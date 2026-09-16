@@ -6,6 +6,7 @@ import {
   errorHandler,
   routeNotFoundHandler,
 } from "./middleware/error-handler.middleware.js";
+import { healthRouter } from "./features/health/health.routes.js";
 
 export const app = express();
 
@@ -28,6 +29,7 @@ app.use(
 
 
 app.use("/api/v1/auth", authRouter);
+app.use("/health", healthRouter);
 
 app.use(routeNotFoundHandler);
 app.use(errorHandler);

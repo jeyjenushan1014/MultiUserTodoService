@@ -429,6 +429,127 @@ The response never contains a password or password hash.
   }
 }
 ```
-
 ---
 
+# Operational Endpoint
+
+## 11. Check Service Health
+
+Reports the availability of the service, PostgreSQL database and Redis cache separately.
+
+### Requirement IDs
+
+`FR-21`, `CR-5`, `OR-6`
+
+### Request
+
+```http
+GET /health
+```
+
+### Authentication
+
+Not required.
+
+### Request headers
+
+No special headers are required.
+
+### Path parameters
+
+None.
+
+### Query parameters
+
+None.
+
+### Request body
+
+None.
+
+### Example request
+
+```bash
+curl -i http://localhost:3000/health
+```
+
+### Healthy response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "status": "available",
+    "checks": {
+      "service": "available",
+      "database": "available",
+      "cache": "available"
+    }
+  }
+}
+```
+
+### Response fields
+
+| Field                  | Type   | Allowed values             | Meaning                      |
+| ---------------------- | ------ | -------------------------- | ---------------------------- |
+| `data`                 | object | —                          | Health-check result          |
+| `data.status`          | string | `available`, `degraded`    | Overall service status       |
+| `data.checks`          | object | —                          | Individual component results |
+| `data.checks.service`  | string | `available`                | HTTP service availability    |
+| `data.checks.database` | string | `available`, `unavailable` | PostgreSQL availability      |
+| `data.checks.cache`    | string | `available`, `unavailable` | Redis availability           |
+
+### Redis-unavailable response
+
+The service can continue without Redis. Therefore, Redis failure does not necessarily return `503`.
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "status": "available",
+    "checks": {
+      "service": "available",
+      "database": "available",
+      "cache": "unavailable"
+    }
+  }
+}
+```
+
+### Database-unavailable response
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "status": "degraded",
+    "checks": {
+      "service": "available",
+      "database": "unavailable",
+      "cache": "available"
+    }
+  }
+}
+```
+### Possible responses
+
+|                    Status | Cause                                                                     |
+| ------------------------: | ------------------------------------------------------------------------- |
+|                  `200 OK` | Service and database are available; cache may be available or unavailable |
+| `503 Service Unavailable` | PostgreSQL database is unavailable                                        |
+
+---

@@ -42,3 +42,22 @@ export async function findUserByEmail(
 
   return result.rows[0];
 }
+
+export async function findUserById(
+  userId: string,
+): Promise<UserDatabaseRow | undefined> {
+  const result = await database.query<UserDatabaseRow>(
+    `
+      SELECT
+        id,
+        email,
+        password,
+        created_at
+      FROM users
+      WHERE id = $1
+    `,
+    [userId],
+  );
+
+  return result.rows[0];
+}

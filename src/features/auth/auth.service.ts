@@ -109,4 +109,19 @@ export async function login(
   };
 }
 
+export async function getCurrentUser(
+  userId: string,
+): Promise<PublicUser> {
+  const user =
+    await authRepository.findUserById(userId);
 
+  if (!user) {
+    throw new AppError(
+      404,
+      "USER_NOT_FOUND",
+      "User not found",
+    );
+  }
+
+  return toPublicUser(user);
+}

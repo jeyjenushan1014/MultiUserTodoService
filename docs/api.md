@@ -325,3 +325,110 @@ The API deliberately returns the same status, code, message, and response struct
 This prevents callers from determining whether an account exists.
 
 ---
+
+## 10. Retrieve the Current Account
+
+Returns the account information belonging to the authenticated user.
+
+### Requirement IDs
+
+`FR-6`, `FR-7`, `SR-4`, `SR-5`, `SR-6`
+
+### Request
+
+```http
+GET /api/v1/auth/me
+```
+
+### Authentication
+
+Required.
+
+### Request headers
+
+| Header          | Required | Value                   |
+| --------------- | -------: | ----------------------- |
+| `Authorization` |      Yes | `Bearer <access_token>` |
+
+### Path parameters
+
+None.
+
+### Query parameters
+
+None.
+
+### Request body
+
+None.
+
+### Example request
+
+```bash
+curl -i http://localhost:3000/api/v1/auth/me \
+  -H "Authorization: Bearer <actual-access-token>"
+```
+
+### Success response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "id": "4d395a15-853a-4d2f-93d5-041868663cd2",
+    "email": "jenushan@example.com",
+    "createdAt": "2026-09-15T10:30:00.000Z"
+  }
+}
+```
+
+### Success-response fields
+
+| Field            | Type            | Meaning                |
+| ---------------- | --------------- | ---------------------- |
+| `data`           | object          | Authenticated user     |
+| `data.id`        | string/UUID     | Unique user identifier |
+| `data.email`     | string          | User’s email address   |
+| `data.createdAt` | string/datetime | Account creation time  |
+
+The response never contains a password or password hash.
+
+### Possible responses
+
+|                      Status | Error code        | Cause                                |
+| --------------------------: | ----------------- | ------------------------------------ |
+|                    `200 OK` | —                 | Account returned successfully        |
+|          `401 Unauthorized` | `UNAUTHENTICATED` | Token is missing, invalid or expired |
+|             `404 Not Found` | `USER_NOT_FOUND`  | Token user no longer exists          |
+| `500 Internal Server Error` | `INTERNAL_ERROR`  | Unexpected internal failure          |
+
+### Missing-token response
+
+```json
+{
+  "error": {
+    "code": "UNAUTHENTICATED",
+    "message": "A valid access token is required",
+    "requestId": "bbfc16a9-7c2e-434c-a663-ea109548a449"
+  }
+}
+```
+
+### Expired-token response
+
+```json
+{
+  "error": {
+    "code": "UNAUTHENTICATED",
+    "message": "A valid access token is required",
+    "requestId": "9ffaf7bd-14c8-4beb-8950-36e87905b46e"
+  }
+}
+```
+
+---
+

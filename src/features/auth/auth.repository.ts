@@ -23,3 +23,22 @@ export async function createUser(
 
   return result.rows[0]!;
 }
+
+export async function findUserByEmail(
+  email: string,
+): Promise<UserDatabaseRow | undefined> {
+  const result = await database.query<UserDatabaseRow>(
+    `
+      SELECT
+        id,
+        email,
+        password,
+        created_at
+      FROM users
+      WHERE lower(email) = lower($1)
+    `,
+    [email],
+  );
+
+  return result.rows[0];
+}

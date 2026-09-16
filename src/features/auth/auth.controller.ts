@@ -19,3 +19,22 @@ export const register: RequestHandler = async (
   });
 };
 
+export const login:RequestHandler = async (
+  request,
+  response
+) => {
+  const credentials = request.body as Credentials;
+
+  const result=await authService.login(
+    credentials.email,
+    credentials.password
+  );
+
+  response.status(200).json({
+    data: result,
+  })
+
+
+}
+
+

@@ -226,3 +226,102 @@ The response never contains the password or stored password hash.
   }
 }
 ```
+---
+
+## 9. Log In
+
+Authenticates a user and issues a time-limited JWT access token.
+
+### Requirement IDs
+
+`FR-4`, `FR-5`, `SR-2`, `SR-4`, `SR-5`
+
+### Request
+
+```http
+POST /api/v1/auth/login
+```
+
+### Authentication
+
+Not required.
+
+### Request headers
+
+| Header         | Required | Value              |
+| -------------- | -------: | ------------------ |
+| `Content-Type` |      Yes | `application/json` |
+
+### Request body
+
+| Field      | Type   | Required | Validation                          | Meaning                  |
+| ---------- | ------ | -------: | ----------------------------------- | ------------------------ |
+| `email`    | string |      Yes | Valid email; maximum 254 characters | Registered account email |
+| `password` | string |      Yes | 12–128 characters                   | Account password         |
+
+### Example request
+
+```bash
+curl -i -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "jenushan@example.com",
+    "password": "strong-password-123"
+  }'
+```
+
+### Success response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "accessToken": "<actual-access-token>",
+    "tokenType": "Bearer",
+    "expiresIn": 900
+  }
+}
+```
+
+### Success-response fields
+
+| Field              | Type    | Meaning                                |
+| ------------------ | ------- | -------------------------------------- |
+| `data`             | object  | Authentication result                  |
+| `data.accessToken` | string  | JWT used to access protected endpoints |
+| `data.tokenType`   | string  | Always `Bearer`                        |
+| `data.expiresIn`   | integer | Token lifetime in seconds              |
+
+### Possible responses
+
+|                      Status | Error code            | Cause                                          |
+| --------------------------: | --------------------- | ---------------------------------------------- |
+|                    `200 OK` | —                     | Authentication successful                      |
+|           `400 Bad Request` | `VALIDATION_ERROR`    | Email or password format is invalid            |
+|          `401 Unauthorized` | `INVALID_CREDENTIALS` | Email is unregistered or password is incorrect |
+| `500 Internal Server Error` | `INTERNAL_ERROR`      | Unexpected internal failure                    |
+
+### Invalid-credentials response
+
+```json
+{
+  "error": {
+    "code": "INVALID_CREDENTIALS",
+    "message": "Email or password is incorrect",
+    "requestId": "9c588068-b02b-429e-af88-48af71fe3354"
+  }
+}
+```
+
+The API deliberately returns the same status, code, message, and response structure for:
+
+1. An unregistered email
+2. A registered email with an incorrect password
+
+This prevents callers from determining whether an account exists.
+
+---

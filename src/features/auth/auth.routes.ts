@@ -11,3 +11,9 @@ authRouter.post(
   validate(credentialsSchema),
   asyncHandler(authController.register),
 );
+
+authRouter.post(
+  "/login",
+  validate(credentialsSchema),
+  asyncHandler(authController.login),
+);

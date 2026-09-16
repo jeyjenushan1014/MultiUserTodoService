@@ -5,6 +5,8 @@ import type {
   PublicUser,
   UserDatabaseRow,
 } from "./auth.types.js";
+import jwt from "jsonwebtoken";
+import { env } from "../../config/env.js";
 
 function toPublicUser(
   user: UserDatabaseRow,
@@ -57,4 +59,54 @@ export async function register(
     throw error;
   }
 }
+
+
+export interface LoginResult {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresIn: number;
+}
+
+export async function login(
+  email: string,
+  password: string,
+): Promise<LoginResult> {
+  const user =
+    await authRepository.findUserByEmail(email);
+
+  const passwordHash =
+    user?.password ?? "$2b$12$C6UzMDM.H6dfI/f/IKcEe.8qJBM9G6tePZlJ8QO4I6m2D8x2wzWfK";
+
+  const passwordMatches = await bcrypt.compare(
+    password,
+    passwordHash,
+  );
+
+  if (!user || !passwordMatches) {
+    throw new AppError(
+      401,
+      "INVALID_CREDENTIALS",
+      "Email or password is incorrect",
+    );
+  }
+
+  const accessToken = jwt.sign(
+    {
+      email: user.email,
+    },
+    env.JWT_SECRET,
+    {
+      subject: user.id,
+      algorithm: "HS256",
+      expiresIn: env.JWT_EXPIRES_IN_SECONDS,
+    },
+  );
+
+  return {
+    accessToken,
+    tokenType: "Bearer",
+    expiresIn: env.JWT_EXPIRES_IN_SECONDS,
+  };
+}
+
 

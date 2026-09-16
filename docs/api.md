@@ -6,7 +6,13 @@ The Multi-User TODO Service allows users to create accounts, authenticate using 
 
 This document covers the Day 1 endpoints:
 
-1. Register a user account
+1\. Register a user account
+
+2: Login a user account
+
+3: get the user particular details
+
+4: health endpoint around the application,database and cache
 
 
 ## 2. Base URL
@@ -20,6 +26,9 @@ All versioned application endpoints begin with:
 ```text
 /api/v1
 ```
+
+Health endpoints cannot mentioned with version
+/health
 
 
 ## 3. Content Type
@@ -430,7 +439,6 @@ The response never contains a password or password hash.
 }
 ```
 ---
-
 # Operational Endpoint
 
 ## 11. Check Service Health
@@ -552,4 +560,194 @@ Content-Type: application/json
 |                  `200 OK` | Service and database are available; cache may be available or unavailable |
 | `503 Service Unavailable` | PostgreSQL database is unavailable                                        |
 
+---
+
+
+---
+
+# TODO Endpoints
+
+## 12. Create a TODO Item
+
+Creates a new TODO item for the authenticated user. The created TODO belongs only to the user identified by the JWT access token.
+
+### Requirement IDs
+
+`FR-8`, `FR-9`, `FR-18`, `FR-19`, `DR-6`, `DR-7`, `DR-10`, `SR-1`, `SR-7`
+
+### Request
+
+```http
+POST /api/v1/todos
+```
+
+### Authentication
+
+Required. The request must contain a valid JWT access token.
+
+### Request headers
+
+| Header | Required | Value |
+| --- | ---: | --- |
+| `Authorization` | Yes | `Bearer <access_token>` |
+| `Content-Type` | Yes | `application/json` |
+
+**### Path parameters**
+
+None.
+
+**### Query parameters**
+
+None.
+
+### Request body
+
+| Field | Type | Required | Validation and allowed values | Meaning |
+| --- | --- | ---: | --- | --- |
+| `title` | string | Yes | 1–200 characters | Title of the TODO item |
+| `description` | string or `null` | No | Maximum 5000 characters | Optional details about the TODO item |
+| `state` | string | No | `pending`, `in_progress`, or `completed`; default is `pending` | Current state of the TODO item |
+| `dueDate` | string/datetime or `null` | No | ISO 8601 datetime containing a timezone offset | Optional due date of the TODO item |
+
+The authenticated user ID is obtained from the JWT. The client must not provide an `ownerId` in the request body.
+
+### Example request
+
+```bash
+curl -i -X POST http://localhost:3000/api/v1/todos \
+  -H "Authorization: Bearer <actual-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Complete Day 2 task",
+    "description": "Implement and document the create TODO endpoint",
+    "state": "pending",
+    "dueDate": "2026-09-20T12:00:00Z"
+  }'
+```
+
+### Success response
+
+```http
+HTTP/1.1 201 Created
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "id": "3c0cf078-8c35-49fb-928c-f03714ec5e32",
+    "ownerId": "4d395a15-853a-4d2f-93d5-041868663cd2",
+    "title": "Complete Day 2 task",
+    "description": "Implement and document the create TODO endpoint",
+    "state": "pending",
+    "dueDate": "2026-09-20T12:00:00.000Z",
+    "createdAt": "2026-09-16T08:30:00.000Z",
+    "updatedAt": "2026-09-16T08:30:00.000Z"
+  }
+}
+```
+
+**### Success-response fields**
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `data` | object | Created TODO item |
+| `data.id` | string/UUID | Unique TODO identifier |
+| `data.ownerId` | string/UUID | Identifier of the authenticated owner |
+| `data.title` | string | TODO title |
+| `data.description` | string or `null` | Optional TODO details |
+| `data.state` | string | One of `pending`, `in_progress`, or `completed` |
+| `data.dueDate` | string/datetime or `null` | Optional due date |
+| `data.createdAt` | string/datetime | Time at which the TODO was created |
+| `data.updatedAt` | string/datetime | Time at which the TODO was last updated |
+
+
+### Possible responses
+
+| Status | Error code | Cause |
+| ---: | --- | --- |
+| `201 Created` | — | TODO item created successfully |
+| `400 Bad Request` | `VALIDATION_ERROR` | A request field is missing or invalid |
+| `401 Unauthorized` | `UNAUTHENTICATED` | Access token is missing, invalid, or expired |
+| `409 Conflict` | `TODO_TITLE_EXISTS` | The owner already has an undeleted TODO with the same title |
+| `500 Internal Server Error` | `INTERNAL_ERROR` | Unexpected internal failure |
+
+### Invalid-state error
+
+Example request body:
+
+```json
+{
+  "title": "Complete Day 2 task",
+  "state": "cancelled"
+}
+```
+
+Example response:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "details": {
+      "issues": [
+        {
+          "path": "body.state",
+          "message": "Invalid option: expected one of pending, in_progress, or completed"
+        }
+      ]
+    },
+    "requestId": "9af63a5d-a59b-4f86-a6e9-b6cd57b15156"
+  }
+}
+```
+
+
+### Invalid-input error
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "details": {
+      "issues": [
+        {
+          "path": "body.email",
+          "message": "Invalid email address"
+        }
+      ]
+    },
+    "requestId": "37869c3a-7cad-4f24-91d4-a881736a8d75"
+  }
+}
+```
+
+### Duplicate-title error
+
+The same authenticated user cannot own two undeleted TODO items with identical titles.
+
+```json
+{
+  "error": {
+    "code": "TODO_TITLE_EXISTS",
+    "message": "An active TODO with this title already exists",
+    "requestId": "178d6b2c-75f5-4fc5-bfc4-38812fb04ffd"
+  }
+}
+```
+
+Two different users may each create a TODO with the same title.
+
+### Missing-token error
+
+```json
+{
+  "error": {
+    "code": "UNAUTHENTICATED",
+    "message": "A valid access token is required",
+    "requestId": "0d495373-72af-4491-8b05-f8299013137f"
+  }
+}
 ---

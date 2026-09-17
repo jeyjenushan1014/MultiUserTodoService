@@ -8,6 +8,7 @@ import {
 } from "./middleware/error-handler.middleware.js";
 import { healthRouter } from "./features/health/health.routes.js";
 import { todoRouter } from "./features/todo/todo.routes.js";
+import { requestLogger } from "./middleware/request-logger.middleware.js";
 
 export const app = express();
 
@@ -28,6 +29,7 @@ app.use(
   }),
 );
 
+app.use(requestLogger);
 
 app.use("/api/v1/auth", authRouter);
 app.use("/health", healthRouter);

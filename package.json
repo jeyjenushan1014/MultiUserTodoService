@@ -4,12 +4,12 @@
   "description": "Building a secure multi-user TODO backend using TypeScript, Node.js, PostgreSQL, Redis, JWT, and Docker. It supports account registration, login, and isolated TODO management with validation, pagination, filtering, sorting, caching, health checks, migrations, logging, and complete API documentation.",
   "main": "index.js",
   "scripts": {
-     "test": "vitest run",
-     "dev": "tsx watch src/server.ts",
-     "build": "tsc",
-     "start": "node dist/src/server.js",
-     "migrate": "node-pg-migrate up",
-     "migrate:down": "node-pg-migrate down"
+    "test": "vitest run",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/src/server.js",
+    "migrate": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down"
   },
   "repository": {
     "type": "git",
@@ -41,8 +41,10 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.20.3",
     "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
     "eslint": "^10.10.0",
     "node-pg-migrate": "^9.0.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",

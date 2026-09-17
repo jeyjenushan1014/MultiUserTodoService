@@ -3,6 +3,8 @@ import { TODO_STATES } from "./todo.types.js";
 
 const emptyObjectSchema = z.object({});
 
+const todoIdSchema = z.string().uuid();
+
 const titleSchema = z
   .string()
   .trim()
@@ -73,4 +75,32 @@ export const listTodosSchema = z.object({
       .enum(["asc", "desc"])
       .default("desc"),
   }),
+});
+
+export const updateTodoSchema = z.object({
+  body: z
+    .object({
+      title: titleSchema.optional(),
+
+      description: descriptionSchema.optional(),
+
+      state: z
+        .enum(TODO_STATES)
+        .optional(),
+
+      dueDate: dueDateSchema.optional(),
+    })
+    .refine(
+      (body) => Object.keys(body).length > 0,
+      {
+        message:
+          "At least one field must be provided",
+      },
+    ),
+
+  params: z.object({
+    id: todoIdSchema,
+  }),
+
+  query: emptyObjectSchema,
 });

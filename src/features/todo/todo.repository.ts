@@ -1,6 +1,6 @@
 import { PoolClient } from "pg";
 import { database } from "../../config/database";
-import { CreateTodoInput, Todo, TodoDatabaseRow, ListTodoQuery } from "./todo.types";
+import { CreateTodoInput, Todo, TodoDatabaseRow, ListTodoQuery, UpdateTodoInput } from "./todo.types";
 
 const TODO_COLUMNS = `
   id,
@@ -177,8 +177,6 @@ async function executeTodoListQueries(
     totalItems,
   };
 }
-
-
 export async function findTodoById(
   ownerId: string,
   todoId: string,
@@ -193,6 +191,79 @@ export async function findTodoById(
           AND deleted_at IS NULL
       `,
       [todoId, ownerId],
+    );
+
+  const row = result.rows[0];
+
+  return row
+    ? mapTodoRow(row)
+    : undefined;
+}
+
+interface UpdateField {
+  inputName: keyof UpdateTodoInput;
+  columnName: string;
+}
+
+const UPDATE_FIELDS: UpdateField[] = [
+  {
+    inputName: "title",
+    columnName: "title",
+  },
+  {
+    inputName: "description",
+    columnName: "description",
+  },
+  {
+    inputName: "state",
+    columnName: "state",
+  },
+  {
+    inputName: "dueDate",
+    columnName: "due_date",
+  },
+];
+
+export async function updateTodo(
+  ownerId: string,
+  todoId: string,
+  input: UpdateTodoInput,
+): Promise<Todo | undefined> {
+  const values: unknown[] = [
+    todoId,
+    ownerId,
+  ];
+
+  const setClauses: string[] = [];
+
+  for (const field of UPDATE_FIELDS) {
+    if (
+      Object.prototype.hasOwnProperty.call(
+        input,
+        field.inputName,
+      )
+    ) {
+      values.push(input[field.inputName]);
+
+      setClauses.push(
+        `${field.columnName} = $${values.length}`,
+      );
+    }
+  }
+
+  const result =
+    await database.query<TodoDatabaseRow>(
+      `
+        UPDATE todos
+        SET
+          ${setClauses.join(", ")},
+          updated_at = now()
+        WHERE id = $1
+          AND owner_id = $2
+          AND deleted_at IS NULL
+        RETURNING ${TODO_COLUMNS}
+      `,
+      values,
     );
 
   const row = result.rows[0];

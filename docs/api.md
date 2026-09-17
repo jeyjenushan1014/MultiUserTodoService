@@ -915,7 +915,7 @@ Returns one undeleted TODO item owned by the authenticated user.
 ### Request
 
 ```http
-GET /api/v1/todos/{id}
+GET /api/v1/todo/{id}
 ```
 
 ### Authentication
@@ -945,7 +945,7 @@ None.
 ### Example request
 
 ```bash
-curl -i http://localhost:3000/api/v1/todos/3c0cf078-8c35-49fb-928c-f03714ec5e32 \
+curl -i http://localhost:3000/api/v1/todo/3c0cf078-8c35-49fb-928c-f03714ec5e32 \
   -H "Authorization: Bearer <actual-access-token>"
 ```
 
@@ -1033,6 +1033,183 @@ This prevents the caller from discovering whether another user owns the requeste
     "code": "TODO_NOT_FOUND",
     "message": "TODO item not found",
     "requestId": "514ea384-f882-4d2f-a454-29d3f9511a49"
+  }
+}
+```
+
+---
+
+## 15. Update a TODO Item
+
+Partially updates an undeleted TODO item owned by the authenticated user. Only supplied fields are changed; omitted fields remain unchanged.
+
+### Requirement IDs
+
+`FR-15`, `FR-16`, `FR-18`, `FR-20`, `CR-4`, `SR-1`, `SR-7`
+
+### Request
+
+```http
+PATCH /api/v1/todo/{id}
+```
+
+### Authentication
+
+Required. The request must contain a valid JWT access token.
+
+### Request headers
+
+| Header          | Required | Value                   |
+| --------------- | -------: | ----------------------- |
+| `Authorization` |      Yes | `Bearer <access_token>` |
+| `Content-Type`  |      Yes | `application/json`      |
+
+### Path parameters
+
+| Parameter | Type        | Required | Meaning                |
+| --------- | ----------- | -------: | ---------------------- |
+| `id`      | string/UUID |      Yes | Unique TODO identifier |
+
+### Query parameters
+
+None.
+
+### Request body
+
+At least one field must be supplied.
+
+| Field         | Type                      | Required | Validation and allowed values          | Meaning                                  |
+| ------------- | ------------------------- | -------: | -------------------------------------- | ---------------------------------------- |
+| `title`       | string                    |       No | 1–200 characters                       | New TODO title                           |
+| `description` | string or `null`          |       No | Maximum 5000 characters                | New description; use `null` to remove it |
+| `state`       | string                    |       No | `pending`, `in_progress`, `completed`  | New TODO state                           |
+| `dueDate`     | string/datetime or `null` |       No | ISO 8601 datetime with timezone offset | New due date; use `null` to remove it    |
+
+The client must not provide `id`, `ownerId`, `createdAt`, `updatedAt`, or `deletedAt`.
+
+### Example request
+
+```bash
+curl -i -X PATCH http://localhost:3000/api/v1/todo/3c0cf078-8c35-49fb-928c-f03714ec5e32 \
+  -H "Authorization: Bearer <actual-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "state": "completed",
+    "description": "The TODO API implementation is complete"
+  }'
+```
+
+### Success response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "id": "3c0cf078-8c35-49fb-928c-f03714ec5e32",
+    "ownerId": "4d395a15-853a-4d2f-93d5-041868663cd2",
+    "title": "Complete Day 2 task",
+    "description": "The TODO API implementation is complete",
+    "state": "completed",
+    "dueDate": "2026-09-20T12:00:00.000Z",
+    "createdAt": "2026-09-16T08:30:00.000Z",
+    "updatedAt": "2026-09-16T11:45:00.000Z"
+  }
+}
+```
+
+### Success-response fields
+
+| Field              | Type                      | Meaning                               |
+| ------------------ | ------------------------- | ------------------------------------- |
+| `data`             | object                    | Updated TODO item                     |
+| `data.id`          | string/UUID               | Unique TODO identifier                |
+| `data.ownerId`     | string/UUID               | Identifier of the authenticated owner |
+| `data.title`       | string                    | Current TODO title                    |
+| `data.description` | string or `null`          | Current TODO details                  |
+| `data.state`       | string                    | Current TODO state                    |
+| `data.dueDate`     | string/datetime or `null` | Current due date                      |
+| `data.createdAt`   | string/datetime           | Original creation time                |
+| `data.updatedAt`   | string/datetime           | Most recent update time               |
+
+### Partial-update behaviour
+
+For this request:
+
+```json
+{
+  "state": "completed"
+}
+```
+
+Only `state` and the server-managed `updatedAt` value change. The title, description, due date, owner and creation time remain unchanged.
+
+### Ownership behaviour
+
+A missing, deleted, or foreign-owned TODO produces the same `404 TODO_NOT_FOUND` response.
+
+### Possible responses
+
+|                      Status | Error code          | Cause                                                              |
+| --------------------------: | ------------------- | ------------------------------------------------------------------ |
+|                    `200 OK` | —                   | TODO updated successfully                                          |
+|           `400 Bad Request` | `VALIDATION_ERROR`  | ID, body, field or state is invalid                                |
+|          `401 Unauthorized` | `UNAUTHENTICATED`   | Access token is missing, invalid, or expired                       |
+|             `404 Not Found` | `TODO_NOT_FOUND`    | TODO is absent, deleted, or belongs to another user                |
+|              `409 Conflict` | `TODO_TITLE_EXISTS` | Another active TODO owned by the same user has the requested title |
+| `500 Internal Server Error` | `INTERNAL_ERROR`    | Unexpected internal failure                                        |
+
+### Empty-body error
+
+Request:
+
+```json
+{}
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "details": {
+      "issues": [
+        {
+          "path": "body",
+          "message": "At least one field must be provided"
+        }
+      ]
+    },
+    "requestId": "34708812-60ef-4470-bb46-f8013181124b"
+  }
+}
+```
+
+### Duplicate-title error
+
+```json
+{
+  "error": {
+    "code": "TODO_TITLE_EXISTS",
+    "message": "An active TODO with this title already exists",
+    "requestId": "d81d634b-e50a-46aa-ac05-b30ee617ac07"
+  }
+}
+```
+
+### TODO-not-found error
+
+```json
+{
+  "error": {
+    "code": "TODO_NOT_FOUND",
+    "message": "TODO item not found",
+    "requestId": "455d2fe6-88d0-4f17-aa0b-f47cc043f215"
   }
 }
 ```

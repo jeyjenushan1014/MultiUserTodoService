@@ -2,7 +2,7 @@ import {Router} from "express";
 import { asyncHandler } from "../../shared/async-handler";
 import * as todoController from "./todo.controller.js"
 import { validate } from "../../shared/validate";
-import { createTodoSchema,listTodosSchema } from "./todo.validation";
+import { createTodoSchema,listTodosSchema,updateTodoSchema } from "./todo.validation";
 import { authenticate } from "../../middleware/authenticate.middleware.js";
 
 
@@ -29,5 +29,15 @@ todoRouter.get(
   authenticate,
   asyncHandler(todoController.getTodoById)
 );
+
+todoRouter.patch(
+  "/:id",
+  authenticate,
+  validate(updateTodoSchema),
+  asyncHandler(todoController.updateTodo),
+);
+
+
+
 
 

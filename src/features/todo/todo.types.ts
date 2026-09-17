@@ -56,3 +56,16 @@ export interface TodoListResult {
   pagination: TodoPagination;
 }
 
+export interface CreateTodoInput {
+  title: string;
+  description?: string | null;
+  state?: TodoState;
+  dueDate?: string | null;
+}
+
+export interface UpdateTodoInput {
+  title?: string;
+  description?: string | null;
+  state?: TodoState;
+  dueDate?: string | null;
+}

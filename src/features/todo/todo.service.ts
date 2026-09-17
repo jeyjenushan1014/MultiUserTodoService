@@ -5,6 +5,7 @@ import type {
   ListTodoQuery,
   Todo,
   TodoListResult,
+  UpdateTodoInput,
 } from "./todo.types.js";
 
 function isDuplicateTodoTitle(
@@ -91,4 +92,38 @@ export async function getTodoById(
   }
 
   return todo;
+}
+
+export async function updateTodo(
+  ownerId: string,
+  todoId: string,
+  input: UpdateTodoInput,
+): Promise<Todo> {
+  try {
+    const todo = await todoRepository.updateTodo(
+      ownerId,
+      todoId,
+      input,
+    );
+
+    if (!todo) {
+      throw new AppError(
+        404,
+        "TODO_NOT_FOUND",
+        "TODO item not found",
+      );
+    }
+
+    return todo;
+  } catch (error) {
+    if (isDuplicateTodoTitle(error)) {
+      throw new AppError(
+        409,
+        "TODO_TITLE_EXISTS",
+        "An active TODO with this title already exists",
+      );
+    }
+
+    throw error;
+  }
 }

@@ -10,6 +10,19 @@ function getAuthenticatedUserId(
   return request.authenticatedUser!.id;
 }
 
+function getTodoId(
+  request: AuthenticatedRequest,
+): string {
+  const id = request.params.id;
+
+  if (typeof id !== "string") {
+    throw new Error(
+      "Validated TODO ID is unavailable",
+    );
+  }
+
+  return id;
+}
 
 
 export const createTodo: RequestHandler = async (
@@ -45,5 +58,19 @@ export const listTodos: RequestHandler = async (
 
   response.status(200).json({
     data: result,
+  });
+};
+
+export const getTodoById: RequestHandler = async (
+  request: AuthenticatedRequest,
+  response,
+) => {
+  const todo = await todoService.getTodoById(
+    getAuthenticatedUserId(request),
+    getTodoId(request),
+  );
+
+  response.status(200).json({
+    data: todo,
   });
 };

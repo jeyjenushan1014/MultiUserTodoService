@@ -24,7 +24,10 @@ todoRouter.get(
   asyncHandler(todoController.listTodos),
 );
 
-
-
+todoRouter.get(
+  "/:id",
+  authenticate,
+  asyncHandler(todoController.getTodoById)
+);
 
 

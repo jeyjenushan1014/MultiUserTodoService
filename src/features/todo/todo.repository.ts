@@ -177,3 +177,27 @@ async function executeTodoListQueries(
     totalItems,
   };
 }
+
+
+export async function findTodoById(
+  ownerId: string,
+  todoId: string,
+): Promise<Todo | undefined> {
+  const result =
+    await database.query<TodoDatabaseRow>(
+      `
+        SELECT ${TODO_COLUMNS}
+        FROM todos
+        WHERE id = $1
+          AND owner_id = $2
+          AND deleted_at IS NULL
+      `,
+      [todoId, ownerId],
+    );
+
+  const row = result.rows[0];
+
+  return row
+    ? mapTodoRow(row)
+    : undefined;
+}

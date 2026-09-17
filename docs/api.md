@@ -903,3 +903,138 @@ The client can determine the total number of pages using `totalPages` without se
 ```
 
 ---
+
+## 14. Retrieve One TODO Item
+
+Returns one undeleted TODO item owned by the authenticated user.
+
+### Requirement IDs
+
+`FR-14`, `FR-20`, `CR-1`, `CR-2`, `CR-3`, `CR-6`
+
+### Request
+
+```http
+GET /api/v1/todos/{id}
+```
+
+### Authentication
+
+Required. The request must contain a valid JWT access token.
+
+### Request headers
+
+| Header          | Required | Value                   |
+| --------------- | -------: | ----------------------- |
+| `Authorization` |      Yes | `Bearer <access_token>` |
+
+### Path parameters
+
+| Parameter | Type        | Required | Meaning                |
+| --------- | ----------- | -------: | ---------------------- |
+| `id`      | string/UUID |      Yes | Unique TODO identifier |
+
+### Query parameters
+
+None.
+
+### Request body
+
+None.
+
+### Example request
+
+```bash
+curl -i http://localhost:3000/api/v1/todos/3c0cf078-8c35-49fb-928c-f03714ec5e32 \
+  -H "Authorization: Bearer <actual-access-token>"
+```
+
+### Success response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "id": "3c0cf078-8c35-49fb-928c-f03714ec5e32",
+    "ownerId": "4d395a15-853a-4d2f-93d5-041868663cd2",
+    "title": "Complete Day 2 task",
+    "description": "Implement the TODO endpoints",
+    "state": "pending",
+    "dueDate": "2026-09-20T12:00:00.000Z",
+    "createdAt": "2026-09-16T08:30:00.000Z",
+    "updatedAt": "2026-09-16T08:30:00.000Z"
+  }
+}
+```
+
+### Success-response fields
+
+| Field              | Type                      | Meaning                                  |
+| ------------------ | ------------------------- | ---------------------------------------- |
+| `data`             | object                    | Requested TODO item                      |
+| `data.id`          | string/UUID               | Unique TODO identifier                   |
+| `data.ownerId`     | string/UUID               | Identifier of the authenticated owner    |
+| `data.title`       | string                    | TODO title                               |
+| `data.description` | string or `null`          | Optional TODO details                    |
+| `data.state`       | string                    | `pending`, `in_progress`, or `completed` |
+| `data.dueDate`     | string/datetime or `null` | Optional due date                        |
+| `data.createdAt`   | string/datetime           | Creation time                            |
+| `data.updatedAt`   | string/datetime           | Last update time                         |
+
+### Ownership behaviour
+
+The API returns the same `404 TODO_NOT_FOUND` response when:
+
+1. The TODO does not exist.
+2. The TODO has been deleted.
+3. The TODO belongs to another user.
+
+This prevents the caller from discovering whether another user owns the requested TODO.
+
+### Possible responses
+
+|                      Status | Error code         | Cause                                               |
+| --------------------------: | ------------------ | --------------------------------------------------- |
+|                    `200 OK` | —                  | TODO returned successfully                          |
+|           `400 Bad Request` | `VALIDATION_ERROR` | TODO ID is not a valid UUID                         |
+|          `401 Unauthorized` | `UNAUTHENTICATED`  | Access token is missing, invalid, or expired        |
+|             `404 Not Found` | `TODO_NOT_FOUND`   | TODO is absent, deleted, or belongs to another user |
+| `500 Internal Server Error` | `INTERNAL_ERROR`   | Unexpected internal failure                         |
+
+### Invalid-ID error
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "details": {
+      "issues": [
+        {
+          "path": "params.id",
+          "message": "Invalid UUID"
+        }
+      ]
+    },
+    "requestId": "74d2bb5c-a48f-4fa5-8858-44539b991c7d"
+  }
+}
+```
+
+### TODO-not-found error
+
+```json
+{
+  "error": {
+    "code": "TODO_NOT_FOUND",
+    "message": "TODO item not found",
+    "requestId": "514ea384-f882-4d2f-a454-29d3f9511a49"
+  }
+}
+```
+
+---

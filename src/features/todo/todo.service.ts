@@ -71,3 +71,24 @@ export async function listTodos(
     },
   };
 }
+
+export async function getTodoById(
+  ownerId: string,
+  todoId: string,
+): Promise<Todo> {
+  const todo =
+    await todoRepository.findTodoById(
+      ownerId,
+      todoId,
+    );
+
+  if (!todo) {
+    throw new AppError(
+      404,
+      "TODO_NOT_FOUND",
+      "TODO item not found",
+    );
+  }
+
+  return todo;
+}

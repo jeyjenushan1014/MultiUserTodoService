@@ -8,8 +8,10 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/src/server.js",
-    "migrate": "node-pg-migrate up",
-    "migrate:down": "node-pg-migrate down"
+    "migrate": "node --env-file=.env ./node_modules/node-pg-migrate/bin/node-pg-migrate up",
+    "migrate:down": "node --env-file=.env ./node_modules/node-pg-migrate/bin/node-pg-migrate down",
+    "lint": "eslint src tests --max-warnings=0",
+    "check": "npm run lint && npm run build && npm test"
   },
   "repository": {
     "type": "git",

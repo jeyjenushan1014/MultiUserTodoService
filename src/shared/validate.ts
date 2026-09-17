@@ -1,6 +1,7 @@
 /*
 This file explains the purpose and functionality of the validate function,
  which is used to validate incoming requests in an Express.js application.
+ which validate the request's body,params,query using zod schema
 */
 
 
@@ -14,6 +15,12 @@ interface RequestParts {
   query: unknown;
 }
 
+/*
+This function takes a zod schema as an argument and returns an express request handler function.
+This handler function validate the incoming request's body,params and query against the provided schema.
+If the validation fails,it creates an AppError with a 400 status code and passes it to the next middleware.
+If the validation success, it updates the request object with the validated data and calls the next middleware.
+*/
 export function validate<T extends RequestParts>(
   schema: ZodType<T>,
 ): RequestHandler {

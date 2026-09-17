@@ -24,7 +24,10 @@ async function startServer(): Promise<void> {
       env.PORT,
       () => {
         logger.info(
-          { port: env.PORT },
+          { 
+            port: env.PORT,
+            environment: env.NODE_ENV
+           },
           "TODO service started",
         );
       },
@@ -36,7 +39,7 @@ async function startServer(): Promise<void> {
       We want to ensure that we close the server and any open connections (like database or cache) before exiting.
     */
     const shutdown = (signal: string): void => {
-      logger.info({ signal }, "Shutting down");
+      logger.info({ signal }, "Graceful shutdown started");
 
       server.close(() => {
         void Promise.allSettled([
@@ -44,7 +47,12 @@ async function startServer(): Promise<void> {
           cache.isOpen
             ? cache.quit()
             : Promise.resolve(),
-        ]).finally(() => process.exit(0));
+        ]).finally(() => {
+          logger.info(
+            "Graceful shutdown completed",
+          );
+          process.exit(0)
+        });
       });
     };
 
@@ -68,3 +76,4 @@ async function startServer(): Promise<void> {
 }
 
 void startServer();
+

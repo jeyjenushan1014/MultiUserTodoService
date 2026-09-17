@@ -1327,4 +1327,124 @@ A missing, already-deleted, or foreign-owned TODO produces the same `404 TODO_NO
 
 ---
 
+## Caching Behaviour
+
+### Requirement IDs
+
+`CR-1`, `CR-2`, `CR-3`, `CR-4`, `CR-5`, `CR-6`
+
+The service uses Redis to cache repeated TODO read operations.
+
+Caching applies to:
+
+```http
+GET /api/v1/todos
+GET /api/v1/todos/{id}
+```
+
+### Repeated reads
+
+When an authenticated user sends the same read request repeatedly, the service may return the result from Redis instead of querying PostgreSQL again.
+
+Caching does not change the documented response body or status code.
+
+### Cache expiration
+
+Every cached value has a limited time to live. The default cache duration is 60 seconds and can be configured at runtime using:
+
+```text
+CACHE_TTL_SECONDS
+```
+
+After the cached value expires, the next identical request retrieves current data from PostgreSQL and stores a new cached result.
+
+### User isolation
+
+Cached TODO data is isolated by authenticated user ID.
+
+Cache entries belonging to one user are never used to answer another user’s request. This applies even when two users request the same TODO identifier or use identical pagination, filtering and sorting parameters.
+
+### Query-specific caching
+
+TODO list cache entries are separated using the complete validated query configuration:
+
+* Page number
+* Page size
+* State filter
+* Sort field
+* Sort order
+
+Therefore, the following requests use different cache entries:
+
+```http
+GET /api/v1/todos?page=1&pageSize=20
+GET /api/v1/todos?page=2&pageSize=20
+GET /api/v1/todos?state=pending
+GET /api/v1/todos?state=completed
+GET /api/v1/todos?sortBy=dueDate&sortOrder=asc
+```
+
+### Cache invalidation
+
+After a successful TODO write operation, the service invalidates the authenticated user’s cached TODO data.
+
+Cache invalidation applies after:
+
+```http
+POST /api/v1/todos
+PATCH /api/v1/todos/{id}
+DELETE /api/v1/todos/{id}
+```
+
+A read performed after a successful write returns data that reflects that write.
+
+Invalidation affects only the user who performed the write. It does not invalidate another user’s cache.
+
+### Redis failure behaviour
+
+PostgreSQL remains the source of truth.
+
+If Redis is unavailable or a cache operation fails:
+
+1. The request continues using PostgreSQL.
+2. The API remains available.
+3. No Redis implementation details are returned to the client.
+4. The response retains its documented structure and status code.
+5. The failure is recorded in the application logs.
+
+The `/health` endpoint reports Redis availability separately:
+
+```json
+{
+  "data": {
+    "status": "available",
+    "checks": {
+      "service": "available",
+      "database": "available",
+      "cache": "unavailable"
+    }
+  }
+}
+```
+
+Redis unavailability does not necessarily cause a `503 Service Unavailable` response because the service can continue using PostgreSQL.
+
+### Cache logging
+
+Application logs indicate whether a TODO read was served from Redis or PostgreSQL.
+
+A cache miss is recorded using:
+
+```text
+cacheHit: false
+```
+
+A cache hit is recorded using:
+
+```text
+cacheHit: true
+```
+
+Logs do not contain cached TODO contents, JWT access tokens, passwords or other credentials.
+
 

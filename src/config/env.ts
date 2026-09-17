@@ -36,6 +36,13 @@ const environmentSchema = z.object({
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
+    
+  CACHE_TTL_SECONDS: z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(3600)
+  .default(60),
 });
 
 const result = environmentSchema.safeParse(process.env);

@@ -1,5 +1,7 @@
 import { AppError } from "../../shared/app-error.js";
+import { logger } from "../../config/logger.js";
 import * as todoRepository from "./todo.repository.js";
+import * as todoCache from "./todo.cache.js";
 import type {
   CreateTodoInput,
   ListTodoQuery,
@@ -33,10 +35,17 @@ export async function createTodo(
 ): Promise<Todo> {
   try {
 
-    return await todoRepository.createTodo(
+    const todo = await todoRepository.createTodo(
       ownerId,
       input,
     );
+
+    // Invalidate the cache for the user's TODO list after creating a new TODO item.
+    await todoCache.invalidateTodoCache(
+      ownerId,
+    );
+
+    return todo;
   } catch (error) {
     if (isDuplicateTodoTitle(error)) {
       throw new AppError(
@@ -54,29 +63,103 @@ export async function listTodos(
   ownerId: string,
   query: ListTodoQuery,
 ): Promise<TodoListResult> {
-  const result = await todoRepository.listTodos(
-    ownerId,
-    query,
-  );
+  const queryIdentifier =
+    todoCache.createListQueryIdentifier(query);
 
-  return {
-    items: result.items,
+  let cacheKey: string | undefined;
+
+  try {
+    cacheKey =
+      await todoCache.buildTodoListCacheKey(
+        ownerId,
+        queryIdentifier,
+      );
+
+    const cachedResult =
+      await todoCache.getCachedValue<TodoListResult>(
+        ownerId,
+        cacheKey,
+      );
+
+    if (cachedResult !== undefined) {
+      return cachedResult;
+    }
+  } catch(error) {
+    logger.warn(
+      {
+        error,
+        ownerId,    
+      },
+      "Todo cache read failed; using database",
+    );
+  }
+
+  const repositoryResult =
+    await todoRepository.listTodos(
+      ownerId,
+      query,
+    );
+
+  const result: TodoListResult = {
+    items: repositoryResult.items,
 
     pagination: {
       page: query.page,
       pageSize: query.pageSize,
-      totalItems: result.totalItems,
+      totalItems:
+        repositoryResult.totalItems,
       totalPages: Math.ceil(
-        result.totalItems / query.pageSize,
+        repositoryResult.totalItems /
+          query.pageSize,
       ),
     },
   };
+
+  if (cacheKey !== undefined) {
+    await todoCache.setCachedValue(
+      ownerId,
+      cacheKey,
+      result,
+    );
+  }
+
+  return result;
 }
+
 
 export async function getTodoById(
   ownerId: string,
   todoId: string,
 ): Promise<Todo> {
+  let cacheKey: string | undefined;
+
+  try {
+    cacheKey =
+      await todoCache.buildTodoItemCacheKey(
+        ownerId,
+        todoId,
+      );
+
+    const cachedTodo =
+      await todoCache.getCachedValue<Todo>(
+        ownerId,
+        cacheKey,
+      );
+
+    if (cachedTodo !== undefined) {
+      return cachedTodo;
+    }
+  } catch (error) {
+    logger.warn(
+      {
+        error,
+        ownerId,
+        todoId,
+      },
+      "Todo cache read failed; using database",
+    );
+  }
+
   const todo =
     await todoRepository.findTodoById(
       ownerId,
@@ -88,6 +171,14 @@ export async function getTodoById(
       404,
       "TODO_NOT_FOUND",
       "TODO item not found",
+    );
+  }
+
+  if (cacheKey !== undefined) {
+    await todoCache.setCachedValue(
+      ownerId,
+      cacheKey,
+      todo,
     );
   }
 
@@ -113,6 +204,10 @@ export async function updateTodo(
         "TODO item not found",
       );
     }
+
+    await todoCache.invalidateTodoCache(
+      ownerId,
+    );
 
     return todo;
   } catch (error) {
@@ -145,4 +240,8 @@ export async function deleteTodo(
       "TODO item not found",
     );
   }
+
+   await todoCache.invalidateTodoCache(
+    ownerId,
+  );
 }

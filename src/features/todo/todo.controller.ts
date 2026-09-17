@@ -1,6 +1,6 @@
 import { RequestHandler } from "express";
 import { AuthenticatedRequest } from "../../middleware/authenticate.middleware";
-import { CreateTodoInput } from "./todo.types";
+import { CreateTodoInput, ListTodoQuery } from "./todo.types";
 import * as todoService from "./todo.service"
 
 
@@ -27,5 +27,23 @@ export const createTodo: RequestHandler = async (
 
   response.status(201).json({
     data: todo,
+  });
+};
+
+export const listTodos: RequestHandler = async (
+  request: AuthenticatedRequest,
+  response,
+) => {
+
+  const query =
+    request.query as unknown as ListTodoQuery;
+
+  const result = await todoService.listTodos(
+    getAuthenticatedUserId(request),
+    query,
+  );
+
+  response.status(200).json({
+    data: result,
   });
 };

@@ -578,7 +578,7 @@ Creates a new TODO item for the authenticated user. The created TODO belongs onl
 ### Request
 
 ```http
-POST /api/v1/todos
+POST /api/v1/todo
 ```
 
 ### Authentication
@@ -614,7 +614,7 @@ The authenticated user ID is obtained from the JWT. The client must not provide 
 ### Example request
 
 ```bash
-curl -i -X POST http://localhost:3000/api/v1/todos \
+curl -i -X POST http://localhost:3000/api/v1/todo \
   -H "Authorization: Bearer <actual-access-token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -750,4 +750,156 @@ Two different users may each create a TODO with the same title.
     "requestId": "0d495373-72af-4491-8b05-f8299013137f"
   }
 }
+---
+```
+
+
+## 13. List TODO Items
+
+Returns a paginated list of TODO items owned by the authenticated user. The list supports state filtering and sorting by creation date or due date.
+
+### Requirement IDs
+
+`FR-10`, `FR-11`, `FR-12`, `FR-13`, `CR-1`, `CR-2`, `CR-3`, `CR-6`
+
+### Request
+
+```http
+GET /api/v1/todo
+```
+
+### Authentication
+
+Required. The request must contain a valid JWT access token.
+
+### Request headers
+
+| Header          | Required | Value                   |
+| --------------- | -------: | ----------------------- |
+| `Authorization` |      Yes | `Bearer <access_token>` |
+
+### Path parameters
+
+None.
+
+### Query parameters
+
+| Parameter   | Type    | Required | Default     | Allowed values                        | Meaning                       |
+| ----------- | ------- | -------: | ----------- | ------------------------------------- | ----------------------------- |
+| `page`      | integer |       No | `1`         | Minimum `1`                           | Requested page number         |
+| `pageSize`  | integer |       No | `20`        | `1`–`100`                             | Number of TODO items per page |
+| `state`     | string  |       No | —           | `pending`, `in_progress`, `completed` | Filters TODOs by state        |
+| `sortBy`    | string  |       No | `createdAt` | `createdAt`, `dueDate`                | Field used for sorting        |
+| `sortOrder` | string  |       No | `desc`      | `asc`, `desc`                         | Sorting direction             |
+
+### Request body
+
+None.
+
+### Example request
+
+```bash
+curl -i "http://localhost:3000/api/v1/todo?page=1&pageSize=20&state=pending&sortBy=dueDate&sortOrder=asc" \
+  -H "Authorization: Bearer <actual-access-token>"
+```
+
+### Success response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "data": {
+    "items": [
+      {
+        "id": "3c0cf078-8c35-49fb-928c-f03714ec5e32",
+        "ownerId": "4d395a15-853a-4d2f-93d5-041868663cd2",
+        "title": "Complete Day 2 task",
+        "description": "Implement the TODO endpoints",
+        "state": "pending",
+        "dueDate": "2026-09-20T12:00:00.000Z",
+        "createdAt": "2026-09-16T08:30:00.000Z",
+        "updatedAt": "2026-09-16T08:30:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "pageSize": 20,
+      "totalItems": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+### Success-response fields
+
+| Field                        | Type                      | Meaning                                    |
+| ---------------------------- | ------------------------- | ------------------------------------------ |
+| `data`                       | object                    | List result                                |
+| `data.items`                 | array                     | TODO items owned by the authenticated user |
+| `data.items[].id`            | string/UUID               | Unique TODO identifier                     |
+| `data.items[].ownerId`       | string/UUID               | Identifier of the authenticated owner      |
+| `data.items[].title`         | string                    | TODO title                                 |
+| `data.items[].description`   | string or `null`          | Optional TODO details                      |
+| `data.items[].state`         | string                    | `pending`, `in_progress`, or `completed`   |
+| `data.items[].dueDate`       | string/datetime or `null` | Optional due date                          |
+| `data.items[].createdAt`     | string/datetime           | Creation time                              |
+| `data.items[].updatedAt`     | string/datetime           | Last update time                           |
+| `data.pagination`            | object                    | Pagination information                     |
+| `data.pagination.page`       | integer                   | Current page                               |
+| `data.pagination.pageSize`   | integer                   | Maximum items on the page                  |
+| `data.pagination.totalItems` | integer                   | Total matching TODO items                  |
+| `data.pagination.totalPages` | integer                   | Total available pages                      |
+
+The client can determine the total number of pages using `totalPages` without sending another request.
+
+### Empty-list response
+
+```json
+{
+  "data": {
+    "items": [],
+    "pagination": {
+      "page": 1,
+      "pageSize": 20,
+      "totalItems": 0,
+      "totalPages": 0
+    }
+  }
+}
+```
+
+### Possible responses
+
+|                      Status | Error code         | Cause                                        |
+| --------------------------: | ------------------ | -------------------------------------------- |
+|                    `200 OK` | —                  | TODO list returned successfully              |
+|           `400 Bad Request` | `VALIDATION_ERROR` | A query parameter is invalid                 |
+|          `401 Unauthorized` | `UNAUTHENTICATED`  | Access token is missing, invalid, or expired |
+| `500 Internal Server Error` | `INTERNAL_ERROR`   | Unexpected internal failure                  |
+
+### Invalid-query error
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "details": {
+      "issues": [
+        {
+          "path": "query.pageSize",
+          "message": "Too big: expected number to be <=100"
+        }
+      ]
+    },
+    "requestId": "10313d2e-902a-467a-a341-b0e8151789aa"
+  }
+}
+```
+
 ---

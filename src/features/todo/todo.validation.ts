@@ -42,3 +42,35 @@ export const createTodoSchema = z.object({
   query: emptyObjectSchema,
 });
 
+export const listTodosSchema = z.object({
+  body: emptyObjectSchema,
+
+  params: emptyObjectSchema,
+
+  query: z.object({
+    page: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(1),
+
+    pageSize: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .default(20),
+
+    state: z
+      .enum(TODO_STATES)
+      .optional(),
+
+    sortBy: z
+      .enum(["createdAt", "dueDate"])
+      .default("createdAt"),
+
+    sortOrder: z
+      .enum(["asc", "desc"])
+      .default("desc"),
+  }),
+});

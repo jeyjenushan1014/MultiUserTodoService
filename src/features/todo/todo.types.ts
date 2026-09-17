@@ -35,3 +35,24 @@ export interface CreateTodoInput {
   state?: TodoState;
   dueDate?: string | null;
 }
+
+export interface ListTodoQuery {
+  page: number;
+  pageSize: number;
+  state?: TodoState;
+  sortBy: "createdAt" | "dueDate";
+  sortOrder: "asc" | "desc";
+}
+
+export interface TodoPagination {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface TodoListResult {
+  items: Todo[];
+  pagination: TodoPagination;
+}
+

@@ -2,7 +2,9 @@ import { AppError } from "../../shared/app-error.js";
 import * as todoRepository from "./todo.repository.js";
 import type {
   CreateTodoInput,
+  ListTodoQuery,
   Todo,
+  TodoListResult,
 } from "./todo.types.js";
 
 function isDuplicateTodoTitle(
@@ -45,4 +47,27 @@ export async function createTodo(
 
     throw error;
   }
+}
+
+export async function listTodos(
+  ownerId: string,
+  query: ListTodoQuery,
+): Promise<TodoListResult> {
+  const result = await todoRepository.listTodos(
+    ownerId,
+    query,
+  );
+
+  return {
+    items: result.items,
+
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      totalItems: result.totalItems,
+      totalPages: Math.ceil(
+        result.totalItems / query.pageSize,
+      ),
+    },
+  };
 }

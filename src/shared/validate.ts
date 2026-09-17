@@ -21,7 +21,7 @@ export function validate<T extends RequestParts>(
     const input: RequestParts = {
       // Express defines request.body loosely.
       // This boundary converts it into validated data.
-      body: request.body,
+      body: request.body ?? {},
       params: request.params,
       query: request.query,
     };

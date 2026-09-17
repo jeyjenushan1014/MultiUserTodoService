@@ -92,3 +92,15 @@ export const updateTodo: RequestHandler = async (
     data: todo,
   });
 };
+
+export const deleteTodo: RequestHandler = async (
+  request: AuthenticatedRequest,
+  response,
+) => {
+  await todoService.deleteTodo(
+    getAuthenticatedUserId(request),
+    getTodoId(request),
+  );
+
+  response.status(204).send();
+};

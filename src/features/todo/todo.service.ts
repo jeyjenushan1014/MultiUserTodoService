@@ -127,3 +127,22 @@ export async function updateTodo(
     throw error;
   }
 }
+
+export async function deleteTodo(
+  ownerId: string,
+  todoId: string,
+): Promise<void> {
+  const deleted =
+    await todoRepository.deleteTodo(
+      ownerId,
+      todoId,
+    );
+
+  if (!deleted) {
+    throw new AppError(
+      404,
+      "TODO_NOT_FOUND",
+      "TODO item not found",
+    );
+  }
+}

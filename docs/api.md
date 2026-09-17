@@ -1213,5 +1213,118 @@ Response:
   }
 }
 ```
+---
+
+## 16. Delete a TODO Item
+
+Soft-deletes an undeleted TODO item owned by the authenticated user. After deletion, the TODO is excluded from all retrieval and listing operations.
+
+### Requirement IDs
+
+`FR-17`, `FR-18`, `FR-20`, `CR-4`
+
+### Request
+
+```http
+DELETE /api/v1/todo/{id}
+```
+
+### Authentication
+
+Required. The request must contain a valid JWT access token.
+
+### Request headers
+
+| Header          | Required | Value                   |
+| --------------- | -------: | ----------------------- |
+| `Authorization` |      Yes | `Bearer <access_token>` |
+
+### Path parameters
+
+| Parameter | Type        | Required | Meaning                |
+| --------- | ----------- | -------: | ---------------------- |
+| `id`      | string/UUID |      Yes | Unique TODO identifier |
+
+### Query parameters
+
+None.
+
+### Request body
+
+None.
+
+### Example request
+
+```bash
+curl -i -X DELETE http://localhost:3000/api/v1/todo/3c0cf078-8c35-49fb-928c-f03714ec5e32 \
+  -H "Authorization: Bearer <actual-access-token>"
+```
+
+### Success response
+
+```http
+HTTP/1.1 204 No Content
+```
+
+The successful response does not contain a response body.
+
+### Deletion behaviour
+
+The endpoint performs a soft delete. The database row remains stored, but its `deletedAt` value is recorded.
+
+After deletion:
+
+* The TODO does not appear in `GET /api/v1/todo`.
+* `GET /api/v1/todo/{id}` returns `404`.
+* A second deletion attempt returns `404`.
+* The owner may create a new TODO using the deleted TODO’s title.
+
+### Ownership behaviour
+
+A missing, already-deleted, or foreign-owned TODO produces the same `404 TODO_NOT_FOUND` response.
+
+### Possible responses
+
+|                      Status | Error code         | Cause                                               |
+| --------------------------: | ------------------ | --------------------------------------------------- |
+|            `204 No Content` | —                  | TODO deleted successfully                           |
+|           `400 Bad Request` | `VALIDATION_ERROR` | TODO ID is not a valid UUID                         |
+|          `401 Unauthorized` | `UNAUTHENTICATED`  | Access token is missing, invalid, or expired        |
+|             `404 Not Found` | `TODO_NOT_FOUND`   | TODO is absent, deleted, or belongs to another user |
+| `500 Internal Server Error` | `INTERNAL_ERROR`   | Unexpected internal failure                         |
+
+### Invalid-ID error
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "details": {
+      "issues": [
+        {
+          "path": "params.id",
+          "message": "Invalid UUID"
+        }
+      ]
+    },
+    "requestId": "0b6d8df0-da68-47f3-8bc9-57fdf24c77bb"
+  }
+}
+```
+
+### TODO-not-found error
+
+```json
+{
+  "error": {
+    "code": "TODO_NOT_FOUND",
+    "message": "TODO item not found",
+    "requestId": "ee662c68-a5fc-48f5-8881-f606b924b614"
+  }
+}
+```
 
 ---
+
+

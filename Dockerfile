@@ -8,7 +8,6 @@ RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
-COPY migrations ./migrations
 
 RUN npm run build
 
@@ -24,7 +23,6 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
-COPY migrations ./migrations
 
 USER node
 

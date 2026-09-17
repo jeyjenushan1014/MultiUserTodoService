@@ -14,7 +14,7 @@
   },
   "include": [
     "src/**/*.ts",
-    "migrations/**/*.ts",
+    "src/db/migrations/**/*.ts",
     "tests/**/*.ts"
   ]
 }

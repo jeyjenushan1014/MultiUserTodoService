@@ -55,23 +55,18 @@ MultiUserTodoService/
 ├── docs/
 │   ├── api.md
 │   └── QUESTIONS.md
-├── migrations/
-│   ├── 001_create_users.ts
-│   └── 002_create_todos.ts
 ├── src/
 │   ├── config/
 │   │   ├── cache.ts
 │   │   ├── database.ts
 │   │   ├── env.ts
 │   │   └── logger.ts
+│   ├── db/
+│   │   └── migrations/
+│   │       ├── 001_create_users.ts
+│   │       └── 002_create_todos.ts
 │   ├── tests/
-│   │   ├── todo.validation.test.ts
-│   │── db/
-│   │   ├── migrations/
-│             ├── 001_create_users.ts
-    │         └── 002_create_todos.ts
-│   │   
-│   │   
+│   │   └── todo.validation.test.ts
 │   ├── features/
 │   │   ├── auth/
 │   │   │   ├── auth.controller.ts

@@ -154,19 +154,7 @@ docker compose up --build
 
 This builds the application image automatically and runs the API in Docker, so you do not need to install packages locally or run `npm run dev` manually.
 
-5. In a second terminal, install the host dependencies. This is required because the migration command runs on your machine, outside the API container:
-
-```bash
-npm install
-```
-
-6. Apply the database migrations:
-
-```bash
-npm run migrate
-```
-
-7. Open the app in your browser or API client:
+5. Open the app in your browser or API client:
 
 ```text
 http://localhost:3000

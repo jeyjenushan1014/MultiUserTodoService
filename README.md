@@ -469,11 +469,11 @@ The health endpoint is available at:
 
 | Method   | Endpoint            | Authentication | Purpose                        |
 | -------- | ------------------- | -------------- | ------------------------------ |
-| `POST`   | `/api/v1/todos`     | Yes            | Create a TODO                  |
-| `GET`    | `/api/v1/todos`     | Yes            | List owned TODOs               |
-| `GET`    | `/api/v1/todos/:id` | Yes            | Retrieve one owned TODO        |
-| `PATCH`  | `/api/v1/todos/:id` | Yes            | Partially update an owned TODO |
-| `DELETE` | `/api/v1/todos/:id` | Yes            | Delete an owned TODO           |
+| `POST`   | `/api/v1/todo`     | Yes            | Create a TODO                  |
+| `GET`    | `/api/v1/todo`     | Yes            | List owned TODOs               |
+| `GET`    | `/api/v1/todo/:id` | Yes            | Retrieve one owned TODO        |
+| `PATCH`  | `/api/v1/todo/:id` | Yes            | Partially update an owned TODO |
+| `DELETE` | `/api/v1/todo/:id` | Yes            | Delete an owned TODO           |
 
 ### Operations
 
@@ -500,25 +500,25 @@ Any other value is rejected before reaching the database.
 The TODO list endpoint supports:
 
 ```http
-GET /api/v1/todos?page=1&pageSize=20
+GET /api/v1/todo?page=1&pageSize=20
 ```
 
 Filter by state:
 
 ```http
-GET /api/v1/todos?state=pending
+GET /api/v1/todo?state=pending
 ```
 
 Sort by creation date:
 
 ```http
-GET /api/v1/todos?sortBy=createdAt&sortOrder=desc
+GET /api/v1/todo?sortBy=createdAt&sortOrder=desc
 ```
 
 Sort by due date:
 
 ```http
-GET /api/v1/todos?sortBy=dueDate&sortOrder=asc
+GET /api/v1/todo?sortBy=dueDate&sortOrder=asc
 ```
 
 Supported values:
@@ -575,8 +575,8 @@ This prevents users from discovering another user’s TODO information.
 Redis caches repeated TODO read operations:
 
 ```http
-GET /api/v1/todos
-GET /api/v1/todos/:id
+GET /api/v1/todo
+GET /api/v1/todo/:id
 ```
 
 Cache behaviour:

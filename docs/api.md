@@ -1337,8 +1337,8 @@ The service uses Redis to cache repeated TODO read operations.
 Caching applies to:
 
 ```http
-GET /api/v1/todos
-GET /api/v1/todos/{id}
+GET /api/v1/todo
+GET /api/v1/todo/{id}
 ```
 
 ### Repeated reads
@@ -1376,11 +1376,11 @@ TODO list cache entries are separated using the complete validated query configu
 Therefore, the following requests use different cache entries:
 
 ```http
-GET /api/v1/todos?page=1&pageSize=20
-GET /api/v1/todos?page=2&pageSize=20
-GET /api/v1/todos?state=pending
-GET /api/v1/todos?state=completed
-GET /api/v1/todos?sortBy=dueDate&sortOrder=asc
+GET /api/v1/todo?page=1&pageSize=20
+GET /api/v1/todo?page=2&pageSize=20
+GET /api/v1/todo?state=pending
+GET /api/v1/todo?state=completed
+GET /api/v1/todo?sortBy=dueDate&sortOrder=asc
 ```
 
 ### Cache invalidation
@@ -1390,9 +1390,9 @@ After a successful TODO write operation, the service invalidates the authenticat
 Cache invalidation applies after:
 
 ```http
-POST /api/v1/todos
-PATCH /api/v1/todos/{id}
-DELETE /api/v1/todos/{id}
+POST /api/v1/todo
+PATCH /api/v1/todo/{id}
+DELETE /api/v1/todo/{id}
 ```
 
 A read performed after a successful write returns data that reflects that write.

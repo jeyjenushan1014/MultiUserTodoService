@@ -105,6 +105,17 @@ export const updateTodoSchema = z.object({
   query: emptyObjectSchema,
 });
 
+
+export const getTodoSchema = z.object({
+  body: emptyObjectSchema,
+
+  params: z.object({
+    id: todoIdSchema,
+  }),
+
+  query: emptyObjectSchema,
+});
+
 export const deleteTodoSchema = z.object({
   body: emptyObjectSchema,
 

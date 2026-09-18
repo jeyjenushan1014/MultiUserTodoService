@@ -110,6 +110,70 @@ MultiUserTodoService/
 └── tsconfig.json
 ```
 
+## Quick Start for New Developers
+
+If you are setting up the project for the first time on your local machine, use this Docker-first workflow:
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/jeyjenushan1014/MultiUserTodoService.git
+cd MultiUserTodoService
+```
+
+2. Create the environment file from the example:
+
+### Windows PowerShell
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### Linux or macOS
+
+```bash
+cp .env.example .env
+```
+
+3. Update the values in `.env` if needed. At minimum, make sure the database, cache and JWT settings are present:
+
+```env
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgres://todo_user:todo_password@localhost:5432/todo_db
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=replace-with-at-least-32-random-characters
+JWT_EXPIRES_IN_SECONDS=900
+```
+
+4. Start PostgreSQL, Redis and the API container together:
+
+```bash
+docker compose up --build
+```
+
+This builds the application image automatically and runs the API in Docker, so you do not need to install packages locally or run `npm run dev` manually.
+
+5. In a second terminal, apply the database migrations:
+
+```bash
+npm run migrate
+```
+
+6. Open the app in your browser or API client:
+
+```text
+http://localhost:3000
+```
+
+The service is ready when the server starts without errors and the health endpoint responds successfully:
+
+```bash
+curl http://localhost:3000/health
+```
+
+If you want the full setup details, environment variables, troubleshooting and endpoint documentation, continue with the sections below.
+
 ## Prerequisites
 
 Install the following software before running the project:

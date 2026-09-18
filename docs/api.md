@@ -163,7 +163,7 @@ curl -i -X POST http://localhost:3000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "jenushan@example.com",
-    "password": "strong-password-123"
+    "password": "jenupassword12345"
   }'
 ```
 
@@ -232,6 +232,25 @@ The response never contains the password or stored password hash.
       ]
     },
     "requestId": "37869c3a-7cad-4f24-91d4-a881736a8d75"
+  }
+}
+```
+
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "details": {
+      "issues": [
+        {
+          "path": "body.password",
+          "message": "Too small: expected string to have >=12 characters"
+        }
+      ]
+    },
+    "requestId": "d821bda4-f695-48d9-b146-25fa34a790d5"
   }
 }
 ```
@@ -703,26 +722,6 @@ Example response:
 }
 ```
 
-
-### Invalid-input error
-
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid request",
-    "details": {
-      "issues": [
-        {
-          "path": "body.email",
-          "message": "Invalid email address"
-        }
-      ]
-    },
-    "requestId": "37869c3a-7cad-4f24-91d4-a881736a8d75"
-  }
-}
-```
 
 ### Duplicate-title error
 

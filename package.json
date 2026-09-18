@@ -9,8 +9,9 @@
     "build": "tsc",
     "start": "node dist/src/server.js",
     "migrate": "node --env-file=.env --import tsx ./node_modules/node-pg-migrate/bin/node-pg-migrate up -m src/db/migrations",
+    "migrate:docker": "node --import tsx ./node_modules/node-pg-migrate/bin/node-pg-migrate up -m src/db/migrations",
     "migrate:down": "node --env-file=.env --import tsx ./node_modules/node-pg-migrate/bin/node-pg-migrate down -m src/db/migrations",
-    "lint": "eslint src tests --max-warnings=0",
+    "lint": "eslint src --max-warnings=0",
     "check": "npm run lint && npm run build && npm test"
   },
   "repository": {

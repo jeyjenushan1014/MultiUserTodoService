@@ -8,6 +8,7 @@ import type {
 
 const CACHE_VERSION_PREFIX = "todo:version";
 const TODO_CACHE_PREFIX = "todo";
+const CACHE_BLOCK_PREFIX = "todo:cache-blocked";
 
 //temporarilyBlockedUsers is a Map that keeps track of users who have been temporarily blocked from using the cache. 
 //The key is the userId, and the value is the timestamp (in milliseconds) until which the user is blocked.
@@ -20,7 +21,11 @@ function getVersionKey(userId: string): string {
   return `${CACHE_VERSION_PREFIX}:${userId}`;
 }
 
-function blockUserCache(userId: string): void {
+function getCacheBlockKey(userId: string): string {
+  return `${CACHE_BLOCK_PREFIX}:${userId}`;
+}
+
+function blockUserCacheLocally(userId: string): void {
   const blockedUntil =
     Date.now() + env.CACHE_TTL_SECONDS * 1000;
 
@@ -28,25 +33,97 @@ function blockUserCache(userId: string): void {
     userId,
     blockedUntil,
   );
+
+  const expiryTimer = setTimeout(() => {
+    if (
+      temporarilyBlockedUsers.get(userId) ===
+      blockedUntil
+    ) {
+      temporarilyBlockedUsers.delete(userId);
+    }
+  }, env.CACHE_TTL_SECONDS * 1000);
+
+  expiryTimer.unref();
+}
+
+async function blockUserCache(userId: string): Promise<void> {
+  blockUserCacheLocally(userId);
+
+  if (!cache.isReady) {
+    return;
+  }
+
+  try {
+    await cache.set(
+      getCacheBlockKey(userId),
+      "1",
+      {
+        EX: env.CACHE_TTL_SECONDS,
+      },
+    );
+  } catch (error) {
+    logger.warn(
+      {
+        error,
+        userId,
+      },
+      "Shared cache block marker could not be written",
+    );
+  }
 }
 
 //isUserCacheBlocked checks if a user is currently blocked from using the cache.
-function isUserCacheBlocked(
+async function isUserCacheBlocked(
   userId: string,
-): boolean {
+): Promise<boolean> {
   const blockedUntil =
     temporarilyBlockedUsers.get(userId);
 
-  if (blockedUntil === undefined) {
-    return false;
-  }
-
-  if (Date.now() >= blockedUntil) {
+  if (
+    blockedUntil !== undefined &&
+    Date.now() >= blockedUntil
+  ) {
     temporarilyBlockedUsers.delete(userId);
+  }
+
+  if (
+    blockedUntil !== undefined &&
+    Date.now() < blockedUntil
+  ) {
+    return true;
+  }
+
+  if (!cache.isReady) {
     return false;
   }
 
-  return true;
+  try {
+    return (await cache.exists(
+      getCacheBlockKey(userId),
+    )) === 1;
+  } catch {
+    return false;
+  }
+}
+
+async function unblockUserCache(userId: string): Promise<void> {
+  temporarilyBlockedUsers.delete(userId);
+
+  if (!cache.isReady) {
+    return;
+  }
+
+  try {
+    await cache.del(getCacheBlockKey(userId));
+  } catch (error) {
+    logger.warn(
+      {
+        error,
+        userId,
+      },
+      "Shared cache block marker could not be cleared",
+    );
+  }
 }
 
 async function getCacheVersion(
@@ -89,7 +166,7 @@ export async function getCachedValue<T>(
 ): Promise<T | undefined> {
   if (
     !cache.isReady ||
-    isUserCacheBlocked(userId)
+    await isUserCacheBlocked(userId)
   ) {
     logger.info(
       {
@@ -148,7 +225,7 @@ export async function setCachedValue(
 ): Promise<void> {
   if (
     !cache.isReady ||
-    isUserCacheBlocked(userId)
+    await isUserCacheBlocked(userId)
   ) {
     return;
   }
@@ -177,7 +254,7 @@ export async function invalidateTodoCache(
 ): Promise<void> {
   try {
     if (!cache.isReady) {
-      blockUserCache(userId);
+      await blockUserCache(userId);
 
       logger.warn(
         { userId },
@@ -191,12 +268,14 @@ export async function invalidateTodoCache(
       getVersionKey(userId),
     );
 
+    await unblockUserCache(userId);
+
     logger.info(
       { userId },
       "TODO cache version incremented",
     );
   } catch (error) {
-    blockUserCache(userId);
+    await blockUserCache(userId);
 
     logger.warn(
       {

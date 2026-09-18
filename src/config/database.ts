@@ -5,12 +5,30 @@ pg is a PostgreSQL client for Node.js. It is used to connect to the PostgreSQL d
 */
 import pg from "pg";
 import { env } from "./env.js";
+import { logger } from "./logger.js";
 
 export const database = new pg.Pool({
   connectionString: env.DATABASE_URL,
   max: 10,
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 30000,
+});
+
+/*
+Handles unexpected errors from idle PostgreSQL connections.
+
+Without this listener, an error emitted by the pool may become an
+unhandled error event and terminate the Node.js process.
+*/
+database.on("error", (error) => {
+  logger.error(
+    {
+      error,
+      errorCode:
+        "code" in error ? error.code : undefined,
+    },
+   "Idle PostgreSQL client error; pool will recover"
+  );
 });
 
 export async function verifyDatabaseConnection(): Promise<void> {

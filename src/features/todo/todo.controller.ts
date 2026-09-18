@@ -1,7 +1,7 @@
 import { RequestHandler } from "express";
-import { AuthenticatedRequest } from "../../middleware/authenticate.middleware";
-import { CreateTodoInput, ListTodoQuery, UpdateTodoInput } from "./todo.types";
-import * as todoService from "./todo.service"
+import type { AuthenticatedRequest } from "../../middleware/authenticate.middleware.js";
+import type { CreateTodoInput, ListTodoQuery, UpdateTodoInput } from "./todo.types.js";
+import * as todoService from "./todo.service.js";
 
 
 function getAuthenticatedUserId(

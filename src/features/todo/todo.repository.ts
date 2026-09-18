@@ -1,6 +1,6 @@
-import { PoolClient } from "pg";
-import { database } from "../../config/database";
-import { CreateTodoInput, Todo, TodoDatabaseRow, ListTodoQuery, UpdateTodoInput } from "./todo.types";
+import type { PoolClient } from "pg";
+import { database } from "../../config/database.js";
+import type { CreateTodoInput, Todo, TodoDatabaseRow, ListTodoQuery, UpdateTodoInput } from "./todo.types.js";
 
 const TODO_COLUMNS = `
   id,
@@ -249,6 +249,10 @@ export async function updateTodo(
         `${field.columnName} = $${values.length}`,
       );
     }
+  }
+
+  if (setClauses.length === 0) {
+    return undefined;
   }
 
   const result =

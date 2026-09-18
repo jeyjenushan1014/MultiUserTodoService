@@ -1,8 +1,8 @@
 import {Router} from "express";
-import { asyncHandler } from "../../shared/async-handler";
-import * as todoController from "./todo.controller.js"
-import { validate } from "../../shared/validate";
-import { createTodoSchema,deleteTodoSchema,getTodoSchema,listTodosSchema,updateTodoSchema } from "./todo.validation";
+import { asyncHandler } from "../../shared/async-handler.js";
+import * as todoController from "./todo.controller.js";
+import { validate } from "../../shared/validate.js";
+import { createTodoSchema,deleteTodoSchema,getTodoSchema,listTodosSchema,updateTodoSchema } from "./todo.validation.js";
 import { authenticate } from "../../middleware/authenticate.middleware.js";
 
 

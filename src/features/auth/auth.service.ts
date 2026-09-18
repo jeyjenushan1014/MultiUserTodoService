@@ -75,7 +75,7 @@ export async function login(
     await authRepository.findUserByEmail(email);
 
   const passwordHash =
-    user?.password ?? "$2b$12$C6UzMDM.H6dfI/f/IKcEe.8qJBM9G6tePZlJ8QO4I6m2D8x2wzWfK";
+    user?.password_hash ?? "$2b$12$C6UzMDM.H6dfI/f/IKcEe.8qJBM9G6tePZlJ8QO4I6m2D8x2wzWfK";
 
   const passwordMatches = await bcrypt.compare(
     password,

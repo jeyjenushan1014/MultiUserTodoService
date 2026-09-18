@@ -203,7 +203,16 @@ export async function getCachedValue<T>(
       "Cache hit",
     );
 
-    return JSON.parse(value) as T;
+    return JSON.parse(value, (property, parsedValue) => {
+      if (
+        (property === "createdAt" || property === "updatedAt" || property === "dueDate") &&
+        typeof parsedValue === "string"
+      ) {
+        return new Date(parsedValue);
+      }
+
+      return parsedValue;
+    }) as T;
   } catch (error) {
     logger.warn(
       {

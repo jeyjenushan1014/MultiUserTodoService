@@ -34,8 +34,13 @@ export const errorHandler: ErrorRequestHandler = (
 ) => {
   void next;
 
+  const suppliedRequestId =
+    request.header("x-request-id");
   const requestId =
-    request.header("x-request-id") ?? randomUUID();
+    suppliedRequestId !== undefined &&
+    /^[A-Za-z0-9._-]{1,100}$/.test(suppliedRequestId)
+      ? suppliedRequestId
+      : randomUUID();
 
   if (error instanceof AppError) {
     response.status(error.statusCode).json({

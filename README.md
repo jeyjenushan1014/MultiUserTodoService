@@ -89,18 +89,15 @@ MultiUserTodoService/
 │   │       ├── todo.types.ts
 │   │       └── todo.validation.ts
 │   ├── middleware/
-│   │   ├── authenticate.ts
-│   │   ├── error-handler.ts
-│   │   └── request-logger.ts
+│   │   ├── authenticate.middleware.ts
+│   │   ├── error-handler.middleware.ts
+│   │   └── request-logger.middleware.ts
 │   ├── shared/
 │   │   ├── app-error.ts
 │   │   ├── async-handler.ts
 │   │   └── validate.ts
 │   ├── app.ts
 │   └── server.ts
-    ├── tests/
-│        └── todo.validation.test.ts
-├── .dockerignore
 ├── .env.example
 ├── .gitignore
 ├── docker-compose.yml

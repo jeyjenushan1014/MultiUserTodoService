@@ -3,7 +3,7 @@ import {
   expect,
   it,
 } from "vitest";
-import { createTodoSchema, listTodosSchema, updateTodoSchema } from "../features/todo/todo.validation";
+import { createTodoSchema, listTodosSchema, updateTodoSchema } from "../features/todo/todo.validation.js";
 
 
 describe("TODO validation", () => {

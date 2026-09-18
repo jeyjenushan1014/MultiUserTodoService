@@ -9,13 +9,13 @@ export async function createUser(
     `
       INSERT INTO users (
         email,
-        password
+        password_hash
       )
       VALUES ($1, $2)
       RETURNING
         id,
         email,
-        password,
+        password_hash,
         created_at
     `,
     [email, password],
@@ -32,7 +32,7 @@ export async function findUserByEmail(
       SELECT
         id,
         email,
-        password,
+        password_hash,
         created_at
       FROM users
       WHERE lower(email) = lower($1)
@@ -51,7 +51,7 @@ export async function findUserById(
       SELECT
         id,
         email,
-        password,
+        password_hash,
         created_at
       FROM users
       WHERE id = $1

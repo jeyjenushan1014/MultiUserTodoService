@@ -99,19 +99,13 @@ jobs:
         run: npm run migrate
 
       - name: Run linting
-        shell: bash
-        run: |
-          if compgen -G "eslint.config.*" > /dev/null; then
-            npx eslint src --max-warnings=0
-          else
-            echo "No eslint.config.* found; skipping ESLint."
-          fi
+        run: npm run lint
 
       - name: Build TypeScript
         run: npm run build
 
       - name: Run automated tests
-        run: npx vitest run src/tests --exclude "dist/**"
+        run: npm test
 
       - name: Start application
         shell: bash

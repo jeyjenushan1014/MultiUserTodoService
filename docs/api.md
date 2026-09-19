@@ -14,7 +14,6 @@ This document covers the Day 1 endpoints:
 
 4: health endpoint around the application,database and cache
 
-
 ## 2. Base URL
 
 ```text

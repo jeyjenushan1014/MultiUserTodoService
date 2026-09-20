@@ -1,3 +1,13 @@
-node_modules
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
 .env
-dist
+.env.*
+!.env.example
+
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/

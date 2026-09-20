@@ -1,56 +1,39 @@
 {
-  "name": "multiusertodoservice",
-  "version": "1.0.0",
-  "description": "Building a secure multi-user TODO backend using TypeScript, Node.js, PostgreSQL, Redis, JWT, and Docker. It supports account registration, login, and isolated TODO management with validation, pagination, filtering, sorting, caching, health checks, migrations, logging, and complete API documentation.",
-  "main": "index.js",
+  "name": "multi-user-todo-service",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/gateway",
+    "apps/account-service",
+    "packages/common",
+    "packages/contracts"
+  ],
   "scripts": {
-    "test": "vitest run",
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/src/server.js",
-    "migrate": "node --env-file=.env --import tsx ./node_modules/node-pg-migrate/bin/node-pg-migrate up -m src/db/migrations",
-    "migrate:docker": "node --import tsx ./node_modules/node-pg-migrate/bin/node-pg-migrate up -m src/db/migrations",
-    "migrate:down": "node --env-file=.env --import tsx ./node_modules/node-pg-migrate/bin/node-pg-migrate down -m src/db/migrations",
-    "lint": "eslint src --max-warnings=0",
-    "check": "npm run lint && npm run build && npm test"
+    "build:contracts": "npm run build -w @todo/contracts",
+    "build:common": "npm run build -w @todo/common",
+    "build:gateway": "npm run build -w @todo/gateway",
+    "build:account": "npm run build -w @todo/account-service",
+    "build:packages": "npm run build:contracts && npm run build:common",
+    "build": "npm run build:packages && npm run build:account && npm run build:gateway",
+    "lint": "npm run build:packages && eslint apps/*/src packages/*/src --max-warnings=0",
+    "test": "npm run test -w @todo/common && npm run test -w @todo/account-service && npm run test -w @todo/gateway",
+    "typecheck": "npm run build",
+    "check": "npm run lint && npm run typecheck && npm test",
+    "migrate:account": "npm run migrate -w @todo/account-service",
+    "migrate:account:down": "npm run migrate:down -w @todo/account-service",
+    "compose:up": "docker compose up --build",
+    "compose:down": "docker compose down"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jeyjenushan1014/MultiUserTodoService.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/jeyjenushan1014/MultiUserTodoService/issues"
-  },
-  "homepage": "https://github.com/jeyjenushan1014/MultiUserTodoService#readme",
-  "dependencies": {
-    "bcrypt": "^6.0.0",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "helmet": "^8.3.0",
-    "jsonwebtoken": "^9.0.3",
-    "pg": "^8.23.0",
-    "pino": "^10.3.1",
-    "pino-http": "^11.0.0",
-    "redis": "^6.2.1",
-    "zod": "^4.6.5"
+  "engines": {
+    "node": ">=22"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/bcrypt": "^6.0.0",
-    "@types/express": "^5.0.6",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^22.20.3",
-    "@types/pg": "^8.23.1",
-    "@types/supertest": "^7.2.1",
-    "eslint": "^10.10.0",
-    "node-pg-migrate": "^9.0.0",
-    "supertest": "^7.2.2",
-    "tsx": "^4.23.13",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.0",
-    "vitest": "^5.0.1"
+    "@eslint/js": "^9.35.0",
+    "@types/node": "^24.3.1",
+    "eslint": "^9.35.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.42.0",
+    "vitest": "^3.2.4"
   }
 }

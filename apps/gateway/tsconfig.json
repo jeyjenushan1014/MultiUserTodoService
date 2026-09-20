@@ -4,22 +4,24 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "composite": true,
-    "tsBuildInfoFile": "./node_modules/.cache/gateway.tsbuildinfo"
+    "noEmit": false,
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
   "include": [
     "src/**/*.ts"
   ],
   "exclude": [
+    "src/**/*.test.ts",
+    "src/**/__tests__/**",
     "dist",
-    "node_modules",
-    "**/*.test.ts"
+    "node_modules"
   ],
   "references": [
     {
       "path": "../../packages/contracts"
     },
     {
-      "path": "../../packages/common"
+      "path": "../../packages/common/tsconfig.build.json"
     }
   ]
 }

@@ -1,3 +1,7 @@
+/*
+This package mainly used for all the services get same error response shape
+*/
+
 export interface ErrorDetail {
   readonly field?: string;
   readonly message: string;

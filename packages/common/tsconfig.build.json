@@ -1,6 +1,7 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "./tsconfig.json",
   "compilerOptions": {
+    "noEmit": false,
     "rootDir": "./src",
     "outDir": "./dist",
     "composite": true,
@@ -10,9 +11,14 @@
     "src/**/*.ts"
   ],
   "exclude": [
-    "dist",
-    "node_modules",
     "src/**/*.test.ts",
-    "src/**/__tests__/**"
+    "src/**/__tests__/**",
+    "dist",
+    "node_modules"
+  ],
+  "references": [
+    {
+      "path": "../contracts"
+    }
   ]
 }

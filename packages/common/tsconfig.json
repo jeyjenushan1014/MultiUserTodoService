@@ -4,15 +4,15 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "composite": true,
-    "tsBuildInfoFile": "./node_modules/.cache/common.tsbuildinfo"
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.cache/common-typecheck.tsbuildinfo"
   },
   "include": [
     "src/**/*.ts"
   ],
   "exclude": [
     "dist",
-    "node_modules",
-    "**/*.test.ts"
+    "node_modules"
   ],
   "references": [
     {

@@ -1,15 +1,19 @@
-//Mainly used to check the type for the source and test files and not generate any output files
-
+//only build for the production source
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "./tsconfig.json",
   "compilerOptions": {
+    "noEmit": false,
     "rootDir": "./src",
-    "noEmit": true
+    "outDir": "./dist",
+    "composite": true,
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
   "include": [
     "src/**/*.ts"
   ],
   "exclude": [
+    "src/**/*.test.ts",
+    "src/**/__tests__/**",
     "dist",
     "node_modules"
   ],

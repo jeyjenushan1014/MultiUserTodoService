@@ -319,3 +319,260 @@ Not implemented in Part 2:
 * RabbitMQ publishing
 
 The account-event types currently define contracts only. They must not be considered operational events until publishing and delivery are implemented and tested.
+
+
+## API Gateway Foundation
+
+### Responsibility
+
+The API Gateway is the planned single public entry point to the platform.
+
+The Gateway foundation currently provides:
+
+* Environment-variable validation
+* Structured JSON logging
+* Sensitive-field log redaction
+* Request-ID generation and propagation
+* Request-scoped asynchronous context
+* HTTP request logging
+* Security headers
+* JSON request-size limits
+* Gateway health reporting
+* Standard not-found responses
+* Standard global error handling
+* Graceful process shutdown
+
+Authentication, rate limiting, Redis and downstream service communication are not implemented in this part.
+
+### Gateway Structure
+
+```text
+apps/gateway/src/
+├── __tests__/
+│   └── app.test.ts
+├── config/
+│   ├── env.ts
+│   └── logger.ts
+├── middleware/
+│   ├── error-handler.middleware.ts
+│   ├── not-found.middleware.ts
+│   ├── request-context.middleware.ts
+│   └── request-logger.middleware.ts
+├── modules/
+│   └── health/
+│       ├── health.controller.ts
+│       ├── health.routes.ts
+│       ├── health.service.test.ts
+│       └── health.service.ts
+├── app.ts
+└── server.ts
+```
+
+### Health Module
+
+The health feature follows this flow:
+
+```text
+GET /health
+    ↓
+health.routes.ts
+    ↓
+health.controller.ts
+    ↓
+health.service.ts
+    ↓
+HTTP response
+```
+
+Each file has one responsibility:
+
+| File                     | Responsibility                                  |
+| ------------------------ | ----------------------------------------------- |
+| `health.routes.ts`       | Maps the HTTP method and path to the controller |
+| `health.controller.ts`   | Handles the HTTP request and response           |
+| `health.service.ts`      | Produces the Gateway health result              |
+| `health.service.test.ts` | Verifies the health-service behaviour           |
+
+The health module does not use a repository because it does not currently read or write database data.
+
+### Middleware Order
+
+Gateway middleware runs in the following order:
+
+```text
+Security headers
+→ Request context
+→ Request logging
+→ JSON body parser
+→ Application routes
+→ Not-found middleware
+→ Global error middleware
+```
+
+The middleware order is important.
+
+Request context runs before body parsing so that malformed JSON errors also receive a request ID.
+
+The not-found middleware runs after all valid routes.
+
+The global error middleware runs last so errors from all earlier middleware and routes use the standard error-response format.
+
+### Request ID
+
+The Gateway accepts an optional `x-request-id` request header.
+
+If the supplied value is a valid UUID, the Gateway preserves it.
+
+If the header is missing or invalid, the Gateway generates a new UUID.
+
+The request ID is:
+
+* Returned in the `x-request-id` response header
+* Stored in asynchronous request context
+* Added to structured logs
+* Added to error responses
+
+Invalid request-ID values are replaced instead of being trusted.
+
+### Request Context
+
+The Gateway uses `AsyncLocalStorage` through the Common package.
+
+The request context stores:
+
+* Request ID
+* Service name
+
+Each concurrent request receives a separate context. Request information must not leak between requests.
+
+### Logging
+
+Gateway logs use structured JSON.
+
+Request logs include:
+
+* HTTP method
+* Request path
+* Response status
+* Request ID
+* Request duration
+
+Sensitive values such as passwords, access tokens, refresh tokens, reset tokens and authorization headers are configured for redaction.
+
+Request bodies are not written to request logs.
+
+### Error Handling
+
+The Gateway uses one standard error-response shape:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Safe error message",
+    "requestId": "UUID"
+  }
+}
+```
+
+Optional validation details may be included when appropriate.
+
+The Gateway currently handles:
+
+| Condition                | Status | Error code              |
+| ------------------------ | -----: | ----------------------- |
+| Unknown route            |    404 | `ROUTE_NOT_FOUND`       |
+| Malformed JSON           |    400 | `INVALID_JSON`          |
+| Request body over 100 KB |    413 | `PAYLOAD_TOO_LARGE`     |
+| Unexpected error         |    500 | `INTERNAL_SERVER_ERROR` |
+
+Unexpected internal error details and stack traces are logged but are not returned to the client.
+
+### Security
+
+The Gateway currently applies the following HTTP protections:
+
+* Helmet security headers
+* Disabled `x-powered-by` header
+* JSON body-size limit
+* Request-ID validation
+* Safe error messages
+* Sensitive-field log redaction
+
+Authentication and authorization will be added in their relevant implementation parts.
+
+### Health Behaviour
+
+The Gateway exposes:
+
+```http
+GET /health
+```
+
+Part 3 does not integrate Redis or downstream services. Therefore, the endpoint currently reports only the health of the Gateway process.
+
+Current response:
+
+```json
+{
+  "status": "healthy",
+  "service": "gateway"
+}
+```
+
+Dependency health checks will be added only after those dependencies are integrated.
+
+### Graceful Shutdown
+
+The Gateway listens for:
+
+* `SIGINT`
+* `SIGTERM`
+
+When either signal is received, the Gateway:
+
+1. Stops accepting new connections.
+2. Allows active connections to finish.
+3. Closes the HTTP server.
+4. Exits normally.
+
+A forced-shutdown timeout prevents the process from hanging indefinitely.
+
+### TypeScript Configuration
+
+The Gateway uses two TypeScript configurations:
+
+| Configuration         | Purpose                                                         |
+| --------------------- | --------------------------------------------------------------- |
+| `tsconfig.json`       | Type-checks application and test files without producing output |
+| `tsconfig.build.json` | Builds production source files into `dist` and excludes tests   |
+
+This prevents automated tests from being included in the production build.
+
+### Current Implementation Status
+
+Completed:
+
+* Gateway HTTP server
+* Health route, controller and service
+* Request-ID middleware
+* Request-context middleware
+* Request logging
+* Structured logger
+* Security headers
+* JSON body-size limit
+* Not-found handling
+* Global error handling
+* Graceful shutdown
+* Gateway unit and HTTP integration tests
+
+Not implemented:
+
+* Redis connection
+* Distributed rate limiting
+* JWT authentication
+* Session validation
+* Account Service communication
+* Signed internal identity forwarding
+* Downstream timeout handling
+* Circuit breaker behaviour

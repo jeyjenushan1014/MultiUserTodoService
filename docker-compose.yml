@@ -104,13 +104,27 @@ services:
       start_period: 10s
 
     restart: unless-stopped
+  account-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: account-migrations
+
+    environment:
+      DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+
+    depends_on:
+      account-postgres:
+        condition: service_healthy
+
+    restart: "no"    
 
   account-service:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
       target: account-service-runtime
-    
+
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -123,6 +137,10 @@ services:
 
     expose:
       - "3001"
+
+    depends_on:
+      account-migrations:
+        condition: service_completed_successfully
 
     healthcheck:
       test:

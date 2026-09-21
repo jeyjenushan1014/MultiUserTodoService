@@ -23,7 +23,22 @@ RUN npm ci
 
 
 # ==========================================================
-# Stage 2: Build shared packages
+# Stage 2: Account database migration runner
+# ==========================================================
+FROM dependencies AS account-migrations
+
+WORKDIR /app
+
+COPY apps/account-service/migrations \
+  ./apps/account-service/migrations
+
+WORKDIR /app/apps/account-service
+
+CMD ["npm", "run", "migrate"]
+
+
+# ==========================================================
+# Stage 3: Build shared packages
 # ==========================================================
 FROM dependencies AS shared-builder
 
@@ -43,7 +58,7 @@ RUN npm run build -w @todo/common
 
 
 # ==========================================================
-# Stage 3: Build Gateway
+# Stage 4: Build Gateway
 # ==========================================================
 FROM shared-builder AS gateway-builder
 
@@ -54,7 +69,7 @@ RUN npm run build -w @todo/gateway
 
 
 # ==========================================================
-# Stage 4: Build Account Service
+# Stage 5: Build Account Service
 # ==========================================================
 FROM shared-builder AS account-service-builder
 
@@ -65,7 +80,7 @@ RUN npm run build -w @todo/account-service
 
 
 # ==========================================================
-# Stage 5: Install production dependencies
+# Stage 6: Install production dependencies
 # ==========================================================
 FROM node:24-alpine AS production-dependencies
 
@@ -92,7 +107,7 @@ RUN npm ci --omit=dev \
 
 
 # ==========================================================
-# Stage 6: Gateway runtime
+# Stage 7: Gateway runtime
 # ==========================================================
 FROM production-dependencies AS gateway-runtime
 
@@ -116,7 +131,7 @@ CMD ["node", "apps/gateway/dist/server.js"]
 
 
 # ==========================================================
-# Stage 7: Account Service runtime
+# Stage 8: Account Service runtime
 # ==========================================================
 FROM production-dependencies AS account-service-runtime
 

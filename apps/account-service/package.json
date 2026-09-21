@@ -9,6 +9,9 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "test": "cross-env NODE_ENV=test DATABASE_URL=postgres://account_user:account_password@localhost:5432/account_db LOG_LEVEL=silent vitest run",
+    "migrate": "node-pg-migrate up -m migrations",
+    "migrate:down": "node-pg-migrate down -m migrations",
+    "migrate:create": "node-pg-migrate create -m migrations",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
@@ -25,6 +28,7 @@
     "@types/pg": "^8.15.5",
     "@types/supertest": "^6.0.3",
     "cross-env": "^10.0.0",
+    "node-pg-migrate": "^8.0.3",
     "supertest": "^7.1.4",
     "tsx": "^4.20.5"
   }

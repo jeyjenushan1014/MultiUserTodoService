@@ -9,12 +9,14 @@
     "apps/account-service",
     "apps/gateway"
   ],
-    "scripts": {
+  
+  "scripts": {
     "build": "npm run build -w @todo/contracts && npm run build -w @todo/common && npm run build -w @todo/account-service && npm run build -w @todo/gateway",
     "build:packages": "npm run build -w @todo/contracts && npm run build -w @todo/common",
     "lint": "npm run build:packages && eslint \"packages/**/*.ts\" \"apps/**/*.ts\" --max-warnings=0",
     "test": "npm run test -w @todo/common && npm run test -w @todo/account-service && npm run test -w @todo/gateway",
     "check": "npm run lint && npm run build && npm test",
+    "migrate:account": "npm run migrate -w @todo/account-service",
     "clean": "node scripts/clean.mjs"
   },
   "engines": {

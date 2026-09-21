@@ -7,12 +7,18 @@ export {
 } from "./events/account-event.contract.js";
 
 export type {
+  RegisterAccountRequest,
+  RegisteredAccount,
+  RegisterAccountResponse,
+  AccountRegisteredEvent,
+  AccountRegisteredPayload,
+} from "./account/index.js";
+
+export type {
   AccountEmailChangedEvent,
   AccountEmailChangedPayload,
   AccountEvent,
   AccountEventType,
-  AccountRegisteredEvent,
-  AccountRegisteredPayload,
 } from "./events/account-event.contract.js";
 
 export type {
@@ -34,4 +40,6 @@ export type {
   CallerIdentity,
   InternalIdentityEnvelope,
 } from "./identity/caller-identity.contract.js";
+
+
 

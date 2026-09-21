@@ -17,27 +17,20 @@ export const logger = pino({
     environment: env.NODE_ENV,
   },
 
-  redact: {
-    paths: [
-      "password",
-      "*.password",
-      "body.password",
-      "request.body.password",
-      "authorization",
-      "headers.authorization",
-      "request.headers.authorization",
-      "accessToken",
-      "refreshToken",
-      "resetToken",
-      "*.accessToken",
-      "*.refreshToken",
-      "*.resetToken",
-      "DATABASE_URL",
-      "databaseUrl",
-      "connectionString",
-    ],
-    censor: "[REDACTED]",
-  },
+ redact: {
+  paths: [
+    "password",
+    "passwordHash",
+    "password_hash",
+    "req.body.password",
+    "authorization",
+    "req.headers.authorization",
+     "['x-internal-service-key']",
+      "req.headers['x-internal-service-key']",
+      "request.headers['x-internal-service-key']",
+  ],
+  censor: "[REDACTED]",
+},
 
   mixin(): Record<string, string> {
     const requestId =

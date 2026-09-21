@@ -19,7 +19,7 @@ const environmentSchema =
       .max(65_535)
       .default(3001),
 
-    DATABASE_URL: z
+    ACCOUNT_DATABASE_URL: z
       .string()
       .min(1)
       .refine(
@@ -75,6 +75,18 @@ const environmentSchema =
         .min(100)
         .max(30_000)
         .default(2_000),
+
+    INTERNAL_SERVICE_SECRET:
+       z.string()
+        .min(32),
+
+    PASSWORD_HASH_ROUNDS: 
+       z.coerce
+          .number()
+          .int()
+          .min(10)
+          .max(14)
+          .default(12),
 
     LOG_LEVEL: z
       .enum([

@@ -15,22 +15,13 @@ export type AccountEventType =
     keyof typeof ACCOUNT_EVENT_TYPES
   ];
 
-export interface AccountRegisteredPayload {
-  readonly userId: string;
-  readonly email: string;
-}
+
 
 export interface AccountEmailChangedPayload {
   readonly userId: string;
   readonly previousEmail: string;
   readonly newEmail: string;
 }
-
-export type AccountRegisteredEvent =
-  EventEnvelope<
-    typeof ACCOUNT_EVENT_TYPES.registered,
-    AccountRegisteredPayload
-  >;
 
 export type AccountEmailChangedEvent =
   EventEnvelope<
@@ -39,5 +30,4 @@ export type AccountEmailChangedEvent =
   >;
 
 export type AccountEvent =
-  | AccountRegisteredEvent
   | AccountEmailChangedEvent;

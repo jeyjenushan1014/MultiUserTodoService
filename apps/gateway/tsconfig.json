@@ -1,24 +1,14 @@
-//Mainly used to check the type for the source and test files and not generate any output files
-
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "./src",
-    "noEmit": true
+    "noEmit": true,
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
   },
   "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "dist",
-    "node_modules"
-  ],
-  "references": [
-    {
-      "path": "../../packages/contracts"
-    },
-    {
-      "path": "../../packages/common/tsconfig.build.json"
-    }
+    "src/**/*.ts",
+    "vitest.config.ts"
   ]
 }

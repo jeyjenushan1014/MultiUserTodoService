@@ -1,3 +1,7 @@
+import {
+  randomUUID,
+} from "node:crypto";
+
 import type {
   ErrorRequestHandler,
 } from "express";
@@ -18,6 +22,8 @@ import {
 
 interface ExpressBodyError {
   readonly type?: unknown;
+  readonly status?: unknown;
+  readonly statusCode?: unknown;
 }
 
 function isObject(
@@ -33,6 +39,39 @@ function isExpressBodyError(
   error: unknown,
 ): error is ExpressBodyError {
   return isObject(error);
+}
+
+function isErrorDetail(
+  value: unknown,
+): value is ErrorDetail {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  const field = value.field;
+  const message = value.message;
+
+  return (
+    (
+      field === undefined ||
+      typeof field === "string"
+    ) &&
+    typeof message === "string"
+  );
+}
+
+function getErrorDetails(
+  details: unknown,
+): readonly ErrorDetail[] | undefined {
+  if (!Array.isArray(details)) {
+    return undefined;
+  }
+
+  if (!details.every(isErrorDetail)) {
+    return undefined;
+  }
+
+  return details;
 }
 
 function createErrorResponse(
@@ -64,99 +103,152 @@ function createErrorResponse(
 export const errorHandlerMiddleware:
   ErrorRequestHandler = (
     error: unknown,
-    _request,
+    request,
     response,
     next,
   ): void => {
     /*
-    Express uses the fourth parameter to identify
-    error-handling middleware.
-    */
+     * Express requires four parameters to identify
+     * this function as error-handling middleware.
+     */
     void next;
 
     const requestId =
       getRequestId() ??
-      "unavailable";
+      randomUUID();
 
-    if (error instanceof AppError) {
-      logger.warn(
-        {
-          errorCode:
-            error.code,
-          statusCode:
-            error.statusCode,
+    response.setHeader(
+      "X-Request-ID",
+      requestId,
+    );
+
+    /*
+     * Handle a request body that exceeds the
+     * express.json() configured size limit.
+     */
+    if (
+      isExpressBodyError(error) &&
+      (
+        error.type ===
+          "entity.too.large" ||
+        error.status === 413 ||
+        error.statusCode === 413
+      )
+    ) {
+      const responseBody =
+        createErrorResponse(
+          "PAYLOAD_TOO_LARGE",
+          "Request body is too large",
           requestId,
-        },
-        error.message,
-      );
+        );
 
       response
-        .status(
-          error.statusCode,
-        )
-        .json(
-          createErrorResponse(
-            error.code,
-            error.message,
-            requestId,
-            error.details,
-          ),
-        );
+        .status(413)
+        .json(responseBody);
 
       return;
     }
 
+    /*
+     * Handle malformed JSON.
+     */
     if (
       isExpressBodyError(error) &&
       error.type ===
         "entity.parse.failed"
     ) {
+      const responseBody =
+        createErrorResponse(
+          "INVALID_JSON",
+          "Request body contains invalid JSON",
+          requestId,
+        );
+
       response
         .status(400)
-        .json(
-          createErrorResponse(
-            "INVALID_JSON",
-            "Request body contains invalid JSON",
-            requestId,
-          ),
-        );
+        .json(responseBody);
 
       return;
     }
 
-    if (
-      isExpressBodyError(error) &&
-      error.type ===
-        "entity.too.large"
-    ) {
+    /*
+     * Handle expected application errors.
+     *
+     * Examples:
+     * - validation error
+     * - duplicate email
+     * - internal authentication failure
+     */
+    if (error instanceof AppError) {
+      const details =
+        getErrorDetails(
+          error.details,
+        );
+
+      logger.warn(
+        {
+          errorCode:
+            error.code,
+
+          statusCode:
+            error.statusCode,
+
+          requestId,
+
+          method:
+            request.method,
+
+          path:
+            request.originalUrl,
+        },
+        error.message,
+      );
+
+      const responseBody =
+        createErrorResponse(
+          error.code,
+          error.message,
+          requestId,
+          details,
+        );
+
       response
-        .status(413)
-        .json(
-          createErrorResponse(
-            "PAYLOAD_TOO_LARGE",
-            "Request body is too large",
-            requestId,
-          ),
-        );
+        .status(error.statusCode)
+        .json(responseBody);
 
       return;
     }
 
+    /*
+     * Log the complete unexpected error internally.
+     *
+     * The property must be named `err` so that
+     * Pino serializes Error.message and Error.stack.
+     */
     logger.error(
       {
-        error,
+        err: error,
         requestId,
+        method:
+          request.method,
+        path:
+          request.originalUrl,
       },
       "Unhandled Account Service error",
     );
 
+    /*
+     * Do not return the original error, stack trace,
+     * SQL statement or database error to the client.
+     */
+    const responseBody =
+      createErrorResponse(
+        "INTERNAL_SERVER_ERROR",
+        "An unexpected error occurred",
+        requestId,
+      );
+
     response
       .status(500)
-      .json(
-        createErrorResponse(
-          "INTERNAL_SERVER_ERROR",
-          "An unexpected error occurred",
-          requestId,
-        ),
-      );
+      .json(responseBody);
   };

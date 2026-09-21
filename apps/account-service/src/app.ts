@@ -17,6 +17,10 @@ import {
   healthRouter,
 } from "./modules/health/health.routes.js";
 
+import {
+  internalRegistrationRouter,
+} from "./modules/account/registration/registration.routes.js";
+
 export const app =
   express();
 
@@ -43,6 +47,12 @@ app.use(
   "/health",
   healthRouter,
 );
+
+app.use(
+  "/internal/v1/accounts",
+  internalRegistrationRouter,
+);
+
 
 app.use(
   notFoundMiddleware,

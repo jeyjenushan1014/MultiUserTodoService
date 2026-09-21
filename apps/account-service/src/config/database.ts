@@ -15,7 +15,7 @@ import {
 export const database =
   new pg.Pool({
     connectionString:
-      env.DATABASE_URL,
+      env.ACCOUNT_DATABASE_URL,
 
     max:
       env.DATABASE_MAX_CONNECTIONS,

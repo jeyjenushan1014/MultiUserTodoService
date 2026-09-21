@@ -128,12 +128,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
       DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
       DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
       DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
       DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      
 
     expose:
       - "3001"
@@ -167,6 +170,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      ACCOUNT_SERVICE_URL: http://account-service:3001
+      DOWNSTREAM_TIMEOUT_MS: ${DOWNSTREAM_TIMEOUT_MS:-5000}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
       LOG_LEVEL: ${LOG_LEVEL:-info}
 
     ports:
@@ -184,6 +190,11 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+
+    depends_on:
+      account-service:
+        condition: service_healthy
+        
 
     restart: unless-stopped
 

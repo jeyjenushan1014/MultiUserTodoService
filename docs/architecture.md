@@ -1044,3 +1044,759 @@ The migrations are stored inside:
 apps/account-service/migrations/
 ├── 001_create_users.cjs
 └── 002_create_outbox_events.cjs
+
+# Part 7 — User Registration with Transactional Outbox
+
+## 1. Purpose
+
+Part 7 implements user registration across the API Gateway and Account Service.
+
+A registration request enters through the public API Gateway. The Gateway validates the public request and forwards it to the private Account Service. The Account Service validates the request again, hashes the password, creates the user, and stores an `account.registered` event in the transactional outbox.
+
+The user and outbox event are created in one PostgreSQL transaction.
+
+Registration does not:
+
+- Return an access token
+- Return a refresh token
+- Create a login session
+- Publish directly to RabbitMQ
+- Send an email directly
+- Store a plain-text password
+
+Those capabilities are implemented in later parts.
+
+---
+
+## 2. Public and Internal Boundaries
+
+### Public boundary
+
+External clients communicate only with the Gateway:
+
+```text
+POST /api/v1/auth/register
+```
+
+Public address:
+
+```text
+http://localhost:3000/api/v1/auth/register
+```
+
+### Internal boundary
+
+The Gateway forwards the validated request to the Account Service:
+
+```text
+POST /internal/v1/accounts/register
+```
+
+Internal Docker address:
+
+```text
+http://account-service:3001/internal/v1/accounts/register
+```
+
+The internal Account Service endpoint is not published to the host machine.
+
+External clients must not call the Account Service directly.
+
+---
+
+## 3. Component Responsibilities
+
+| Component | Responsibility |
+|---|---|
+| API Gateway route | Exposes the public registration endpoint |
+| Gateway validation | Rejects malformed public requests |
+| Account Service client | Calls the Account Service with a finite timeout |
+| Internal authentication middleware | Rejects calls without the correct internal service secret |
+| Account registration route | Defines the internal registration endpoint |
+| Account validation | Revalidates the request at the service boundary |
+| Registration controller | Converts HTTP input into a service call |
+| Registration service | Coordinates normalization, hashing and persistence |
+| Password hasher | Produces a secure password hash |
+| Registration repository | Executes user and outbox inserts in one transaction |
+| PostgreSQL | Stores users and pending outbox events |
+| Error middleware | Converts failures into safe API responses |
+
+---
+
+## 4. Folder Structure
+
+The Part 7 implementation is organized by responsibility.
+
+```text
+apps/
+├── gateway/
+│   └── src/
+│       ├── clients/
+│       │   └── account-service.client.ts
+│       ├── config/
+│       │   └── env.ts
+│       ├── middleware/
+│       │   ├── error-handler.middleware.ts
+│       │   ├── not-found.middleware.ts
+│       │   └── request-context.middleware.ts
+│       ├── modules/
+│       │   └── auth/
+│       │       └── registration/
+│       │           ├── registration.controller.ts
+│       │           ├── registration.routes.ts
+│       │           └── registration.validation.ts
+│       ├── app.ts
+│       └── server.ts
+│
+└── account-service/
+    └── src/
+        ├── config/
+        │   ├── database.ts
+        │   ├── env.ts
+        │   └── logger.ts
+        ├── middleware/
+        │   ├── error-handler.middleware.ts
+        │   ├── internal-service-auth.middleware.ts
+        │   └── request-context.middleware.ts
+        ├── modules/
+        │   └── account/
+        │       └── registration/
+        │           ├── registration.controller.ts
+        │           ├── registration.repository.ts
+        │           ├── registration.routes.ts
+        │           ├── registration.service.ts
+        │           ├── registration.types.ts
+        │           └── registration.validation.ts
+        ├── security/
+        │   └── password-hasher.ts
+        ├── app.ts
+        └── server.ts
+
+packages/
+└── contracts/
+    └── src/
+        └── account/
+            ├── account-event.ts
+            ├── register-account.ts
+            └── index.ts
+```
+
+The `index.ts` files only export public module contracts. Business logic is kept in responsibility-specific files.
+
+---
+
+## 5. Registration Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Account as Account Service
+    participant DB as Account PostgreSQL
+
+    Client->>Gateway: POST /api/v1/auth/register
+    Gateway->>Gateway: Validate body
+    Gateway->>Account: POST /internal/v1/accounts/register
+    Account->>Account: Verify internal secret
+    Account->>Account: Validate and normalize input
+    Account->>Account: Hash password
+    Account->>DB: BEGIN
+    Account->>DB: INSERT users
+    Account->>DB: INSERT outbox_events
+    Account->>DB: COMMIT
+    Account-->>Gateway: 201 Created
+    Gateway-->>Client: 201 Created
+```
+
+The same request ID is propagated through the complete request flow.
+
+---
+
+## 6. Double Boundary Validation
+
+The request is validated at both service boundaries.
+
+### Gateway validation
+
+The Gateway validates the public request to:
+
+- Reject malformed input early
+- Avoid unnecessary internal network calls
+- Return a consistent public validation response
+- Protect downstream services from clearly invalid input
+
+### Account Service validation
+
+The Account Service validates the request again because:
+
+- A service must protect its own boundary
+- Internal traffic must not automatically be trusted
+- The Account Service may receive calls from another authorized service later
+- Gateway validation rules could become outdated
+- A malformed internal request must not reach the database
+
+Gateway validation improves efficiency. Account Service validation preserves service independence and security.
+
+---
+
+## 7. Registration Input Rules
+
+### Email rules
+
+The email must:
+
+- Be a string
+- Be a valid email address
+- Contain no more than 254 characters
+- Be normalized before persistence
+
+Email normalization performs:
+
+```text
+Trim surrounding whitespace
+Convert the complete email address to lowercase
+```
+
+Example:
+
+```text
+Input:  "  User@Example.COM  "
+Stored: "user@example.com"
+```
+
+The database also enforces normalized email storage.
+
+### Password rules
+
+The password must:
+
+- Be a string
+- Contain at least 12 characters
+- Contain no more than 128 characters
+
+The password is validated before hashing.
+
+The plain-text password must never be:
+
+- Stored in PostgreSQL
+- Written to an outbox event
+- Returned in a response
+- Added to application logs
+- Added to error logs
+
+---
+
+## 8. Password Hashing
+
+The Account Service hashes the password before opening the database transaction.
+
+The implementation uses a dedicated password-hashing component.
+
+Responsibilities of the password hasher:
+
+- Receive a valid plain-text password
+- Generate a salted password hash
+- Return only the hash
+- Hide the hashing library from registration business logic
+
+The password hasher uses the configured work factor:
+
+```env
+PASSWORD_HASH_ROUNDS=12
+```
+
+A higher work factor increases password protection but also increases CPU usage and response time.
+
+The password hash is stored in:
+
+```text
+users.password_hash
+```
+
+The original password is never stored.
+
+---
+
+## 9. Internal Service Authentication
+
+The internal registration endpoint is protected using an internal service secret.
+
+The Gateway sends:
+
+```http
+X-Internal-Service-Key: configured-secret-value
+```
+
+The Account Service compares the received value with its configured secret.
+
+Both services receive the secret through environment variables:
+
+```env
+INTERNAL_SERVICE_SECRET=replace-with-a-long-random-secret
+```
+
+Requirements:
+
+- Use a secret containing at least 32 characters
+- Do not hardcode the secret in source code
+- Do not commit a real secret to Git
+- Do not log the secret
+- Use the same value in the Gateway and Account Service
+- Reject missing or incorrect values
+- Compare secrets using a timing-safe operation
+
+The internal service secret authenticates the calling service. It does not authenticate an end user.
+
+---
+
+## 10. Request ID Propagation
+
+The Gateway accepts or creates an `X-Request-ID`.
+
+The same request ID is forwarded to the Account Service:
+
+```http
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+```
+
+The Account Service stores this value in:
+
+```text
+outbox_events.request_id
+```
+
+The request ID connects:
+
+- Gateway logs
+- Account Service logs
+- Database operation logs
+- Outbox event records
+- Future event-publisher logs
+- Future event-consumer logs
+
+Passwords and internal secrets must not be included in these logs.
+
+---
+
+## 11. Gateway-to-Account-Service Communication
+
+The Gateway uses a dedicated Account Service client.
+
+Configuration:
+
+```env
+ACCOUNT_SERVICE_URL=http://account-service:3001
+DOWNSTREAM_TIMEOUT_MS=5000
+```
+
+The internal request has a finite timeout.
+
+A registration request is not automatically retried because it is a non-idempotent write operation. Retrying without a defined idempotency mechanism could create duplicate operations or ambiguous responses.
+
+If the Account Service times out, the Gateway returns:
+
+```text
+504 Gateway Timeout
+```
+
+If the Account Service cannot be reached, the Gateway returns:
+
+```text
+503 Service Unavailable
+```
+
+If the Account Service returns a known business error, the Gateway preserves its appropriate HTTP status and safe error response.
+
+---
+
+## 12. Transactional Registration
+
+The Account Service creates the user and outbox event in one database transaction.
+
+```mermaid
+flowchart TD
+    A["Begin transaction"] --> B["Insert user"]
+    B --> C["Insert account.registered event"]
+    C --> D["Commit"]
+    B -->|Failure| E["Rollback"]
+    C -->|Failure| E
+    D --> F["Return registered user"]
+```
+
+The transaction follows this order:
+
+1. Acquire a PostgreSQL client from the pool.
+2. Start the transaction using `BEGIN`.
+3. Insert the user into `users`.
+4. Insert the domain event into `outbox_events`.
+5. Commit using `COMMIT`.
+6. Return the created public user data.
+7. Release the PostgreSQL client in a `finally` block.
+
+When any transaction operation fails:
+
+1. Execute `ROLLBACK`.
+2. Translate known database failures.
+3. Log safe operational information.
+4. Release the PostgreSQL client.
+5. Return a safe API error.
+
+The PostgreSQL client must always be released.
+
+---
+
+## 13. Atomicity Guarantee
+
+The following results are valid:
+
+| User row | Outbox event | Result |
+|---|---|---|
+| Created | Created | Registration succeeds |
+| Not created | Not created | Registration fails safely |
+
+The following partial results must never occur:
+
+| User row | Outbox event | Reason invalid |
+|---|---|---|
+| Created | Missing | Other services may never learn about the account |
+| Missing | Created | Event describes an account that does not exist |
+
+PostgreSQL provides the atomicity guarantee through the transaction.
+
+---
+
+## 14. Duplicate Email Protection
+
+The service does not depend on a separate email existence query.
+
+A sequence such as this is unsafe:
+
+```text
+SELECT user by email
+If absent, INSERT user
+```
+
+Two concurrent requests could both observe that the email is absent and then attempt registration.
+
+Instead, PostgreSQL's unique email index is the authoritative protection.
+
+When PostgreSQL returns unique-constraint error code:
+
+```text
+23505
+```
+
+for the users email constraint, the Account Service translates it into:
+
+```text
+409 Conflict
+```
+
+Public error code:
+
+```text
+EMAIL_ALREADY_REGISTERED
+```
+
+The raw PostgreSQL error is never returned to the client.
+
+---
+
+## 15. Account Registered Outbox Event
+
+Successful registration creates an outbox event with the following type:
+
+```text
+account.registered
+```
+
+Event version:
+
+```text
+1
+```
+
+Producer:
+
+```text
+account-service
+```
+
+Example event payload:
+
+```json
+{
+  "userId": "a95fd118-f777-4500-9ea9-7d1a650fdadb",
+  "email": "user@example.com"
+}
+```
+
+Example logical event envelope:
+
+```json
+{
+  "eventId": "16bd92d3-e2f2-4897-8235-abd77788c8a0",
+  "eventType": "account.registered",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-21T08:30:00.000Z",
+  "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+  "producer": "account-service",
+  "payload": {
+    "userId": "a95fd118-f777-4500-9ea9-7d1a650fdadb",
+    "email": "user@example.com"
+  }
+}
+```
+
+The event must not contain:
+
+- Plain-text password
+- Password hash
+- Internal service secret
+- Database credentials
+
+Part 7 persists the event to the outbox. It does not publish the event to RabbitMQ yet.
+
+---
+
+## 16. Data Returned to the Client
+
+The registration response contains only safe public account information:
+
+- User ID
+- Normalized email
+- Account creation timestamp
+
+The response must not contain:
+
+- Password
+- Password hash
+- Access token
+- Refresh token
+- Session ID
+- Internal event ID
+- Internal service secret
+- Database information
+
+---
+
+## 17. Error Ownership
+
+### Gateway-owned errors
+
+The Gateway creates errors for:
+
+- Invalid public request body
+- Invalid JSON
+- Account Service connection failure
+- Account Service timeout
+- Unknown public route
+
+### Account Service-owned errors
+
+The Account Service creates errors for:
+
+- Invalid internal request
+- Missing internal service key
+- Incorrect internal service key
+- Duplicate email
+- Database failure
+- Password-hashing failure
+- Transaction failure
+
+The Gateway must not convert every downstream error into `500 Internal Server Error`. Known safe errors retain their meaningful status codes.
+
+---
+
+## 18. Failure Behaviour
+
+| Failure | Expected result |
+|---|---|
+| Email is invalid | `400 VALIDATION_ERROR` |
+| Password is shorter than 12 characters | `400 VALIDATION_ERROR` |
+| Password is longer than 128 characters | `400 VALIDATION_ERROR` |
+| Request contains malformed JSON | `400 INVALID_JSON` |
+| Email already exists | `409 EMAIL_ALREADY_REGISTERED` |
+| Internal service key is missing | Internal request receives `401 INTERNAL_SERVICE_UNAUTHORIZED` |
+| Internal service key is incorrect | Internal request receives `401 INTERNAL_SERVICE_UNAUTHORIZED` |
+| Password hashing fails | No user or outbox record is created |
+| User insert fails | Transaction rolls back |
+| Outbox insert fails | User insert is rolled back |
+| PostgreSQL is unavailable | Registration fails safely with no partial data |
+| Account Service is unavailable | Gateway returns `503 SERVICE_UNAVAILABLE` |
+| Account Service exceeds the timeout | Gateway returns `504 DOWNSTREAM_TIMEOUT` |
+| RabbitMQ is unavailable | Registration can still commit to PostgreSQL |
+| Redis is unavailable | Registration continues because registration does not require Redis |
+| Mailpit is unavailable | Registration continues because email is asynchronous |
+| Client disconnects | Server safely completes or rolls back its active operation |
+| Two concurrent requests use the same email | One succeeds and the other receives `409` |
+
+---
+
+## 19. Logging Requirements
+
+A successful registration log may contain:
+
+- Request ID
+- User ID
+- Service name
+- HTTP status
+- Request duration
+
+An error log may contain:
+
+- Request ID
+- Safe application error code
+- PostgreSQL error code
+- Service name
+- Operation name
+
+Logs must not contain:
+
+- Request password
+- Password hash
+- Internal service secret
+- PostgreSQL password
+- Complete sensitive request body
+
+---
+
+## 20. Performance Decisions
+
+Part 7 follows these performance decisions:
+
+- Request validation occurs before internal communication.
+- Password hashing occurs before the database transaction.
+- The database transaction is kept short.
+- No email is sent inside the request.
+- No RabbitMQ connection is required to complete registration.
+- One database transaction creates both the user and event.
+- The database unique index handles concurrency safely.
+- Internal HTTP calls use a finite timeout.
+- PostgreSQL connections are reused through the connection pool.
+- No unnecessary email existence query is executed.
+
+Password hashing is intentionally CPU-expensive. It protects credentials and must not be replaced by a fast general-purpose hash.
+
+---
+
+## 21. SOLID and Design Decisions
+
+### Single Responsibility Principle
+
+Each component has one main responsibility:
+
+- Controller handles HTTP concerns.
+- Validator handles input rules.
+- Service coordinates the use case.
+- Password hasher handles password hashing.
+- Repository handles SQL and transactions.
+- Account Service client handles downstream HTTP communication.
+
+### Open/Closed Principle
+
+The password-hashing and persistence implementations can be replaced without rewriting the controller.
+
+### Liskov Substitution Principle
+
+Implementations that satisfy the defined interfaces can replace one another without changing registration behaviour.
+
+### Interface Segregation Principle
+
+Registration components depend only on the operations they require.
+
+### Dependency Inversion Principle
+
+Business orchestration depends on abstractions such as a password hasher and registration repository instead of directly depending on library details.
+
+### Repository Pattern
+
+Raw SQL and PostgreSQL transaction handling remain inside the registration repository.
+
+### Service Layer Pattern
+
+Registration business workflow remains inside the registration service.
+
+### Gateway Pattern
+
+External clients access the platform through one public entry point.
+
+### Transactional Outbox Pattern
+
+Business data and its event are committed in one local transaction.
+
+---
+
+## 22. Part 7 Security Checklist
+
+- [x] Public registration is available only through the Gateway.
+- [x] Internal Account Service port is not published publicly.
+- [x] Gateway input is validated.
+- [x] Account Service input is independently validated.
+- [x] Email is normalized before persistence.
+- [x] Password length is restricted.
+- [x] Password is securely hashed.
+- [x] Plain-text password is not stored.
+- [x] Password hash is not returned.
+- [x] Password data is not written to the outbox.
+- [x] Internal endpoint requires service authentication.
+- [x] Internal secret is loaded through configuration.
+- [x] Errors do not reveal internal implementation details.
+- [x] Database constraint protects against concurrent duplicates.
+- [x] Internal calls use a timeout.
+- [x] Registration is not retried automatically.
+
+---
+
+## 23. Part 7 Reliability Checklist
+
+- [x] User and event are stored atomically.
+- [x] Transaction failures are rolled back.
+- [x] PostgreSQL clients are always released.
+- [x] RabbitMQ outage does not prevent database commit.
+- [x] Redis outage does not prevent registration.
+- [x] Mailpit outage does not prevent registration.
+- [x] Duplicate concurrent registration is handled safely.
+- [x] Downstream timeout produces a controlled error.
+- [x] Downstream unavailability produces a controlled error.
+- [x] Request ID is propagated and persisted.
+- [x] Outbox events survive service restarts.
+
+---
+
+## 24. Part 7 Scope
+
+Implemented in Part 7:
+
+- Public Gateway registration endpoint
+- Internal Account Service registration endpoint
+- Shared registration request and response contracts
+- Gateway request validation
+- Account Service request validation
+- Internal service authentication
+- Email normalization
+- Password hashing
+- Duplicate-email handling
+- Raw SQL persistence
+- User and outbox atomic transaction
+- `account.registered` outbox event creation
+- Request ID propagation
+- Downstream timeout handling
+- Registration success-path tests
+- Registration failure-path tests
+- Registration API documentation
+
+Not implemented in Part 7:
+
+- Login
+- Logout
+- Access tokens
+- Refresh tokens
+- User sessions
+- Email verification
+- Password reset
+- Outbox publishing worker
+- RabbitMQ event publishing
+- Notification consumer
+- Registration email delivery
+- Registration idempotency key

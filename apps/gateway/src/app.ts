@@ -18,6 +18,10 @@ import {
 } from "./middleware/request-logger.middleware.js";
 
 import {
+  registrationRouter,
+} from "./modules/auth/registration/registration.routes.js";
+
+import {
   healthRouter,
 } from "./modules/health/health.routes.js";
 
@@ -50,6 +54,11 @@ app.use(
 app.use(
   "/health",
   healthRouter,
+);
+
+app.use(
+  "/api/v1/auth",
+  registrationRouter,
 );
 
 app.use(

@@ -1,6 +1,7 @@
 /*
-It gives json structured logs, not sent the stack trace to the client
-*/
+ * It produces structured JSON logs.
+ * Stack traces and sensitive values are not sent to clients.
+ */
 
 import pino from "pino";
 
@@ -14,6 +15,7 @@ import {
 
 export const logger = pino({
   name: "gateway",
+
   level: env.LOG_LEVEL,
 
   base: {
@@ -23,20 +25,32 @@ export const logger = pino({
 
   redact: {
     paths: [
+      /*
+       * Password fields at different
+       * possible object locations.
+       */
       "password",
-      "*.password",
-      "body.password",
+      "passwordHash",
+      "password_hash",
+      "req.body.password",
       "request.body.password",
+
+      /*
+       * Authentication headers.
+       */
       "authorization",
-      "headers.authorization",
+      "req.headers.authorization",
       "request.headers.authorization",
-      "accessToken",
-      "refreshToken",
-      "resetToken",
-      "*.accessToken",
-      "*.refreshToken",
-      "*.resetToken",
+
+      /*
+       * Property names containing hyphens
+       * require bracket notation.
+       */
+      "['x-internal-service-key']",
+      "req.headers['x-internal-service-key']",
+      "request.headers['x-internal-service-key']",
     ],
+
     censor: "[REDACTED]",
   },
 

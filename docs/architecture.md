@@ -987,3 +987,60 @@ Not implemented in Part 5:
 * Password reset
 * Email changes
 * Account-event publishing
+
+# System Architecture
+
+## Part 6 — Account Database and Transactional Outbox
+
+### 1. Purpose
+
+Part 6 introduces the private PostgreSQL schema owned by the Account Service.
+
+The Account Service uses this database to store:
+
+- Registered user accounts
+- Password hashes
+- Account-related domain events waiting to be published
+
+The schema is created using version-controlled database migrations.
+
+No Registration API is implemented in Part 6. The database is being prepared for the Registration API that will be implemented in the next part.
+
+---
+
+### 2. Account Service Data Ownership
+
+The Account Service owns its PostgreSQL database and migrations.
+
+Other services must not:
+
+- Connect directly to the Account Service database
+- Read the `users` table
+- Write to the `users` table
+- Read or update the Account Service outbox
+- Run the Account Service migrations
+
+Other services must communicate with the Account Service through:
+
+- Internal HTTP APIs
+- Published domain events
+
+This prevents tight coupling between services.
+
+---
+
+### 3. Database Structure
+
+The Account Service database currently contains the following tables:
+
+| Table | Responsibility |
+|---|---|
+| `users` | Stores registered user account information |
+| `outbox_events` | Stores domain events that must be published reliably |
+
+The migrations are stored inside:
+
+```text
+apps/account-service/migrations/
+├── 001_create_users.cjs
+└── 002_create_outbox_events.cjs

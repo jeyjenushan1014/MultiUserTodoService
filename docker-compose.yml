@@ -173,6 +173,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
       ACCOUNT_SERVICE_URL: http://account-service:3001
       DOWNSTREAM_TIMEOUT_MS: ${DOWNSTREAM_TIMEOUT_MS:-5000}
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}

@@ -29,6 +29,10 @@ import {
   internalRefreshRouter,
 } from "./modules/account/refresh/refresh.routes.js";
 
+import {
+  internalLogoutRouter,
+} from "./modules/account/logout/logout.routes.js";
+
 export const app =
   express();
 
@@ -71,6 +75,10 @@ app.use(
   internalRefreshRouter,
 );
 
+app.use(
+  "/internal/v1/auth",
+  internalLogoutRouter,
+);
 
 app.use(
   notFoundMiddleware,

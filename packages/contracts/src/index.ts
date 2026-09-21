@@ -52,3 +52,7 @@ export type {
   RefreshSessionResponse,
 } from "./account/index.js";
 
+export type {
+  LogoutAllSessionsResponse,
+  LogoutSessionResponse
+} from "./account/index.js"

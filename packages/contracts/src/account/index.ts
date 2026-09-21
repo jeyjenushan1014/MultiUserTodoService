@@ -19,3 +19,8 @@ export type {
   RefreshSessionRequest,
   RefreshSessionResponse,
 } from "./refresh-session.contract.js";
+
+export type {
+  LogoutAllSessionsResponse,
+  LogoutSessionResponse
+} from "./logout-session.contract.js"

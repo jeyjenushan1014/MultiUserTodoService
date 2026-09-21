@@ -2607,3 +2607,95 @@ Not implemented:
 - Logout all devices
 - Current-user endpoint
 - Gateway session projection
+
+# Part 10 — Logout and Session Revocation
+
+## Purpose
+
+Part 10 implements current-session and all-device Logout.
+
+The Gateway validates the access token and forwards a signed internal identity to the Account Service. The Account Service revokes the persistent session in PostgreSQL.
+
+## Public Endpoints
+
+```text
+POST /api/v1/auth/logout
+POST /api/v1/auth/logout-all
+```
+
+## Logout Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Account as Account Service
+    participant DB as PostgreSQL
+
+    Client->>Gateway: Bearer access token
+    Gateway->>Gateway: Verify JWT
+    Gateway->>Account: Signed internal identity
+    Account->>Account: Verify internal signature
+    Account->>DB: Revoke session
+    Account-->>Gateway: 204
+    Gateway-->>Client: 204
+```
+
+## Session Revocation
+
+Current-session Logout updates only the session identified by the access token.
+
+All-device Logout revokes every active session belonging to the user.
+
+Revocation uses:
+
+```sql
+revoked_at = COALESCE(revoked_at, CURRENT_TIMESTAMP)
+```
+
+This makes Logout idempotent.
+
+## Internal Identity Security
+
+The Gateway signs the following identity information:
+
+- User ID
+- Session ID
+- Email
+- Request ID
+- Issue time
+
+The Account Service verifies:
+
+- HMAC signature
+- Identity age
+- Request ID match
+- Required fields
+
+## Token Behaviour
+
+After Logout:
+
+- Refreshing the session fails immediately.
+- Refresh tokens belonging to the session cannot create new access tokens.
+- Existing JWT access tokens remain cryptographically valid until their short expiry.
+
+Immediate access-token revocation on every protected Gateway request requires server-side session projection and is implemented in a later part.
+
+## Part 10 Scope
+
+Implemented:
+
+- JWT validation at Gateway
+- Signed internal identity propagation
+- Current-session Logout
+- All-device Logout
+- Database session revocation
+- Idempotent Logout
+- Logout tests
+
+Not implemented:
+
+- Redis session projection
+- Current-user API
+- Protected TODO endpoints

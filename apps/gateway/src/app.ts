@@ -10,6 +10,10 @@ import {
 } from "./middleware/not-found.middleware.js";
 
 import {
+  logoutRouter,
+} from "./modules/auth/logout/logout.routes.js";
+
+import {
   requestContextMiddleware,
 } from "./middleware/request-context.middleware.js";
 
@@ -77,6 +81,11 @@ app.use(
 app.use(
   "/api/v1/auth",
   refreshRouter,
+);
+
+app.use(
+  "/api/v1/auth",
+  logoutRouter,
 );
 
 app.use(

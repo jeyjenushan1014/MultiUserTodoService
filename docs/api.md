@@ -1907,3 +1907,84 @@ Not implemented:
 - Logout all devices
 - Current-user endpoint
 - Gateway session projection
+
+# Logout APIs
+
+## Logout Current Session
+
+### `POST /api/v1/auth/logout`
+
+Revokes the session identified by the Bearer access token.
+
+### Required header
+
+```http
+Authorization: Bearer ACCESS_TOKEN
+```
+
+### Success
+
+```text
+204 No Content
+```
+
+The response has no body.
+
+### Missing or invalid token
+
+```text
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "A valid access token is required",
+    "requestId": "request-uuid"
+  }
+}
+```
+
+Logout is idempotent. Repeating a valid Logout request does not produce a server error.
+
+---
+
+## Logout All Sessions
+
+### `POST /api/v1/auth/logout-all`
+
+Revokes every active session belonging to the authenticated user.
+
+### Required header
+
+```http
+Authorization: Bearer ACCESS_TOKEN
+```
+
+### Success
+
+```text
+204 No Content
+```
+
+The response has no body.
+
+### Security effect
+
+After successful Logout:
+
+- Current-session refresh token fails.
+- Rotated refresh tokens for the revoked session fail.
+- Logout-all invalidates refresh capability for all user sessions.
+- Existing short-lived access tokens expire naturally.
+
+### Status codes
+
+| Status | Code | Meaning |
+|---|---|---|
+| `204` | Not applicable | Logout succeeded |
+| `401` | `UNAUTHORIZED` | Access token missing or invalid |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected internal failure |
+| `503` | `SERVICE_UNAVAILABLE` | Account Service unavailable |
+| `504` | `DOWNSTREAM_TIMEOUT` | Account Service timeout |

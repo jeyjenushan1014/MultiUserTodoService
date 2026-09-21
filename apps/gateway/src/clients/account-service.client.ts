@@ -8,13 +8,24 @@ import type {
   RefreshSessionResponse
 } from "@todo/contracts";
 
+import type {
+  CallerIdentity,
+  InternalIdentityEnvelope,
+} from "@todo/contracts";
+
 import {
   AppError,
+  encodeIdentity,
+  signIdentity,
 } from "@todo/common";
+
+
 
 import {
   env,
 } from "../config/env.js";
+
+
 
 function isRecord(
   value: unknown,
@@ -75,12 +86,17 @@ async function parseJson(
   }
 }
 
+interface AccountRequestOptions {
+  readonly path: string;
+  readonly method: "POST";
+  readonly requestId: string;
+  readonly body?: unknown;
+  readonly identity?: CallerIdentity;
+}
 
 async function sendAccountRequest<T>(
-  path: string,
-  request: unknown,
-  requestId: string,
-): Promise<T> {
+  options: AccountRequestOptions,
+): Promise<T | undefined> {
   const abortController =
     new AbortController();
 
@@ -93,33 +109,55 @@ async function sendAccountRequest<T>(
 
   timeout.unref();
 
+  const headers:
+    Record<string, string> = {
+      "content-type":
+        "application/json",
+
+      "x-request-id":
+        options.requestId,
+
+      "x-internal-service-key":
+        env.INTERNAL_SERVICE_SECRET,
+    };
+
+  if (options.identity !== undefined) {
+    Object.assign(
+      headers,
+      createIdentityHeaders(
+        options.identity,
+        options.requestId,
+      ),
+    );
+  }
+
   try {
     const response = await fetch(
       new URL(
-        path,
+        options.path,
         env.ACCOUNT_SERVICE_URL,
       ),
       {
-        method: "POST",
+        method: options.method,
+        headers,
 
-        headers: {
-          "content-type":
-            "application/json",
-
-          "x-request-id":
-            requestId,
-
-          "x-internal-service-key":
-            env.INTERNAL_SERVICE_SECRET,
-        },
-
-        body:
-          JSON.stringify(request),
+        ...(options.body === undefined
+          ? {}
+          : {
+              body:
+                JSON.stringify(
+                  options.body,
+                ),
+            }),
 
         signal:
           abortController.signal,
       },
     );
+
+    if (response.status === 204) {
+      return undefined;
+    }
 
     const responseBody =
       await parseJson(response);
@@ -165,17 +203,31 @@ async function sendAccountRequest<T>(
   }
 }
 
+
 export async function registerAccount(
   request: RegisterAccountRequest,
   requestId: string,
 ): Promise<RegisterAccountResponse> {
-  return sendAccountRequest<
-    RegisterAccountResponse
-  >(
-    "/internal/v1/accounts/register",
-    request,
-    requestId,
-  );
+  const result =
+    await sendAccountRequest<
+      RegisterAccountResponse
+    >({
+      path:
+        "/internal/v1/accounts/register",
+      method: "POST",
+      requestId,
+      body: request,
+    });
+
+  if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
 }
 
 
@@ -183,24 +235,100 @@ export async function loginAccount(
   request: LoginAccountRequest,
   requestId: string,
 ): Promise<LoginAccountResponse> {
-  return sendAccountRequest<
+  const result = await sendAccountRequest<
     LoginAccountResponse
   >(
-    "/internal/v1/auth/login",
-    request,
+    {
+   path: "/internal/v1/auth/login",
+   method: "POST",
     requestId,
-  );
+    body: request
+    });
+
+  if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
 }
 
 export async function refreshSession(
   request: RefreshSessionRequest,
   requestId: string,
 ): Promise<RefreshSessionResponse> {
-  return sendAccountRequest<
+   const result = await sendAccountRequest<
     RefreshSessionResponse
-  >(
-    "/internal/v1/auth/refresh",
-    request,
+  >({
+    path:"/internal/v1/auth/refresh",
+    method: "POST",
     requestId,
+    body: request,
+  }
   );
+    if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
+}
+
+function createIdentityHeaders(
+  identity: CallerIdentity,
+  requestId: string,
+): Record<string, string> {
+  const envelope:
+    InternalIdentityEnvelope = {
+      ...identity,
+      requestId,
+      issuedAt: Date.now(),
+    };
+
+  const encodedIdentity =
+    encodeIdentity(envelope);
+
+  return {
+    "x-internal-identity":
+      encodedIdentity,
+
+    "x-internal-signature":
+      signIdentity(
+        encodedIdentity,
+        env.INTERNAL_SERVICE_SECRET,
+      ),
+  };
+}
+
+
+export async function logoutSession(
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<void> {
+  await sendAccountRequest<never>({
+    path:
+      "/internal/v1/auth/logout",
+    method: "POST",
+    requestId,
+    identity,
+  });
+}
+
+export async function logoutAllSessions(
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<void> {
+  await sendAccountRequest<never>({
+    path:
+      "/internal/v1/auth/logout-all",
+    method: "POST",
+    requestId,
+    identity,
+  });
 }

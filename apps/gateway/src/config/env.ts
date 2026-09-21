@@ -31,6 +31,26 @@ const environmentSchema = z.object({
     .string()
     .min(32),
 
+  JWT_SECRET: z
+    .string()
+    .min(32),
+
+  JWT_ISSUER: z
+    .string()
+   .min(1)
+   .default(
+    "todo-account-service",
+    ),
+
+  JWT_AUDIENCE: z
+   .string()
+   .min(1)
+   .default(
+    "todo-platform",
+   ),
+
+  
+
   LOG_LEVEL: z
     .string()
     .default("info"),

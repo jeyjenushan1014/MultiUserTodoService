@@ -25,6 +25,10 @@ import {
   internalLoginRouter,
 } from "./modules/account/login/login.routes.js";
 
+import {
+  internalRefreshRouter,
+} from "./modules/account/refresh/refresh.routes.js";
+
 export const app =
   express();
 
@@ -60,6 +64,11 @@ app.use(
 app.use(
   "/internal/v1/auth",
   internalLoginRouter,
+);
+
+app.use(
+  "/internal/v1/auth",
+  internalRefreshRouter,
 );
 
 

@@ -29,6 +29,10 @@ import {
   loginRouter,
 } from "./modules/auth/login/login.routes.js";
 
+import {
+  refreshRouter,
+} from "./modules/auth/refresh/refresh.routes.js";
+
 export const app =
   express();
 
@@ -71,8 +75,15 @@ app.use(
 );
 
 app.use(
+  "/api/v1/auth",
+  refreshRouter,
+);
+
+app.use(
   notFoundMiddleware,
 );
+
+
 
 app.use(
   errorHandlerMiddleware,

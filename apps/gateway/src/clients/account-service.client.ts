@@ -3,7 +3,9 @@ import type {
   RegisterAccountRequest,
   RegisterAccountResponse,
   LoginAccountRequest,
-  LoginAccountResponse
+  LoginAccountResponse,
+  RefreshSessionRequest,
+  RefreshSessionResponse
 } from "@todo/contracts";
 
 import {
@@ -185,6 +187,19 @@ export async function loginAccount(
     LoginAccountResponse
   >(
     "/internal/v1/auth/login",
+    request,
+    requestId,
+  );
+}
+
+export async function refreshSession(
+  request: RefreshSessionRequest,
+  requestId: string,
+): Promise<RefreshSessionResponse> {
+  return sendAccountRequest<
+    RefreshSessionResponse
+  >(
+    "/internal/v1/auth/refresh",
     request,
     requestId,
   );

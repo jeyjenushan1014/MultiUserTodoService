@@ -34,6 +34,11 @@ export const logger = pino({
       "password_hash",
       "req.body.password",
       "request.body.password",
+      "refreshToken",
+      "accessToken",
+      "req.body.refreshToken",
+      "request.body.refreshToken",
+
 
       /*
        * Authentication headers.

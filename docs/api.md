@@ -1810,3 +1810,100 @@ GET  /api/v1/users/me
 ```
 
 Refresh-token rotation, reuse detection and session revocation are implemented in later parts.
+
+# Part 9 — Refresh-Token Rotation and Reuse Detection
+
+## Purpose
+
+Part 9 implements single-use refresh-token rotation.
+
+A valid refresh token is exchanged for:
+
+- A new JWT access token
+- A new opaque refresh token
+
+The old refresh token is permanently marked as used.
+
+## Security Flow
+
+```mermaid
+flowchart TD
+    A["Receive refresh token"] --> B["Hash token"]
+    B --> C["Lock database credential"]
+    C --> D{"Credential state"}
+    D -->|Valid and unused| E["Create replacement token"]
+    D -->|Invalid or expired| F["Return generic 401"]
+    D -->|Already used| G["Revoke session"]
+    E --> H["Mark old token used"]
+    H --> I["Commit transaction"]
+```
+
+## Concurrency Protection
+
+PostgreSQL `SELECT ... FOR UPDATE` locks the refresh-token and session rows.
+
+Two concurrent requests cannot both rotate the same token successfully.
+
+## Reuse Detection
+
+A refresh token may be used only once.
+
+If a token with a non-null `used_at` value is submitted again:
+
+1. The Account Service treats it as possible credential theft.
+2. The complete session is revoked.
+3. The API returns the generic `INVALID_REFRESH_TOKEN` error.
+4. Tokens belonging to the revoked session can no longer be refreshed.
+
+## Persistence Guarantee
+
+The replacement token insert and previous-token update occur in one transaction.
+
+Valid outcomes:
+
+| Previous token | Replacement token | Result |
+|---|---|---|
+| Marked used | Created | Rotation succeeds |
+| Unchanged | Not created | Rotation fails |
+| Already used | Session revoked | Reuse detected |
+
+## Token Storage
+
+The raw refresh token is never stored.
+
+Only its SHA-256 hash is persisted in `refresh_tokens.token_hash`.
+
+## Sliding Session Expiration
+
+A successful rotation extends the session expiry to match the newly issued refresh token.
+
+## Public Error Behaviour
+
+Unknown, expired, revoked and reused refresh tokens return the same response:
+
+```text
+401 INVALID_REFRESH_TOKEN
+```
+
+This avoids exposing internal credential state.
+
+## Part 9 Scope
+
+Implemented:
+
+- Public refresh endpoint
+- Internal refresh endpoint
+- Refresh-token rotation
+- Row-level locking
+- Token-family preservation
+- Token reuse detection
+- Session revocation
+- Sliding session expiry
+- Unit and validation tests
+
+Not implemented:
+
+- Logout
+- Logout all devices
+- Current-user endpoint
+- Gateway session projection

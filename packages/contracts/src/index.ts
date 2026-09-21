@@ -47,3 +47,8 @@ export type {
   LoginAccountResponse,
 } from "./account/index.js";
 
+export type {
+  RefreshSessionRequest,
+  RefreshSessionResponse,
+} from "./account/index.js";
+

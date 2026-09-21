@@ -14,3 +14,8 @@ export type {
   LoginAccountRequest,
   LoginAccountResponse,
 } from "./login.account.contract.js";
+
+export type {
+  RefreshSessionRequest,
+  RefreshSessionResponse,
+} from "./refresh-session.contract.js";

@@ -1,88 +1,142 @@
+name: multi-user-todo-platform
+
 services:
-  postgres:
+  account-postgres:
     image: postgres:17-alpine
+
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${ACCOUNT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ACCOUNT_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ACCOUNT_POSTGRES_DB}
+
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${ACCOUNT_POSTGRES_PORT:-5432}:5432"
+
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - account_postgres_data:/var/lib/postgresql/data
+
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:8-alpine
-    ports:
-     - "${REDIS_PORT:-6379}:6379"
-    volumes:
-     - redis_data:/data
-    healthcheck:
-      test: 
-        - CMD-SHELL
-        - redis-cli ping
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
       interval: 5s
-      timeout: 3s
-      retries: 5
-
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: builder
-
-    command: ["npm", "run", "migrate:docker"]
-
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-    restart: "no"
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN_SECONDS: ${JWT_EXPIRES_IN_SECONDS:-900}
-      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-60}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-
-    ports:
-      - "${API_PORT:-3000}:3000"
-
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-      redis:
-        condition: service_healthy
-
-      migrate:
-        condition: service_completed_successfully
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
     restart: unless-stopped
 
 
+  redis:
+    image: redis:8-alpine
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --requirepass
+      - "${REDIS_PASSWORD}"
+
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+    restart: unless-stopped
+
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    healthcheck:
+      test:
+        - CMD
+        - rabbitmq-diagnostics
+        - -q
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+    restart: unless-stopped
+
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+
+    healthcheck:
+      test:
+        - CMD
+        - /mailpit
+        - readyz
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gateway-runtime
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --tries=1
+        - --spider
+        - http://localhost:3000/health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    restart: unless-stopped
 
 
 volumes:
-  postgres_data:
+  account_postgres_data:
   redis_data:
-    
-  
+  rabbitmq_data:

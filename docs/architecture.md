@@ -576,3 +576,45 @@ Not implemented:
 * Signed internal identity forwarding
 * Downstream timeout handling
 * Circuit breaker behaviour
+
+## Local Container Architecture
+
+The Part 4 development environment runs through Docker Compose.
+
+Current containers:
+
+| Container | Responsibility |
+|---|---|
+| `gateway` | Public HTTP entry point |
+| `account-postgres` | Future Account Service datastore |
+| `redis` | Future shared cache, projections and counters |
+| `rabbitmq` | Future durable asynchronous message transport |
+| `mailpit` | Future local email capture |
+
+### Network Exposure
+
+The Gateway is the only public application entry point.
+
+Development infrastructure ports are bound to `127.0.0.1` so they are reachable only from the local machine.
+
+Current local ports:
+
+| Component | Local port |
+|---|---:|
+| Gateway | 3000 |
+| Account PostgreSQL | 55432 |
+| Redis | 56379 |
+| RabbitMQ | 5672 |
+| RabbitMQ Management | 15672 |
+| Mailpit SMTP | 1025 |
+| Mailpit UI | 8025 |
+
+Internal containers will communicate using Docker service names rather than `localhost`.
+
+Examples:
+
+```text
+account-postgres:5432
+redis:6379
+rabbitmq:5672
+mailpit:1025

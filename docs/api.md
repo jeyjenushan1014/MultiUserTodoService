@@ -1988,3 +1988,185 @@ After successful Logout:
 | `500` | `INTERNAL_SERVER_ERROR` | Unexpected internal failure |
 | `503` | `SERVICE_UNAVAILABLE` | Account Service unavailable |
 | `504` | `DOWNSTREAM_TIMEOUT` | Account Service timeout |
+
+# Current User Profile
+
+## `GET /api/v1/users/me`
+
+Returns the profile belonging to the authenticated user.
+
+### Authentication
+
+Required:
+
+```http
+Authorization: Bearer ACCESS_TOKEN
+```
+
+### Successful response
+
+Status:
+
+```text
+200 OK
+```
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "a95fd118-f777-4500-9ea9-7d1a650fdadb",
+      "email": "user@example.com",
+      "createdAt": "2026-09-21T08:00:00.000Z",
+      "updatedAt": "2026-09-21T08:00:00.000Z"
+    }
+  }
+}
+```
+
+### Missing or invalid access token
+
+Status:
+
+```text
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "A valid access token is required",
+    "requestId": "request-uuid"
+  }
+}
+```
+
+### Revoked, expired or missing session
+
+Status:
+
+```text
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "SESSION_INVALID",
+    "message": "Session is invalid or expired",
+    "requestId": "request-uuid"
+  }
+}
+```
+
+### Security rules
+
+- A valid JWT alone is not enough.
+- The Account Service verifies the persistent session.
+- Revoked sessions are rejected.
+- Expired sessions are rejected.
+- A session cannot access another user's profile.
+- Password hashes are never returned.
+
+### Status codes
+
+| Status | Code | Meaning |
+|---|---|---|
+| `200` | Not applicable | Profile returned |
+| `401` | `UNAUTHORIZED` | Access token invalid |
+| `401` | `SESSION_INVALID` | Persistent session invalid |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected internal failure |
+| `503` | `SERVICE_UNAVAILABLE` | Account Service unavailable |
+| `504` | `DOWNSTREAM_TIMEOUT` | Account Service timeout |
+
+# Current User Profile
+
+## `GET /api/v1/users/me`
+
+Returns the profile belonging to the authenticated user.
+
+### Authentication
+
+Required:
+
+```http
+Authorization: Bearer ACCESS_TOKEN
+```
+
+### Successful response
+
+Status:
+
+```text
+200 OK
+```
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "a95fd118-f777-4500-9ea9-7d1a650fdadb",
+      "email": "user@example.com",
+      "createdAt": "2026-09-21T08:00:00.000Z",
+      "updatedAt": "2026-09-21T08:00:00.000Z"
+    }
+  }
+}
+```
+
+### Missing or invalid access token
+
+Status:
+
+```text
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "A valid access token is required",
+    "requestId": "request-uuid"
+  }
+}
+```
+
+### Revoked, expired or missing session
+
+Status:
+
+```text
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "SESSION_INVALID",
+    "message": "Session is invalid or expired",
+    "requestId": "request-uuid"
+  }
+}
+```
+
+### Security rules
+
+- A valid JWT alone is not enough.
+- The Account Service verifies the persistent session.
+- Revoked sessions are rejected.
+- Expired sessions are rejected.
+- A session cannot access another user's profile.
+- Password hashes are never returned.
+
+### Status codes
+
+| Status | Code | Meaning |
+|---|---|---|
+| `200` | Not applicable | Profile returned |
+| `401` | `UNAUTHORIZED` | Access token invalid |
+| `401` | `SESSION_INVALID` | Persistent session invalid |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected internal failure |
+| `503` | `SERVICE_UNAVAILABLE` | Account Service unavailable |
+| `504` | `DOWNSTREAM_TIMEOUT` | Account Service timeout |

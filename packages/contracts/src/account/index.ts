@@ -24,3 +24,8 @@ export type {
   LogoutAllSessionsResponse,
   LogoutSessionResponse
 } from "./logout-session.contract.js"
+
+export type {
+  CurrentAccount,
+  CurrentAccountResponse,
+} from "./current-account.contract.js";

@@ -56,3 +56,8 @@ export type {
   LogoutAllSessionsResponse,
   LogoutSessionResponse
 } from "./account/index.js"
+
+export type {
+  CurrentAccount,
+  CurrentAccountResponse,
+} from "./account/index.js";

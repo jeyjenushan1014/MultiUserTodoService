@@ -33,6 +33,10 @@ import {
   internalLogoutRouter,
 } from "./modules/account/logout/logout.routes.js";
 
+import {
+  internalProfileRouter,
+} from "./modules/account/profile/profile.routes.js";
+
 export const app =
   express();
 
@@ -66,6 +70,11 @@ app.use(
 );
 
 app.use(
+  "/internal/v1/accounts",
+  internalProfileRouter,
+);
+
+app.use(
   "/internal/v1/auth",
   internalLoginRouter,
 );
@@ -79,6 +88,8 @@ app.use(
   "/internal/v1/auth",
   internalLogoutRouter,
 );
+
+
 
 app.use(
   notFoundMiddleware,

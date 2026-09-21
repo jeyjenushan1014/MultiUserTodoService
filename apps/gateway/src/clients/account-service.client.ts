@@ -1,17 +1,16 @@
 import type {
-  ErrorResponse,
   RegisterAccountRequest,
   RegisterAccountResponse,
   LoginAccountRequest,
   LoginAccountResponse,
   RefreshSessionRequest,
-  RefreshSessionResponse
-} from "@todo/contracts";
-
-import type {
+  RefreshSessionResponse,
   CallerIdentity,
   InternalIdentityEnvelope,
+  CurrentAccountResponse,
+  ErrorResponse
 } from "@todo/contracts";
+
 
 import {
   AppError,
@@ -88,7 +87,9 @@ async function parseJson(
 
 interface AccountRequestOptions {
   readonly path: string;
-  readonly method: "POST";
+   readonly method:
+    | "GET"
+    | "POST";
   readonly requestId: string;
   readonly body?: unknown;
   readonly identity?: CallerIdentity;
@@ -331,4 +332,31 @@ export async function logoutAllSessions(
     requestId,
     identity,
   });
+}
+
+export async function getCurrentAccount(
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<CurrentAccountResponse> {
+  const result =
+    await sendAccountRequest<
+      CurrentAccountResponse
+    >({
+      path:
+        "/internal/v1/accounts/me",
+
+      method: "GET",
+      requestId,
+      identity,
+    });
+
+  if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
 }

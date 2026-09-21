@@ -2699,3 +2699,164 @@ Not implemented:
 - Redis session projection
 - Current-user API
 - Protected TODO endpoints
+
+# Part 11 — Current User Profile
+
+## Purpose
+
+Part 11 implements an authenticated current-user profile endpoint.
+
+```text
+GET /api/v1/users/me
+```
+
+The Gateway validates the JWT and forwards a signed internal identity to the Account Service.
+
+The Account Service performs authoritative session validation using PostgreSQL before returning the profile.
+
+## Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Account as Account Service
+    participant DB as PostgreSQL
+
+    Client->>Gateway: GET /api/v1/users/me
+    Gateway->>Gateway: Verify JWT
+    Gateway->>Account: Signed internal identity
+    Account->>Account: Verify identity signature
+    Account->>DB: Find user and active session
+    DB-->>Account: Current account
+    Account-->>Gateway: Profile
+    Gateway-->>Client: 200 OK
+```
+
+## Authoritative Session Validation
+
+The Account Service validates:
+
+- User ID matches the session owner
+- Session exists
+- Session has not expired
+- Session has not been revoked
+
+A cryptographically valid JWT is not sufficient if its session has been revoked.
+
+## Data Exposure
+
+The public profile contains:
+
+- User ID
+- Email
+- Creation timestamp
+- Last-update timestamp
+
+It does not contain:
+
+- Password
+- Password hash
+- Refresh token
+- Session ID
+- Internal secrets
+- Database fields unrelated to the profile
+
+## Part 11 Scope
+
+Implemented:
+
+- Authenticated `/me` endpoint
+- JWT verification
+- Signed internal identity
+- Database-backed session validation
+- Profile mapping
+- Success and sad-path tests
+
+Not implemented:
+
+- Email change
+- Password change
+- Redis session projection
+- Protected TODO APIs
+
+
+# Part 11 — Current User Profile
+
+## Purpose
+
+Part 11 implements an authenticated current-user profile endpoint.
+
+```text
+GET /api/v1/users/me
+```
+
+The Gateway validates the JWT and forwards a signed internal identity to the Account Service.
+
+The Account Service performs authoritative session validation using PostgreSQL before returning the profile.
+
+## Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Account as Account Service
+    participant DB as PostgreSQL
+
+    Client->>Gateway: GET /api/v1/users/me
+    Gateway->>Gateway: Verify JWT
+    Gateway->>Account: Signed internal identity
+    Account->>Account: Verify identity signature
+    Account->>DB: Find user and active session
+    DB-->>Account: Current account
+    Account-->>Gateway: Profile
+    Gateway-->>Client: 200 OK
+```
+
+## Authoritative Session Validation
+
+The Account Service validates:
+
+- User ID matches the session owner
+- Session exists
+- Session has not expired
+- Session has not been revoked
+
+A cryptographically valid JWT is not sufficient if its session has been revoked.
+
+## Data Exposure
+
+The public profile contains:
+
+- User ID
+- Email
+- Creation timestamp
+- Last-update timestamp
+
+It does not contain:
+
+- Password
+- Password hash
+- Refresh token
+- Session ID
+- Internal secrets
+- Database fields unrelated to the profile
+
+## Part 11 Scope
+
+Implemented:
+
+- Authenticated `/me` endpoint
+- JWT verification
+- Signed internal identity
+- Database-backed session validation
+- Profile mapping
+- Success and sad-path tests
+
+Not implemented:
+
+- Email change
+- Password change
+- Redis session projection
+- Protected TODO APIs

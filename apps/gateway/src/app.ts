@@ -18,6 +18,10 @@ import {
 } from "./middleware/request-context.middleware.js";
 
 import {
+  profileRouter,
+} from "./modules/user/profile/profile.routes.js";
+
+import {
   requestLoggerMiddleware,
 } from "./middleware/request-logger.middleware.js";
 
@@ -86,6 +90,10 @@ app.use(
 app.use(
   "/api/v1/auth",
   logoutRouter,
+);
+app.use(
+  "/api/v1/users",
+  profileRouter,
 );
 
 app.use(

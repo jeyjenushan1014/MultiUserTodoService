@@ -105,6 +105,40 @@ services:
 
     restart: unless-stopped
 
+  account-service:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      target: account-service-runtime
+    
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    expose:
+      - "3001"
+
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --tries=1
+        - --spider
+        - http://localhost:3001/health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    restart: unless-stopped
+
 
   gateway:
     build:

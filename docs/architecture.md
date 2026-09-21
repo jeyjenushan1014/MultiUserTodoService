@@ -618,3 +618,372 @@ account-postgres:5432
 redis:6379
 rabbitmq:5672
 mailpit:1025
+
+## Account Service Foundation
+
+### Responsibility
+
+The Account Service owns account, credential and session-related business responsibilities.
+
+Part 5 establishes the Account Service runtime, PostgreSQL connection and independent health reporting.
+
+Account business APIs are not implemented in this part.
+
+### Source Structure
+
+```text
+apps/account-service/src/
+├── __tests__/
+│   └── app.test.ts
+├── config/
+│   ├── database.ts
+│   ├── env.ts
+│   └── logger.ts
+├── middleware/
+│   ├── error-handler.middleware.ts
+│   ├── not-found.middleware.ts
+│   └── request-context.middleware.ts
+├── modules/
+│   └── health/
+│       ├── health.controller.ts
+│       ├── health.routes.ts
+│       ├── health.service.test.ts
+│       └── health.service.ts
+├── app.ts
+└── server.ts
+```
+
+### Layer Responsibilities
+
+| Component              | Responsibility                                          |
+| ---------------------- | ------------------------------------------------------- |
+| `health.routes.ts`     | Maps the internal health path to its controller         |
+| `health.controller.ts` | Converts the health result into an HTTP response        |
+| `health.service.ts`    | Evaluates Account Service and PostgreSQL health         |
+| `database.ts`          | Manages the Account Service PostgreSQL connection pool  |
+| `env.ts`               | Validates Account Service environment variables         |
+| `logger.ts`            | Produces structured logs with sensitive-field redaction |
+| `app.ts`               | Registers middleware and Account Service routes         |
+| `server.ts`            | Starts and gracefully stops the Account Service process |
+
+The health module does not use a repository because it does not read or modify business records.
+
+### Data Ownership
+
+The Account Service connects only to its own PostgreSQL database.
+
+The database is identified as:
+
+```text
+account_db
+```
+
+The Account Service uses credentials created specifically for that database.
+
+The Gateway does not:
+
+* Hold Account Service database credentials
+* Connect to the Account Service database
+* Query Account Service tables
+* Modify Account Service data
+
+Other services must interact with the Account Service through approved HTTP or event contracts.
+
+### PostgreSQL Connection Pool
+
+The Account Service uses a PostgreSQL connection pool instead of opening a new connection for every request.
+
+The pool configuration includes:
+
+* Maximum connection count
+* Connection timeout
+* Idle connection timeout
+* Query timeout
+* Application name for database observability
+
+The PostgreSQL application name is:
+
+```text
+todo-account-service
+```
+
+The pool registers an error listener for unexpected errors emitted by idle PostgreSQL connections.
+
+Without this listener, an emitted pool error could become an unhandled Node.js error event and terminate the process.
+
+The listener records the failure without exposing the database connection string or password.
+
+### Startup Behaviour
+
+The Account Service does not wait for a successful PostgreSQL connection before opening its HTTP server.
+
+If PostgreSQL is unavailable when the Account Service starts:
+
+* The Node.js process still starts.
+* The health endpoint remains reachable inside the Docker network.
+* The health endpoint reports PostgreSQL as unavailable.
+* The health endpoint returns `503 Service Unavailable`.
+* The process does not intentionally exit.
+* The container does not enter an application-created restart loop.
+
+When PostgreSQL becomes available again, the connection pool can establish a new connection during the next database operation.
+
+The Account Service does not require a restart to recover from a temporary PostgreSQL outage.
+
+### Health Module
+
+The Account Service exposes this internal endpoint:
+
+```http
+GET /health
+```
+
+The request flow is:
+
+```text
+GET /health
+    ↓
+health.routes.ts
+    ↓
+health.controller.ts
+    ↓
+health.service.ts
+    ↓
+checkDatabaseHealth()
+    ↓
+PostgreSQL SELECT 1
+```
+
+When PostgreSQL is available, the endpoint returns:
+
+```text
+200 OK
+```
+
+```json
+{
+  "status": "healthy",
+  "service": "account-service",
+  "dependencies": {
+    "database": "available"
+  }
+}
+```
+
+When PostgreSQL is unavailable, the endpoint returns:
+
+```text
+503 Service Unavailable
+```
+
+```json
+{
+  "status": "unhealthy",
+  "service": "account-service",
+  "dependencies": {
+    "database": "unavailable"
+  }
+}
+```
+
+The health query has a finite timeout so the health request does not wait indefinitely for PostgreSQL.
+
+### Internal Network Boundary
+
+The Account Service listens on container port:
+
+```text
+3001
+```
+
+Docker Compose uses `expose` rather than publishing the port to the host.
+
+The Account Service is reachable by other containers using:
+
+```text
+http://account-service:3001
+```
+
+A client running outside the Docker network cannot directly use:
+
+```text
+http://localhost:3001
+```
+
+The Gateway remains the only published application entry point.
+
+### Request IDs
+
+The Account Service accepts the internal `x-request-id` header.
+
+If the supplied value is a valid UUID, the Account Service preserves it.
+
+If the value is missing or invalid, the Account Service generates a new UUID.
+
+The request ID is:
+
+* Returned in the response header
+* Stored in asynchronous request context
+* Included in error responses
+* Available to structured logging
+
+### Error Handling
+
+The Account Service uses the platform's standard error-response shape:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Safe error message",
+    "requestId": "UUID"
+  }
+}
+```
+
+The current foundation handles:
+
+| Condition                              | HTTP status | Error code              |
+| -------------------------------------- | ----------: | ----------------------- |
+| Unknown internal route                 |         404 | `ROUTE_NOT_FOUND`       |
+| Malformed JSON                         |         400 | `INVALID_JSON`          |
+| Request body over the configured limit |         413 | `PAYLOAD_TOO_LARGE`     |
+| Unexpected error                       |         500 | `INTERNAL_SERVER_ERROR` |
+
+Internal stack traces, database connection strings and credentials are not returned to the caller.
+
+### Logging
+
+The Account Service uses structured JSON logging.
+
+The logger includes:
+
+* Service name
+* Runtime environment
+* Request ID when available
+* Error information required for diagnosis
+
+The logger is configured to redact:
+
+* Passwords
+* Authorization headers
+* Access tokens
+* Refresh tokens
+* Reset tokens
+* Database URLs
+* Connection strings
+
+### Graceful Shutdown
+
+The Account Service listens for:
+
+* `SIGINT`
+* `SIGTERM`
+
+During shutdown, it:
+
+1. Stops accepting new HTTP connections.
+2. Waits for active HTTP connections to finish.
+3. Closes the PostgreSQL connection pool.
+4. Completes the process shutdown.
+
+A forced-shutdown timeout prevents the process from waiting indefinitely.
+
+### Docker Runtime
+
+The Account Service has its own production image target:
+
+```text
+account-service-runtime
+```
+
+The runtime image contains:
+
+* Production dependencies
+* Compiled Contracts package
+* Compiled Common package
+* Compiled Account Service code
+
+The runtime image does not contain Account Service test files.
+
+The process runs as the non-root Node.js user.
+
+### Failure Behaviour
+
+Stopping PostgreSQL must not terminate the Account Service process.
+
+During the outage:
+
+* The Account Service container remains running.
+* The health endpoint returns `503`.
+* The database dependency is reported as unavailable.
+* Database credentials are not exposed.
+* The process restart count does not increase because of the database outage.
+
+After PostgreSQL restarts:
+
+* The Account Service process remains the same process.
+* The next health query reconnects through the pool.
+* The health endpoint returns `200`.
+* No Account Service restart is required.
+
+### TypeScript Build Configuration
+
+The Account Service uses two TypeScript configurations:
+
+| Configuration         | Purpose                                                           |
+| --------------------- | ----------------------------------------------------------------- |
+| `tsconfig.json`       | Type-checks source files and test files without generating output |
+| `tsconfig.build.json` | Produces the production `dist` output and excludes tests          |
+
+The production build must create:
+
+```text
+apps/account-service/dist/server.js
+```
+
+The production build must not create:
+
+```text
+apps/account-service/dist/__tests__
+```
+
+### Current Implementation Status
+
+Completed in Part 5:
+
+* Account Service HTTP runtime
+* Responsibility-based folder structure
+* Environment validation
+* Structured logging
+* Sensitive-value redaction
+* PostgreSQL connection pool
+* PostgreSQL pool error listener
+* Database connection timeout
+* Database query timeout
+* Internal health endpoint
+* Database outage reporting
+* Automatic recovery after PostgreSQL returns
+* Request-ID handling
+* Standard error handling
+* Graceful shutdown
+* Unit tests
+* HTTP integration tests
+* Account Service Docker runtime
+* Internal-only Docker network exposure
+
+Not implemented in Part 5:
+
+* Account database migrations
+* User table
+* Transactional outbox table
+* Registration API
+* Password hashing
+* Login
+* Sessions
+* Access tokens
+* Refresh tokens
+* Logout
+* Password reset
+* Email changes
+* Account-event publishing

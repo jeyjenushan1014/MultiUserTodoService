@@ -29,3 +29,14 @@ export type {
   CurrentAccount,
   CurrentAccountResponse,
 } from "./current-account.contract.js";
+
+export type {
+  ChangedEmailAccount,
+  ChangeEmailRequest,
+  ChangeEmailResponse,
+} from "./change-email.contract.js";
+
+export type {
+  AccountEmailChangedEvent,
+  AccountEmailChangedPayload,
+} from "./account.event.contract.js";

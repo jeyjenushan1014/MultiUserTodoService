@@ -8,7 +8,9 @@ import type {
   CallerIdentity,
   InternalIdentityEnvelope,
   CurrentAccountResponse,
-  ErrorResponse
+  ErrorResponse,
+  ChangeEmailRequest,
+  ChangeEmailResponse
 } from "@todo/contracts";
 
 
@@ -89,7 +91,8 @@ interface AccountRequestOptions {
   readonly path: string;
    readonly method:
     | "GET"
-    | "POST";
+    | "POST"
+    | "PATCH";
   readonly requestId: string;
   readonly body?: unknown;
   readonly identity?: CallerIdentity;
@@ -348,6 +351,35 @@ export async function getCurrentAccount(
       method: "GET",
       requestId,
       identity,
+    });
+
+  if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
+}
+
+export async function changeAccountEmail(
+  identity: CallerIdentity,
+  request: ChangeEmailRequest,
+  requestId: string,
+): Promise<ChangeEmailResponse> {
+  const result =
+    await sendAccountRequest<
+      ChangeEmailResponse
+    >({
+      path:
+        "/internal/v1/accounts/me/email",
+
+      method: "PATCH",
+      requestId,
+      identity,
+      body: request,
     });
 
   if (result === undefined) {

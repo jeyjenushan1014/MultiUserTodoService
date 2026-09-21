@@ -2860,3 +2860,74 @@ Not implemented:
 - Password change
 - Redis session projection
 - Protected TODO APIs
+
+# Part 12 — Secure Email Change
+
+## Purpose
+
+Part 12 implements authenticated email change with current-password verification.
+
+## Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Account as Account Service
+    participant DB as PostgreSQL
+
+    Client->>Gateway: PATCH /api/v1/users/me/email
+    Gateway->>Gateway: Verify JWT
+    Gateway->>Account: Signed identity and request
+    Account->>DB: Validate active session
+    Account->>Account: Verify current password
+    Account->>DB: BEGIN
+    Account->>DB: Update normalized email
+    Account->>DB: Insert outbox event
+    Account->>DB: Revoke user sessions
+    Account->>DB: COMMIT
+    Account-->>Client: Reauthentication required
+```
+
+## Transaction Guarantee
+
+The following operations are atomic:
+
+- User email update
+- `account.email-changed` event creation
+- User session revocation
+
+If one operation fails, all changes roll back.
+
+## Reauthentication
+
+The JWT contains the email that existed when it was issued. Therefore, all sessions are revoked after a successful email change.
+
+The user must authenticate again using the new email.
+
+## Security
+
+- Current password is required.
+- Email is normalized.
+- Duplicate email is enforced by PostgreSQL.
+- Password and hash are not logged.
+- The outbox event contains no password data.
+- Existing sessions are revoked.
+
+## Part 12 Scope
+
+Implemented:
+
+- Authenticated email change
+- Password re-verification
+- Transactional outbox event
+- Session revocation
+- Duplicate-email handling
+- Validation and service tests
+
+Not implemented:
+
+- Password change
+- Password reset
+- Email verification workflow
+- Outbox publisher

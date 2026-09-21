@@ -2170,3 +2170,110 @@ Status:
 | `500` | `INTERNAL_SERVER_ERROR` | Unexpected internal failure |
 | `503` | `SERVICE_UNAVAILABLE` | Account Service unavailable |
 | `504` | `DOWNSTREAM_TIMEOUT` | Account Service timeout |
+
+# Change Email
+
+## `PATCH /api/v1/users/me/email`
+
+Changes the authenticated user's email address.
+
+### Authentication
+
+```http
+Authorization: Bearer ACCESS_TOKEN
+```
+
+### Request
+
+```json
+{
+  "email": "new@example.com",
+  "currentPassword": "StrongPassword123!"
+}
+```
+
+### Success
+
+Status:
+
+```text
+200 OK
+```
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "user-uuid",
+      "email": "new@example.com",
+      "updatedAt": "2026-09-21T10:00:00.000Z"
+    },
+    "reauthenticationRequired": true
+  }
+}
+```
+
+All existing sessions are revoked. The user must log in again using the new email.
+
+### Incorrect current password
+
+```text
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "INVALID_CREDENTIALS",
+    "message": "Current password is incorrect",
+    "requestId": "request-uuid"
+  }
+}
+```
+
+### Duplicate email
+
+```text
+409 Conflict
+```
+
+```json
+{
+  "error": {
+    "code": "EMAIL_ALREADY_REGISTERED",
+    "message": "An account with this email already exists",
+    "requestId": "request-uuid"
+  }
+}
+```
+
+### Same email
+
+```text
+409 Conflict
+```
+
+```json
+{
+  "error": {
+    "code": "EMAIL_UNCHANGED",
+    "message": "New email must be different from the current email",
+    "requestId": "request-uuid"
+  }
+}
+```
+
+### Status codes
+
+| Status | Code | Meaning |
+|---|---|---|
+| `200` | Not applicable | Email changed |
+| `400` | `VALIDATION_ERROR` | Invalid request |
+| `401` | `UNAUTHORIZED` | Invalid access token |
+| `401` | `SESSION_INVALID` | Session invalid |
+| `401` | `INVALID_CREDENTIALS` | Current password incorrect |
+| `409` | `EMAIL_UNCHANGED` | New email equals current email |
+| `409` | `EMAIL_ALREADY_REGISTERED` | Email belongs to another account |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected failure |
+| `503` | `SERVICE_UNAVAILABLE` | Account Service unavailable |
+| `504` | `DOWNSTREAM_TIMEOUT` | Account Service timeout |

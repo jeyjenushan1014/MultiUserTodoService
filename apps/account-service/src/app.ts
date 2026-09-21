@@ -14,6 +14,10 @@ import {
 } from "./middleware/request-context.midddleware.js";
 
 import {
+  internalEmailChangeRouter,
+} from "./modules/account/email-change/email-change.routes.js";
+
+import {
   healthRouter,
 } from "./modules/health/health.routes.js";
 
@@ -89,7 +93,10 @@ app.use(
   internalLogoutRouter,
 );
 
-
+app.use(
+  "/internal/v1/accounts",
+  internalEmailChangeRouter,
+);
 
 app.use(
   notFoundMiddleware,

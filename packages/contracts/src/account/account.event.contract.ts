@@ -10,3 +10,14 @@ export type AccountRegisteredEvent =
     "account.registered",
     AccountRegisteredPayload
   >;
+
+  export interface AccountEmailChangedPayload {
+  readonly userId: string;
+  readonly email: string;
+}
+
+export type AccountEmailChangedEvent =
+  EventEnvelope<
+    "account.email-changed",
+    AccountEmailChangedPayload
+  >;

@@ -1,3 +1,4 @@
+
 import express from "express";
 import helmet from "helmet";
 
@@ -36,6 +37,10 @@ import {
 import {
   loginRouter,
 } from "./modules/auth/login/login.routes.js";
+
+import {
+  emailChangeRouter,
+} from "./modules/user/email-change/email-change.routes.js";
 
 import {
   refreshRouter,
@@ -94,6 +99,11 @@ app.use(
 app.use(
   "/api/v1/users",
   profileRouter,
+);
+
+app.use(
+  "/api/v1/users",
+  emailChangeRouter,
 );
 
 app.use(

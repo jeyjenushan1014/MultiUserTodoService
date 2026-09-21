@@ -2,6 +2,8 @@ import type {
   ErrorResponse,
   RegisterAccountRequest,
   RegisterAccountResponse,
+  LoginAccountRequest,
+  LoginAccountResponse
 } from "@todo/contracts";
 
 import {
@@ -71,10 +73,12 @@ async function parseJson(
   }
 }
 
-export async function registerAccount(
-  request: RegisterAccountRequest,
+
+async function sendAccountRequest<T>(
+  path: string,
+  request: unknown,
   requestId: string,
-): Promise<RegisterAccountResponse> {
+): Promise<T> {
   const abortController =
     new AbortController();
 
@@ -90,21 +94,28 @@ export async function registerAccount(
   try {
     const response = await fetch(
       new URL(
-        "/internal/v1/accounts/register",
+        path,
         env.ACCOUNT_SERVICE_URL,
       ),
       {
         method: "POST",
 
         headers: {
-          "content-type": "application/json",
-          "x-request-id": requestId,
+          "content-type":
+            "application/json",
+
+          "x-request-id":
+            requestId,
+
           "x-internal-service-key":
             env.INTERNAL_SERVICE_SECRET,
         },
 
-        body: JSON.stringify(request),
-        signal: abortController.signal,
+        body:
+          JSON.stringify(request),
+
+        signal:
+          abortController.signal,
       },
     );
 
@@ -128,8 +139,7 @@ export async function registerAccount(
       );
     }
 
-    return responseBody as
-      RegisterAccountResponse;
+    return responseBody as T;
   } catch (error) {
     if (error instanceof AppError) {
       throw error;
@@ -151,4 +161,31 @@ export async function registerAccount(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function registerAccount(
+  request: RegisterAccountRequest,
+  requestId: string,
+): Promise<RegisterAccountResponse> {
+  return sendAccountRequest<
+    RegisterAccountResponse
+  >(
+    "/internal/v1/accounts/register",
+    request,
+    requestId,
+  );
+}
+
+
+export async function loginAccount(
+  request: LoginAccountRequest,
+  requestId: string,
+): Promise<LoginAccountResponse> {
+  return sendAccountRequest<
+    LoginAccountResponse
+  >(
+    "/internal/v1/auth/login",
+    request,
+    requestId,
+  );
 }

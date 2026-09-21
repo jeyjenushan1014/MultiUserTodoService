@@ -1263,3 +1263,550 @@ GET  /api/v1/users/me
 The Registration API does not return authentication tokens.
 
 The `account.registered` event is stored in the outbox but is not published to RabbitMQ until the outbox publisher is implemented.
+
+# Multi-User TODO Platform API
+
+## 1. Document Status
+
+This document describes the HTTP API implemented through Part 8.
+
+| Capability | Status |
+|---|---|
+| Gateway health endpoint | Implemented |
+| Account Service health endpoint | Implemented |
+| Public Registration API | Implemented |
+| Transactional registration outbox | Implemented |
+| Public Login API | Implemented |
+| Persistent sessions | Implemented |
+| JWT access-token creation | Implemented |
+| Opaque refresh-token creation | Implemented |
+| Token refresh API | Not implemented |
+| Logout API | Not implemented |
+| Current-user API | Not implemented |
+| TODO APIs | Not implemented in the microservice platform |
+| Outbox event publisher | Not implemented |
+
+---
+
+## 2. Base URLs
+
+### Public API Gateway
+
+External clients must communicate only with:
+
+```text
+http://localhost:3000
+```
+
+### Internal Account Service
+
+The Account Service is accessible only inside the Docker network:
+
+```text
+http://account-service:3001
+```
+
+External clients must not call the Account Service directly.
+
+---
+
+## 3. Public API Summary
+
+| Method | Endpoint | Authentication | Status |
+|---|---|---|---|
+| `GET` | `/health` | Not required | Implemented |
+| `POST` | `/api/v1/auth/register` | Not required | Implemented |
+| `POST` | `/api/v1/auth/login` | Not required | Implemented |
+
+---
+
+## 4. Internal API Summary
+
+| Method | Endpoint | Authentication | Status |
+|---|---|---|---|
+| `GET` | `/health` | Internal network | Implemented |
+| `POST` | `/internal/v1/accounts/register` | Internal service key | Implemented |
+| `POST` | `/internal/v1/auth/login` | Internal service key | Implemented |
+
+---
+
+## 5. Standard Headers
+
+JSON requests must include:
+
+```http
+Content-Type: application/json
+```
+
+Clients may provide:
+
+```http
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+```
+
+If a valid request ID is not supplied, the Gateway creates one.
+
+The response includes:
+
+```http
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+```
+
+Internal Gateway requests also include:
+
+```http
+X-Internal-Service-Key: configured-secret
+```
+
+External clients must not send or receive the internal service secret.
+
+---
+
+## 6. Standard Error Response
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+Validation responses may include:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+    "details": [
+      {
+        "field": "email",
+        "message": "A valid email address is required"
+      }
+    ]
+  }
+}
+```
+
+The API never returns:
+
+- Stack traces
+- Raw SQL errors
+- Passwords
+- Password hashes
+- JWT secrets
+- Internal service secrets
+- Database credentials
+
+---
+
+# Login API
+
+## 7. Login
+
+### `POST /api/v1/auth/login`
+
+Authenticates an existing user and creates a persistent session.
+
+### Authentication
+
+Not required.
+
+### Request
+
+```http
+POST /api/v1/auth/login HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+```
+
+### Request body
+
+```json
+{
+  "email": "user@example.com",
+  "password": "StrongPassword123!"
+}
+```
+
+### Request fields
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `email` | String | Yes | Valid email, maximum 254 characters |
+| `password` | String | Yes | Non-empty, maximum 128 characters |
+
+The email is trimmed and converted to lowercase before account lookup.
+
+---
+
+## 8. Successful Login
+
+Status:
+
+```text
+200 OK
+```
+
+Example response:
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "a95fd118-f777-4500-9ea9-7d1a650fdadb",
+      "email": "user@example.com"
+    },
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example-signature",
+    "refreshToken": "random-opaque-refresh-token",
+    "accessTokenExpiresIn": 900,
+    "refreshTokenExpiresIn": 604800
+  }
+}
+```
+
+### Response fields
+
+| Field | Description |
+|---|---|
+| `data.user.id` | Authenticated user ID |
+| `data.user.email` | Normalized email |
+| `data.accessToken` | Short-lived JWT |
+| `data.refreshToken` | Long-lived opaque credential |
+| `data.accessTokenExpiresIn` | Access-token lifetime in seconds |
+| `data.refreshTokenExpiresIn` | Refresh-token lifetime in seconds |
+
+The response never contains the password or password hash.
+
+---
+
+## 9. PowerShell Login Example
+
+```powershell
+$body = @{
+  email = "user@example.com"
+  password = "StrongPassword123!"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:3000/api/v1/auth/login" `
+  -ContentType "application/json" `
+  -Headers @{
+    "X-Request-ID" =
+      "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  } `
+  -Body $body
+```
+
+---
+
+## 10. cURL Login Example
+
+```bash
+curl --request POST \
+  --url http://localhost:3000/api/v1/auth/login \
+  --header "Content-Type: application/json" \
+  --data '{
+    "email": "user@example.com",
+    "password": "StrongPassword123!"
+  }'
+```
+
+---
+
+## 11. Invalid Credentials
+
+Unknown email and incorrect password return exactly the same response.
+
+Status:
+
+```text
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "INVALID_CREDENTIALS",
+    "message": "Email or password is incorrect",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+The API does not reveal whether:
+
+- The email exists
+- The password was incorrect
+- The account lookup returned no record
+
+---
+
+## 12. Login Validation Failure
+
+Status:
+
+```text
+400 Bad Request
+```
+
+Example invalid email:
+
+```json
+{
+  "email": "invalid-email",
+  "password": "StrongPassword123!"
+}
+```
+
+Example response:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+    "details": [
+      {
+        "field": "email",
+        "message": "A valid email address is required"
+      }
+    ]
+  }
+}
+```
+
+An empty password also returns `400`.
+
+Unexpected properties are rejected:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "StrongPassword123!",
+  "role": "admin"
+}
+```
+
+---
+
+## 13. Account Service Unavailable
+
+If the Gateway immediately determines that the Account Service is unavailable:
+
+```text
+503 Service Unavailable
+```
+
+```json
+{
+  "error": {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "Account service is temporarily unavailable",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+---
+
+## 14. Account Service Timeout
+
+If the Account Service does not respond before the configured deadline:
+
+```text
+504 Gateway Timeout
+```
+
+```json
+{
+  "error": {
+    "code": "DOWNSTREAM_TIMEOUT",
+    "message": "Account service did not respond in time",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+Login is not automatically retried because an unsuccessful response does not prove that the Account Service failed before creating the session.
+
+---
+
+# Internal Login API
+
+## 15. Internal Login
+
+### `POST /internal/v1/auth/login`
+
+Used by the Gateway to authenticate a user.
+
+This endpoint is not publicly accessible.
+
+### Required headers
+
+```http
+Content-Type: application/json
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+X-Internal-Service-Key: configured-secret
+```
+
+### Request body
+
+```json
+{
+  "email": "user@example.com",
+  "password": "StrongPassword123!"
+}
+```
+
+### Successful response
+
+Status:
+
+```text
+200 OK
+```
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "a95fd118-f777-4500-9ea9-7d1a650fdadb",
+      "email": "user@example.com"
+    },
+    "accessToken": "signed-access-token",
+    "refreshToken": "opaque-refresh-token",
+    "accessTokenExpiresIn": 900,
+    "refreshTokenExpiresIn": 604800
+  }
+}
+```
+
+### Internal authentication failure
+
+Status:
+
+```text
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_SERVICE_UNAUTHORIZED",
+    "message": "Internal service authentication failed",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+---
+
+## 16. Token Security
+
+### Access token
+
+The access token:
+
+- Is a signed JWT
+- Has a short lifetime
+- Contains the user and session identifiers
+- Must be sent using the Bearer authentication scheme on future protected endpoints
+
+Example:
+
+```http
+Authorization: Bearer ACCESS_TOKEN
+```
+
+### Refresh token
+
+The refresh token:
+
+- Is an opaque random credential
+- Has a longer lifetime
+- Is returned only after successful Login
+- Must be stored securely by the client
+- Is stored only as a hash by the Account Service
+
+The current API does not yet provide a token-refresh endpoint.
+
+---
+
+## 17. Login Status Codes
+
+| Status | Error code | Meaning |
+|---|---|---|
+| `200` | Not applicable | Login succeeded |
+| `400` | `VALIDATION_ERROR` | Invalid Login request |
+| `400` | `INVALID_JSON` | Malformed JSON |
+| `401` | `INVALID_CREDENTIALS` | Unknown email or incorrect password |
+| `401` | `INTERNAL_SERVICE_UNAUTHORIZED` | Internal service authentication failed |
+| `413` | `PAYLOAD_TOO_LARGE` | Request exceeds the body-size limit |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected internal failure |
+| `502` | `INVALID_DOWNSTREAM_RESPONSE` | Invalid Account Service response |
+| `503` | `SERVICE_UNAVAILABLE` | Account Service is unavailable |
+| `504` | `DOWNSTREAM_TIMEOUT` | Account Service exceeded the deadline |
+
+---
+
+## 18. Login Database Effects
+
+Successful Login creates:
+
+- One `sessions` row
+- One `refresh_tokens` row
+
+Verify sessions:
+
+```sql
+SELECT
+  id,
+  user_id,
+  expires_at,
+  revoked_at,
+  created_at
+FROM sessions
+ORDER BY created_at DESC;
+```
+
+Verify refresh-token records:
+
+```sql
+SELECT
+  id,
+  session_id,
+  family_id,
+  token_hash,
+  expires_at,
+  used_at,
+  created_at
+FROM refresh_tokens
+ORDER BY created_at DESC;
+```
+
+The `token_hash` value must not equal the refresh token returned to the client.
+
+Failed Login must not create either row.
+
+---
+
+## 19. Login Limitations
+
+Part 8 creates persistent sessions and credentials, but the following operations are not implemented yet:
+
+```text
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+POST /api/v1/auth/logout-all
+GET  /api/v1/users/me
+```
+
+Refresh-token rotation, reuse detection and session revocation are implemented in later parts.

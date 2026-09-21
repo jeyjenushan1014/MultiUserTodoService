@@ -21,6 +21,10 @@ import {
   internalRegistrationRouter,
 } from "./modules/account/registration/registration.routes.js";
 
+import {
+  internalLoginRouter,
+} from "./modules/account/login/login.routes.js";
+
 export const app =
   express();
 
@@ -51,6 +55,11 @@ app.use(
 app.use(
   "/internal/v1/accounts",
   internalRegistrationRouter,
+);
+
+app.use(
+  "/internal/v1/auth",
+  internalLoginRouter,
 );
 
 

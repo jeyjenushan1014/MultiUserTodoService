@@ -1800,3 +1800,713 @@ Not implemented in Part 7:
 - Notification consumer
 - Registration email delivery
 - Registration idempotency key
+
+
+# Part 8 — Secure Login and Session Creation
+
+## 1. Purpose
+
+Part 8 implements secure user login and persistent session creation.
+
+A login request enters through the public API Gateway. The Gateway validates the request and forwards it to the private Account Service.
+
+The Account Service:
+
+1. Normalizes the email.
+2. Finds the account using the normalized email.
+3. Verifies the password using bcrypt.
+4. Generates a session ID.
+5. Generates an opaque refresh token.
+6. Hashes the refresh token.
+7. Creates a short-lived JWT access token.
+8. Stores the session and refresh-token hash atomically.
+9. Returns the raw refresh token only once.
+
+Part 8 does not implement:
+
+- Refresh-token rotation
+- Token refresh endpoint
+- Logout
+- Current-user endpoint
+- Gateway session projection
+- Password reset
+- Outbox publishing
+
+---
+
+## 2. Public and Internal Endpoints
+
+### Public Gateway endpoint
+
+External clients use:
+
+```text
+POST /api/v1/auth/login
+```
+
+Public URL:
+
+```text
+http://localhost:3000/api/v1/auth/login
+```
+
+### Internal Account Service endpoint
+
+The Gateway forwards the request to:
+
+```text
+POST /internal/v1/auth/login
+```
+
+Internal Docker URL:
+
+```text
+http://account-service:3001/internal/v1/auth/login
+```
+
+The Account Service is not exposed directly to external clients.
+
+---
+
+## 3. Login Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Account as Account Service
+    participant DB as Account PostgreSQL
+
+    Client->>Gateway: POST /api/v1/auth/login
+    Gateway->>Gateway: Validate request
+    Gateway->>Account: Forward with internal secret
+    Account->>Account: Verify internal secret
+    Account->>Account: Validate request
+    Account->>DB: Find user by normalized email
+    DB-->>Account: User and password hash
+    Account->>Account: Verify password with bcrypt
+    Account->>Account: Generate access and refresh tokens
+    Account->>DB: BEGIN
+    Account->>DB: Insert session
+    Account->>DB: Insert refresh-token hash
+    Account->>DB: COMMIT
+    Account-->>Gateway: User and tokens
+    Gateway-->>Client: 200 OK
+```
+
+---
+
+## 4. Component Responsibilities
+
+| Component | Responsibility |
+|---|---|
+| Gateway Login route | Exposes the public Login endpoint |
+| Gateway Login validation | Rejects malformed client input early |
+| Account Service client | Calls the private Account Service with a timeout |
+| Internal authentication middleware | Authenticates the calling Gateway |
+| Account Login validation | Independently validates the internal request |
+| Login controller | Handles HTTP request and response concerns |
+| Login service | Coordinates authentication and session creation |
+| Password verifier | Verifies a password against the bcrypt hash |
+| Access-token service | Creates the signed JWT access token |
+| Login repository | Finds users and persists sessions using raw SQL |
+| PostgreSQL | Stores users, sessions and refresh-token hashes |
+| Error middleware | Converts failures into safe API responses |
+
+---
+
+## 5. Folder Structure
+
+```text
+packages/
+└── contracts/
+    └── src/
+        └── account/
+            ├── login-account.contract.ts
+            └── index.ts
+
+apps/
+├── gateway/
+│   └── src/
+│       ├── clients/
+│       │   └── account-service.client.ts
+│       └── modules/
+│           └── auth/
+│               └── login/
+│                   ├── __tests__/
+│                   │   └── login.validation.test.ts
+│                   ├── login.controller.ts
+│                   ├── login.routes.ts
+│                   └── login.validation.ts
+│
+└── account-service/
+    ├── migrations/
+    │   └── 003_create_sessions_and_refresh_tokens.cjs
+    └── src/
+        ├── security/
+        │   ├── access-token.service.ts
+        │   └── password-hasher.ts
+        └── modules/
+            └── account/
+                └── login/
+                    ├── __tests__/
+                    │   ├── login.service.test.ts
+                    │   └── login.validation.test.ts
+                    ├── login.controller.ts
+                    ├── login.module.ts
+                    ├── login.repository.interface.ts
+                    ├── login.repository.ts
+                    ├── login.routes.ts
+                    ├── login.service.ts
+                    ├── login.types.ts
+                    └── login.validation.ts
+```
+
+---
+
+## 6. Double Boundary Validation
+
+Login input is validated at both the Gateway and Account Service.
+
+### Gateway validation
+
+The Gateway:
+
+- Rejects malformed public input early
+- Avoids unnecessary internal network calls
+- Prevents unexpected fields
+- Normalizes the email before forwarding
+
+### Account Service validation
+
+The Account Service:
+
+- Protects its own service boundary
+- Does not automatically trust internal traffic
+- Revalidates all required fields
+- Rejects unexpected properties
+- Applies the authoritative Login validation rules
+
+Validation at the Gateway improves efficiency. Validation at the Account Service preserves security and service independence.
+
+---
+
+## 7. Login Input Rules
+
+### Email
+
+The email must:
+
+- Be a string
+- Be a valid email address
+- Contain no more than 254 characters
+- Be trimmed
+- Be converted to lowercase
+
+Example:
+
+```text
+Input:  "  User@Example.COM  "
+Query:  "user@example.com"
+```
+
+### Password
+
+The Login password must:
+
+- Be a string
+- Not be empty
+- Contain no more than 128 characters
+
+Login does not apply the Registration API's minimum password length.
+
+Registration enforces the password policy when an account is created. Login verifies the credentials stored for an existing account.
+
+---
+
+## 8. Password Verification
+
+The Account Service retrieves:
+
+- User ID
+- Normalized email
+- Password hash
+
+The service verifies the submitted password using bcrypt.
+
+The application never:
+
+- Decrypts the password hash
+- Stores the submitted password
+- Returns the password
+- Returns the password hash
+- Logs the password
+- Adds the password to an event
+
+A bcrypt password hash is one-way. Login verifies whether the supplied password produces a valid comparison result against the stored hash.
+
+---
+
+## 9. Account Enumeration Protection
+
+Unknown email and incorrect password return the same response:
+
+```text
+401 Unauthorized
+INVALID_CREDENTIALS
+Email or password is incorrect
+```
+
+The API does not return separate messages such as:
+
+```text
+Email does not exist
+Password is incorrect
+```
+
+Separate messages would allow an attacker to discover which email addresses are registered.
+
+The service also does not return the password hash or database result.
+
+---
+
+## 10. Access Token
+
+The access token is a short-lived JWT signed by the Account Service.
+
+Default lifetime:
+
+```text
+900 seconds
+```
+
+Environment configuration:
+
+```env
+ACCESS_TOKEN_TTL_SECONDS=900
+```
+
+The access token contains:
+
+| Claim | Meaning |
+|---|---|
+| `sub` | User ID |
+| `sid` | Session ID |
+| `email` | Normalized user email |
+| `iss` | Token issuer |
+| `aud` | Intended token audience |
+| `iat` | Token issue time |
+| `exp` | Token expiration time |
+
+Example issuer:
+
+```text
+todo-account-service
+```
+
+Example audience:
+
+```text
+todo-platform
+```
+
+The access token does not contain:
+
+- Password
+- Password hash
+- Refresh token
+- Internal service secret
+- Database credentials
+
+The JWT secret is loaded from environment configuration and must contain at least 32 characters.
+
+---
+
+## 11. Refresh Token
+
+The refresh token is an opaque random credential.
+
+It does not contain readable user data or JWT claims.
+
+A refresh token is generated using cryptographically secure random bytes.
+
+The raw refresh token is:
+
+- Returned to the client once
+- Never stored directly in PostgreSQL
+- Never written to application logs
+- Never added to domain events
+
+Before persistence, the Account Service creates a SHA-256 hash of the refresh token.
+
+```text
+Raw refresh token
+        ↓
+SHA-256
+        ↓
+64-character hexadecimal token hash
+        ↓
+Stored in PostgreSQL
+```
+
+When the refresh endpoint is implemented, the submitted token will be hashed and compared using the stored hash.
+
+---
+
+## 12. Session Table
+
+The `sessions` table stores the persistent server-side session.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID | Unique session identifier |
+| `user_id` | UUID | Owner of the session |
+| `expires_at` | TIMESTAMPTZ | Session expiration time |
+| `revoked_at` | TIMESTAMPTZ | Time at which the session was revoked |
+| `created_at` | TIMESTAMPTZ | Session creation time |
+
+A session is considered potentially active when:
+
+```text
+revoked_at IS NULL
+AND expires_at > current time
+```
+
+Session enforcement on protected Gateway routes is implemented in a later part.
+
+---
+
+## 13. Refresh Tokens Table
+
+The `refresh_tokens` table stores refresh-token credentials.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID | Refresh-token record ID |
+| `session_id` | UUID | Parent session |
+| `family_id` | UUID | Token rotation family |
+| `token_hash` | VARCHAR(64) | SHA-256 hash of the raw token |
+| `expires_at` | TIMESTAMPTZ | Refresh-token expiration time |
+| `used_at` | TIMESTAMPTZ | Time at which the token was consumed |
+| `replaced_by_token_id` | UUID | Token created during rotation |
+| `created_at` | TIMESTAMPTZ | Token record creation time |
+
+The raw refresh token is not stored.
+
+The `family_id` prepares the schema for refresh-token rotation and reuse detection in a later part.
+
+---
+
+## 14. Atomic Session Creation
+
+The session and refresh-token record are written inside one PostgreSQL transaction.
+
+```mermaid
+flowchart TD
+    A["Begin transaction"] --> B["Insert session"]
+    B --> C["Insert refresh-token hash"]
+    C --> D["Commit"]
+    B -->|Failure| E["Rollback"]
+    C -->|Failure| E
+```
+
+Valid outcomes:
+
+| Session | Refresh-token row | Valid |
+|---|---|---|
+| Created | Created | Yes |
+| Not created | Not created | Yes |
+
+Invalid partial outcomes:
+
+| Session | Refresh-token row | Reason |
+|---|---|---|
+| Created | Missing | Session cannot be refreshed |
+| Missing | Created | Refresh token references no valid session |
+
+PostgreSQL transaction handling prevents these partial results.
+
+---
+
+## 15. Token Creation Order
+
+The Account Service performs Login in this order:
+
+1. Find the user.
+2. Verify the password.
+3. Generate session identifiers.
+4. Generate the raw refresh token.
+5. Hash the refresh token.
+6. Create the access token.
+7. Create the session and refresh-token database rows atomically.
+8. Return the response.
+
+If access-token signing fails, no session is inserted.
+
+If session persistence fails, the client does not receive the generated credentials.
+
+---
+
+## 16. Internal Service Authentication
+
+The Gateway calls the Account Service using:
+
+```http
+X-Internal-Service-Key: configured-secret
+```
+
+The Account Service verifies the secret using timing-safe comparison.
+
+Missing and incorrect secrets produce the same response:
+
+```text
+401 INTERNAL_SERVICE_UNAUTHORIZED
+```
+
+The internal secret:
+
+- Is loaded through environment configuration
+- Is not hardcoded
+- Is not logged
+- Is not returned to clients
+- Must contain at least 32 characters
+- Must be identical in the Gateway and Account Service
+
+The JWT secret and internal service secret must be different values.
+
+---
+
+## 17. Downstream Timeout Behaviour
+
+Gateway-to-Account-Service calls have a finite timeout:
+
+```env
+DOWNSTREAM_TIMEOUT_MS=5000
+```
+
+Possible results:
+
+| Failure | Gateway response |
+|---|---|
+| Account Service rejects credentials | `401 Unauthorized` |
+| Account Service is unreachable immediately | `503 Service Unavailable` |
+| Account Service exceeds the deadline | `504 Gateway Timeout` |
+| Account Service returns malformed data | `502 Bad Gateway` |
+
+Login is not automatically retried.
+
+Automatically retrying Login could create multiple sessions when the original request completed but its response was lost.
+
+---
+
+## 18. Login Failure Behaviour
+
+| Failure | Expected result |
+|---|---|
+| Invalid email format | `400 VALIDATION_ERROR` |
+| Empty password | `400 VALIDATION_ERROR` |
+| Password exceeds 128 characters | `400 VALIDATION_ERROR` |
+| Unexpected request property | `400 VALIDATION_ERROR` |
+| Malformed JSON | `400 INVALID_JSON` |
+| Oversized request | `413 PAYLOAD_TOO_LARGE` |
+| Unknown email | `401 INVALID_CREDENTIALS` |
+| Incorrect password | `401 INVALID_CREDENTIALS` |
+| Internal service secret missing | `401 INTERNAL_SERVICE_UNAUTHORIZED` |
+| Internal service secret incorrect | `401 INTERNAL_SERVICE_UNAUTHORIZED` |
+| Access-token signing fails | No session is created |
+| Session insert fails | Transaction rolls back |
+| Refresh-token insert fails | Session insert rolls back |
+| PostgreSQL unavailable | Controlled server error; no partial session |
+| Account Service unreachable | Gateway returns `503` or `504` |
+| Redis unavailable | Login continues in Part 8 |
+| RabbitMQ unavailable | Login continues |
+| Mailpit unavailable | Login continues |
+
+---
+
+## 19. Logging Requirements
+
+Login logs may include:
+
+- Request ID
+- User ID after successful authentication
+- Session ID
+- Service name
+- Status code
+- Request duration
+- Safe application error code
+
+Login logs must not include:
+
+- Submitted password
+- Password hash
+- Raw access token
+- Raw refresh token
+- Refresh-token hash
+- JWT secret
+- Internal service secret
+- Database credentials
+
+Logger redaction must include:
+
+```text
+password
+passwordHash
+password_hash
+accessToken
+refreshToken
+authorization
+x-internal-service-key
+```
+
+---
+
+## 20. Performance Decisions
+
+Part 8 uses the following performance decisions:
+
+- The Gateway rejects malformed requests before internal communication.
+- The database lookup uses the normalized unique email.
+- PostgreSQL connections are reused through the connection pool.
+- Password verification occurs before opening a transaction.
+- JWT signing occurs before opening the database transaction.
+- The transaction contains only two inserts.
+- No RabbitMQ operation occurs during Login.
+- No email operation occurs during Login.
+- No automatic Login retry is performed.
+- Database indexes support user lookup and session expiration operations.
+
+Bcrypt verification is intentionally CPU-expensive because it protects user credentials.
+
+---
+
+## 21. SOLID and Design Patterns
+
+### Single Responsibility Principle
+
+- Login controller handles HTTP concerns.
+- Login validator handles request validation.
+- Login service coordinates authentication.
+- Password verifier handles bcrypt comparison.
+- Access-token service handles JWT creation.
+- Login repository handles SQL and transactions.
+
+### Dependency Inversion Principle
+
+The Login service depends on:
+
+- `LoginRepository`
+- `PasswordVerifier`
+
+It does not depend directly on PostgreSQL or bcrypt implementation details.
+
+### Repository Pattern
+
+All Login SQL and transaction management remain inside the PostgreSQL Login repository.
+
+### Service Layer Pattern
+
+Authentication and session-creation rules remain inside the Login service.
+
+### Gateway Pattern
+
+External clients communicate only with the Gateway.
+
+### Opaque Token Pattern
+
+Refresh tokens contain random data and reveal no user or session information.
+
+---
+
+## 22. Part 8 Security Checklist
+
+- [x] Login is publicly exposed only through the Gateway.
+- [x] Account Service remains private.
+- [x] Gateway validates Login input.
+- [x] Account Service validates Login input independently.
+- [x] Unexpected request fields are rejected.
+- [x] Password is verified using bcrypt.
+- [x] Unknown email and incorrect password return the same error.
+- [x] Password is never logged or returned.
+- [x] JWT is short-lived.
+- [x] Refresh token is cryptographically random.
+- [x] Only the refresh-token hash is persisted.
+- [x] Internal endpoint requires service authentication.
+- [x] Internal calls use a finite timeout.
+- [x] Login is not automatically retried.
+- [x] Session and refresh-token creation are atomic.
+
+---
+
+## 23. Part 8 Reliability Checklist
+
+- [x] Failed password verification creates no session.
+- [x] Failed JWT signing creates no session.
+- [x] Failed session insert creates no refresh-token row.
+- [x] Failed refresh-token insert rolls back the session.
+- [x] PostgreSQL clients are released in a `finally` block.
+- [x] Account Service outage returns a controlled Gateway error.
+- [x] Gateway remains available during Account Service failure.
+- [x] RabbitMQ outage does not prevent Login.
+- [x] Redis outage does not prevent Part 8 Login.
+- [x] Mailpit outage does not prevent Login.
+
+---
+
+## 24. Part 8 Test Coverage
+
+Part 8 tests cover:
+
+- Valid Login input
+- Email normalization
+- Invalid email
+- Empty password
+- Long password
+- Unexpected properties
+- Successful authentication
+- Password verification
+- Access-token creation
+- Refresh-token generation
+- Refresh-token hashing
+- Unknown email
+- Incorrect password
+- User repository failure
+- Password-verification failure
+- Session-persistence failure
+- Gateway boundary validation
+- Account Service boundary validation
+
+---
+
+## 25. Part 8 Scope
+
+Implemented in Part 8:
+
+- Public Login endpoint
+- Internal Account Service Login endpoint
+- Login request and response contracts
+- Gateway Login validation
+- Account Service Login validation
+- bcrypt password verification
+- Generic invalid-credentials response
+- JWT access-token creation
+- Opaque refresh-token generation
+- Refresh-token hashing
+- Sessions table
+- Refresh-tokens table
+- Atomic session persistence
+- Downstream timeout handling
+- Login unit tests
+- Login sad-path verification
+- Login API documentation
+
+Not implemented in Part 8:
+
+- Refresh-token endpoint
+- Refresh-token rotation
+- Refresh-token reuse detection
+- Logout
+- Logout from all devices
+- Current-user endpoint
+- Gateway session projection
+- Protected TODO endpoints

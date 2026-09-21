@@ -10,14 +10,31 @@ export interface PasswordHasher {
   ): Promise<string>;
 }
 
-export class BcryptPasswordHasher
-implements PasswordHasher {
+export interface PasswordVerifier {
+  verify(
+    password: string,
+    passwordHash: string,
+  ): Promise<boolean>;
+}
+
+export class BcryptPasswordService
+implements PasswordHasher,PasswordVerifier {
   public async hash(
     password: string,
   ): Promise<string> {
     return bcrypt.hash(
       password,
       env.PASSWORD_HASH_ROUNDS,
+    );
+  }
+
+  public async verify(
+    password: string,
+    passwordHash: string,
+  ): Promise<boolean> {
+    return bcrypt.compare(
+      password,
+      passwordHash,
     );
   }
 }

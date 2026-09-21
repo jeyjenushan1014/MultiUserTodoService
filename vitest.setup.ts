@@ -43,3 +43,18 @@ process.env.PASSWORD_HASH_ROUNDS ??=
  */
 process.env.INTERNAL_SERVICE_SECRET ??=
   "test-internal-service-secret-with-more-than-32-characters";
+
+process.env.JWT_SECRET ??=
+  "test-jwt-secret-containing-more-than-32-characters";
+
+process.env.JWT_ISSUER ??=
+  "todo-account-service";
+
+process.env.JWT_AUDIENCE ??=
+  "todo-platform";
+
+process.env.ACCESS_TOKEN_TTL_SECONDS ??=
+  "900";
+
+process.env.REFRESH_TOKEN_TTL_SECONDS ??=
+  "604800";

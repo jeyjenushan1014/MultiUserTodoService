@@ -25,6 +25,10 @@ import {
   healthRouter,
 } from "./modules/health/health.routes.js";
 
+import {
+  loginRouter,
+} from "./modules/auth/login/login.routes.js";
+
 export const app =
   express();
 
@@ -59,6 +63,11 @@ app.use(
 app.use(
   "/api/v1/auth",
   registrationRouter,
+);
+
+app.use(
+  "/api/v1/auth",
+  loginRouter,
 );
 
 app.use(

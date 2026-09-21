@@ -41,5 +41,9 @@ export type {
   InternalIdentityEnvelope,
 } from "./identity/caller-identity.contract.js";
 
-
+export type {
+  AuthenticatedAccount,
+  LoginAccountRequest,
+  LoginAccountResponse,
+} from "./account/index.js";
 

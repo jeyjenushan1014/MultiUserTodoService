@@ -87,7 +87,39 @@ const environmentSchema =
           .min(10)
           .max(14)
           .default(12),
+    
+    JWT_SECRET: z
+        .string()
+        .min(32),
 
+    JWT_ISSUER: z
+        .string()
+        .min(1)
+        .default(
+           "todo-account-service",
+        ),
+
+    JWT_AUDIENCE: z
+      .string()
+      .min(1)
+      .default(
+         "todo-platform",
+      ),
+
+  ACCESS_TOKEN_TTL_SECONDS:
+       z.coerce
+        .number()
+        .int()
+        .positive()
+        .max(3600)
+        .default(900),
+
+  REFRESH_TOKEN_TTL_SECONDS:
+       z.coerce
+          .number()
+         .int()
+         .positive()
+        .default(604800),
     LOG_LEVEL: z
       .enum([
         "fatal",

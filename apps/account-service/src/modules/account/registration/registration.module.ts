@@ -1,5 +1,5 @@
 import {
-  BcryptPasswordHasher,
+  BcryptPasswordService,
 } from "../../../security/password-hasher.js";
 
 import {
@@ -18,7 +18,7 @@ const registrationRepository =
   new PostgresRegistrationRepository();
 
 const passwordHasher =
-  new BcryptPasswordHasher();
+  new BcryptPasswordService();
 
 const registrationService =
   new RegistrationService(

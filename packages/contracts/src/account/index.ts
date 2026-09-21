@@ -8,3 +8,9 @@ export type {
   AccountRegisteredEvent,
   AccountRegisteredPayload,
 } from "./account.event.contract.js";
+
+export type {
+  AuthenticatedAccount,
+  LoginAccountRequest,
+  LoginAccountResponse,
+} from "./login.account.contract.js";

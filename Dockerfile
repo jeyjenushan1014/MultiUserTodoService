@@ -19,6 +19,9 @@ COPY apps/account-service/package.json \
 COPY apps/gateway/package.json \
   ./apps/gateway/package.json
 
+COPY apps/todo-service/package.json \
+  ./apps/todo-service/package.json
+
 RUN npm ci
 
 
@@ -55,6 +58,23 @@ COPY packages/common \
 
 RUN npm run build -w @todo/contracts
 RUN npm run build -w @todo/common
+
+
+# ==========================================================
+# TODO Service migration image
+# ==========================================================
+FROM dependencies AS todo-migrations-runtime
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY apps/todo-service/migrations \
+  ./apps/todo-service/migrations
+
+USER node
+
+CMD ["npm", "run", "migrate", "-w", "@todo/todo-service"]
 
 
 # ==========================================================

@@ -7,7 +7,8 @@
     "packages/contracts",
     "packages/common",
     "apps/account-service",
-    "apps/gateway"
+    "apps/gateway",
+    "apps/todo-service"
   ],
   
   "scripts": {
@@ -17,7 +18,10 @@
     "test": "npm run test -w @todo/common && npm run test -w @todo/account-service && npm run test -w @todo/gateway",
     "check": "npm run lint && npm run build && npm test",
     "migrate:account": "npm run migrate -w @todo/account-service",
-    "clean": "node scripts/clean.mjs"
+    "clean": "node scripts/clean.mjs",
+     "migrate:todo": "npm run migrate -w @todo/todo-service",
+    "migrate:todo:down": "npm run migrate:down -w @todo/todo-service"
+
   },
   "engines": {
     "node": ">=24"

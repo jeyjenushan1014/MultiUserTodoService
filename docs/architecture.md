@@ -3257,3 +3257,98 @@ packages/contracts/src/todo
 Each concept has a focused file. The TODO `index.ts` file only exports the module's public contract.
 
 The contracts package contains no Express, PostgreSQL or Redis implementation.
+
+## TODO Service data ownership
+
+The TODO Service owns a dedicated PostgreSQL database.
+
+The Account Service and TODO Service do not share tables or access each other's databases directly.
+
+### TODO owner projection
+
+The TODO database contains a `todo_owners` table.
+
+This table is a minimal local projection of account identity. It stores the account identifier required to enforce TODO ownership but does not duplicate account credentials or email addresses.
+
+The projection is updated from account-domain events.
+
+The `todos.owner_id` column references `todo_owners.id`. PostgreSQL therefore prevents a TODO item from existing without a known owner.
+
+### TODO tables
+
+The TODO Service owns:
+
+| Table | Purpose |
+|---|---|
+| `todo_owners` | Minimal projection of account owners. |
+| `todos` | Owner-scoped TODO items. |
+| `processed_events` | Idempotency records for consumed events. |
+
+Every table has a primary key.
+
+### TODO state constraint
+
+The database accepts only:
+
+```text
+pending
+in_progress
+completed
+cancelled
+```
+
+The application validates the state before database access, while the database constraint protects the invariant from every write path.
+
+### Active-title uniqueness
+
+The database uses a partial unique index over:
+
+```text
+owner_id
+LOWER(BTRIM(title))
+```
+
+The index includes only records where:
+
+```text
+deleted_at IS NULL
+```
+
+This provides the following guarantees:
+
+- one owner cannot hold two active TODOs with the same normalized title;
+- case differences do not bypass uniqueness;
+- leading and trailing spaces do not bypass uniqueness;
+- different owners may use the same title;
+- a title can be reused after its previous TODO is soft-deleted;
+- concurrent conflicting requests are rejected by PostgreSQL.
+
+### Foreign-key behaviour
+
+The owner foreign key uses `ON DELETE RESTRICT`.
+
+Owner projection rows are deactivated instead of deleted while TODO records reference them. This preserves ownership and historical integrity.
+
+### Read indexes
+
+The TODO table contains partial indexes for active rows:
+
+- owner and creation date;
+- owner, state and creation date;
+- owner and due date.
+
+These indexes support frequently issued owner-scoped list, filter and sort operations without scanning the complete TODO table.
+
+### Processed-event idempotency
+
+The `processed_events` table uses the RabbitMQ event ID as its primary key.
+
+An account event and its projection update are committed in one PostgreSQL transaction. If RabbitMQ redelivers the same event, the existing primary key prevents duplicate processing.
+
+### Migration policy
+
+The TODO schema is managed only by repository migration files.
+
+Once committed, a migration is immutable. Schema corrections must be introduced through a new migration.
+
+Applying all TODO migrations to an empty PostgreSQL database produces the complete TODO schema.

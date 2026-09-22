@@ -27,6 +27,29 @@ services:
     restart: unless-stopped
 
 
+  todo-postgres:
+    image: postgres:17-alpine
+
+    environment:
+      POSTGRES_USER: ${TODO_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TODO_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${TODO_POSTGRES_DB}
+
+    volumes:
+      - todo_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+    restart: unless-stopped
+
+
   redis:
     image: redis:8-alpine
 
@@ -126,6 +149,22 @@ services:
         condition: service_healthy
 
     restart: "no"    
+
+  todo-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-migrations-runtime
+
+    environment:
+      DATABASE_URL: >-
+        postgres://${TODO_POSTGRES_USER}:${TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${TODO_POSTGRES_DB}
+
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+
+    restart: "no"
 
   account-service:
     build:
@@ -268,5 +307,6 @@ services:
 
 volumes:
   account_postgres_data:
+  todo_postgres_data:
   redis_data:
   rabbitmq_data:

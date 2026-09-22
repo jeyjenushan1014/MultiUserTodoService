@@ -27,6 +27,11 @@ import {
 } from "./middleware/request-logger.middleware.js";
 
 import {
+  passwordResetRouter,
+} from "./modules/auth/password-reset/password-reset.routes.js";
+
+
+import {
   registrationRouter,
 } from "./modules/auth/registration/registration.routes.js";
 
@@ -104,6 +109,11 @@ app.use(
 app.use(
   "/api/v1/users",
   emailChangeRouter,
+);
+
+app.use(
+  "/api/v1/auth/password-reset",
+  passwordResetRouter,
 );
 
 app.use(

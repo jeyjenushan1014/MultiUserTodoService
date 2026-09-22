@@ -18,6 +18,13 @@ const environmentSchema =
       .min(1)
       .max(65_535)
       .default(3001),
+    
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: z.coerce
+        .number()
+        .int()
+        .positive()
+        .max(60)
+        .default(15),
 
     ACCOUNT_DATABASE_URL: z
       .string()

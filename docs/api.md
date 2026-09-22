@@ -2277,3 +2277,621 @@ All existing sessions are revoked. The user must log in again using the new emai
 | `500` | `INTERNAL_SERVER_ERROR` | Unexpected failure |
 | `503` | `SERVICE_UNAVAILABLE` | Account Service unavailable |
 | `504` | `DOWNSTREAM_TIMEOUT` | Account Service timeout |
+
+## Password Reset Request API
+
+The Password Reset Request API allows a user to request instructions for resetting their password.
+
+The endpoint always returns the same successful response regardless of whether the supplied email address belongs to an account. This behaviour prevents attackers from discovering registered email addresses.
+
+---
+
+### Public endpoint
+
+```http
+POST /api/v1/auth/password-reset/request
+```
+
+This endpoint is exposed through the API Gateway.
+
+### Internal endpoint
+
+```http
+POST /internal/v1/auth/password-reset/request
+```
+
+This endpoint belongs to the Account Service and must not be exposed publicly.
+
+The API Gateway calls the internal endpoint using the configured internal service credential.
+
+---
+
+### Authentication
+
+Authentication is not required.
+
+This endpoint is used when a user cannot sign in and therefore does not have a valid access token.
+
+---
+
+### Request headers
+
+| Header | Required | Description |
+|---|---:|---|
+| `Content-Type` | Yes | Must be `application/json`. |
+| `X-Request-ID` | No | Optional UUID used to trace the request across services. The Gateway generates one when it is not provided. |
+
+Example:
+
+```http
+Content-Type: application/json
+X-Request-ID: 67dd883e-0ca4-4101-9a11-5bf22dbfcaf0
+```
+
+---
+
+### Request body
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+### Request fields
+
+| Field | Type | Required | Validation |
+|---|---|---:|---|
+| `email` | string | Yes | Must be a valid email address and must not exceed 254 characters. |
+
+The email address is trimmed and converted to lowercase before it is processed.
+
+Additional request properties are rejected.
+
+---
+
+### Successful response
+
+Status:
+
+```http
+202 Accepted
+```
+
+Body:
+
+```json
+{
+  "message": "If an account exists for this email, password reset instructions will be sent"
+}
+```
+
+The response does not confirm whether the email address belongs to an account.
+
+The same status code, response body and message are returned for both registered and unregistered email addresses.
+
+---
+
+### Registered email behaviour
+
+When the email belongs to an active account, the Account Service performs the following operations:
+
+1. Generates a cryptographically secure opaque reset token.
+2. Calculates the SHA-256 hash of the token.
+3. Invalidates previous unused password-reset tokens belonging to the user.
+4. Stores the new token hash and expiration time.
+5. Creates an `account.password-reset-requested` transactional outbox event.
+6. Commits the token and outbox event in one PostgreSQL transaction.
+7. Returns the generic `202 Accepted` response.
+
+Only the token hash is stored in the `password_reset_tokens` table.
+
+The public API never returns the reset token.
+
+---
+
+### Unregistered email behaviour
+
+When the email does not belong to an active account:
+
+1. No password-reset token is created.
+2. No outbox event is created.
+3. The same generic `202 Accepted` response is returned.
+
+This behaviour prevents account enumeration.
+
+---
+
+### Password-reset token rules
+
+Password-reset tokens have the following properties:
+
+- Tokens are generated using a cryptographically secure random generator.
+- Only the SHA-256 token hash is stored in the password-reset token table.
+- Tokens expire after the configured password-reset TTL.
+- Requesting a newer token invalidates previous unused tokens.
+- Tokens are never written to normal application logs.
+- Tokens are never returned through the public API.
+- A token can only be used for the password-reset operation.
+- Token validation and password replacement are handled by the password-reset confirmation API.
+
+---
+
+### Transactional outbox event
+
+When the email belongs to an active account, the Account Service creates this event:
+
+```text
+account.password-reset-requested
+```
+
+Example event payload:
+
+```json
+{
+  "userId": "11da4df1-b840-4f1b-a6e0-e191b65c46df",
+  "email": "user@example.com",
+  "resetToken": "secure-generated-reset-token",
+  "expiresAt": "2026-09-22T10:30:00.000Z"
+}
+```
+
+The outbox publisher processes this event asynchronously and forwards it to the message broker.
+
+The notification component uses the event to send password-reset instructions to the user.
+
+The reset token is sensitive information. It must not be included in application logs, error responses or monitoring labels.
+
+---
+
+## Password Reset Request Examples
+
+### Request with a registered email
+
+```http
+POST /api/v1/auth/password-reset/request HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+X-Request-ID: 67dd883e-0ca4-4101-9a11-5bf22dbfcaf0
+
+{
+  "email": "user@example.com"
+}
+```
+
+Response:
+
+```http
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+X-Request-ID: 67dd883e-0ca4-4101-9a11-5bf22dbfcaf0
+```
+
+```json
+{
+  "message": "If an account exists for this email, password reset instructions will be sent"
+}
+```
+
+---
+
+### Request with an unregistered email
+
+```http
+POST /api/v1/auth/password-reset/request HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+
+{
+  "email": "unknown@example.com"
+}
+```
+
+Response:
+
+```http
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+```
+
+```json
+{
+  "message": "If an account exists for this email, password reset instructions will be sent"
+}
+```
+
+The response intentionally does not reveal that the email address is unregistered.
+
+---
+
+## Error Responses
+
+All error responses follow the common API error structure:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
+    "details": [
+      {
+        "field": "email",
+        "message": "Validation error message"
+      }
+    ]
+  }
+}
+```
+
+The `details` property is only included when field-level error information is available.
+
+---
+
+### Invalid email address
+
+Status:
+
+```http
+400 Bad Request
+```
+
+Request:
+
+```json
+{
+  "email": "not-an-email"
+}
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
+    "details": [
+      {
+        "field": "email",
+        "message": "A valid email address is required"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Missing email address
+
+Status:
+
+```http
+400 Bad Request
+```
+
+Request:
+
+```json
+{}
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
+    "details": [
+      {
+        "field": "email",
+        "message": "Invalid input: expected string, received undefined"
+      }
+    ]
+  }
+}
+```
+
+The exact validation message may depend on the configured Zod error mapper.
+
+---
+
+### Unknown request property
+
+Status:
+
+```http
+400 Bad Request
+```
+
+Request:
+
+```json
+{
+  "email": "user@example.com",
+  "role": "admin"
+}
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
+    "details": [
+      {
+        "field": "",
+        "message": "Unrecognized key: \"role\""
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Malformed JSON
+
+Status:
+
+```http
+400 Bad Request
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "INVALID_JSON",
+    "message": "Request body contains invalid JSON",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0"
+  }
+}
+```
+
+---
+
+### Payload too large
+
+Status:
+
+```http
+413 Payload Too Large
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "PAYLOAD_TOO_LARGE",
+    "message": "Request body is too large",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0"
+  }
+}
+```
+
+---
+
+### Account Service unavailable
+
+Status:
+
+```http
+503 Service Unavailable
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "Account service is temporarily unavailable",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0"
+  }
+}
+```
+
+This response can occur when the Gateway cannot establish a connection to the Account Service.
+
+---
+
+### Account Service timeout
+
+Status:
+
+```http
+504 Gateway Timeout
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "DOWNSTREAM_TIMEOUT",
+    "message": "Account service did not respond in time",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0"
+  }
+}
+```
+
+---
+
+### Unexpected server error
+
+Status:
+
+```http
+500 Internal Server Error
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "An unexpected error occurred",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0"
+  }
+}
+```
+
+Internal database errors, stack traces, SQL statements and sensitive token values must not be returned to the client.
+
+---
+
+## PowerShell verification
+
+### Registered email
+
+```powershell
+curl.exe -i `
+  -X POST `
+  "http://localhost:3000/api/v1/auth/password-reset/request" `
+  -H "Content-Type: application/json" `
+  -H "X-Request-ID: 67dd883e-0ca4-4101-9a11-5bf22dbfcaf0" `
+  -d '{\"email\":\"user@example.com\"}'
+```
+
+Expected status:
+
+```http
+202 Accepted
+```
+
+---
+
+### Unregistered email
+
+```powershell
+curl.exe -i `
+  -X POST `
+  "http://localhost:3000/api/v1/auth/password-reset/request" `
+  -H "Content-Type: application/json" `
+  -d '{\"email\":\"unknown@example.com\"}'
+```
+
+Expected status:
+
+```http
+202 Accepted
+```
+
+The response must be identical to the response returned for a registered email.
+
+---
+
+### Invalid email
+
+```powershell
+curl.exe -i `
+  -X POST `
+  "http://localhost:3000/api/v1/auth/password-reset/request" `
+  -H "Content-Type: application/json" `
+  -d '{\"email\":\"invalid-email\"}'
+```
+
+Expected status:
+
+```http
+400 Bad Request
+```
+
+---
+
+### Verify the token record
+
+```powershell
+docker compose exec account-postgres `
+  psql `
+  -U account_user `
+  -d account_db `
+  -c "SELECT user_id, token_hash, expires_at, used_at, created_at FROM password_reset_tokens ORDER BY created_at DESC LIMIT 5;"
+```
+
+The `token_hash` must contain a 64-character SHA-256 hexadecimal value.
+
+The raw reset token must not appear in the `password_reset_tokens` table.
+
+---
+
+### Verify the outbox event
+
+```powershell
+docker compose exec account-postgres `
+  psql `
+  -U account_user `
+  -d account_db `
+  -c "SELECT event_type, aggregate_id, request_id, occurred_at, publish_attempts FROM outbox_events WHERE event_type = 'account.password-reset-requested' ORDER BY occurred_at DESC LIMIT 5;"
+```
+
+Expected event type:
+
+```text
+account.password-reset-requested
+```
+
+---
+
+## Security considerations
+
+- The endpoint uses a generic response to prevent account enumeration.
+- Email addresses are normalized before lookup.
+- Reset tokens are generated using a cryptographically secure generator.
+- Only token hashes are stored in the password-reset token table.
+- Tokens have a short expiration period.
+- Previous unused tokens are invalidated when a new token is requested.
+- Token creation and outbox creation use one database transaction.
+- Raw tokens must not appear in normal application logs.
+- Internal service credentials must never be returned to clients.
+- Database errors and stack traces must not be exposed.
+- Rate limiting should be applied to reduce password-reset abuse.
+- Production systems should encrypt sensitive reset-token information stored inside outbox event payloads.
+
+---
+
+## Reliability behaviour
+
+| Failure | Expected behaviour |
+|---|---|
+| Email does not exist | Return the generic `202 Accepted` response without creating a token. |
+| Token insert fails | Roll back the token and outbox transaction. |
+| Outbox insert fails | Roll back the reset-token insert. |
+| PostgreSQL is unavailable | Return a controlled server error; do not create partial data. |
+| Account Service is unavailable | Gateway returns `503 Service Unavailable`. |
+| Account Service times out | Gateway returns `504 Gateway Timeout`. |
+| Email delivery is temporarily unavailable | The committed outbox event remains available for a later retry. |
+| Duplicate reset request | Invalidate the previous unused token and create a new token. |
+
+---
+
+## Related events
+
+| Event | Producer | Purpose |
+|---|---|---|
+| `account.password-reset-requested` | Account Service | Requests asynchronous delivery of password-reset instructions. |
+
+---
+
+## Related future endpoint
+
+The password-reset request endpoint only creates and delivers the reset token.
+
+The token is consumed by the password-reset confirmation endpoint:
+
+```http
+POST /api/v1/auth/password-reset/confirm
+```
+
+The confirmation endpoint validates the token, replaces the password, marks the token as used and revokes existing user sessions.

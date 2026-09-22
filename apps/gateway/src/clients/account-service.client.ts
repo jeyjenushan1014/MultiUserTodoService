@@ -13,6 +13,10 @@ import type {
   ChangeEmailResponse
 } from "@todo/contracts";
 
+import type {
+  PasswordResetRequest,
+  PasswordResetRequestedResponse,
+} from "@todo/contracts";
 
 import {
   AppError,
@@ -379,6 +383,32 @@ export async function changeAccountEmail(
       method: "PATCH",
       requestId,
       identity,
+      body: request,
+    });
+
+  if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
+}
+
+export async function requestPasswordReset(
+  request: PasswordResetRequest,
+  requestId: string,
+): Promise<PasswordResetRequestedResponse> {
+  const result =
+    await sendAccountRequest<
+      PasswordResetRequestedResponse
+    >({
+      method: "POST",
+      path:
+        "/internal/v1/auth/password-reset/request",
+      requestId,
       body: request,
     });
 

@@ -26,6 +26,10 @@ import {
 } from "./modules/account/registration/registration.routes.js";
 
 import {
+  passwordResetRouter,
+} from "./modules/account/password-reset/password-reset.routes.js";
+
+import {
   internalLoginRouter,
 } from "./modules/account/login/login.routes.js";
 
@@ -96,6 +100,11 @@ app.use(
 app.use(
   "/internal/v1/accounts",
   internalEmailChangeRouter,
+);
+
+app.use(
+  "/internal/v1/auth/password-reset",
+  passwordResetRouter,
 );
 
 app.use(

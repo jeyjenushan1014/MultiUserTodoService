@@ -65,3 +65,5 @@ export type {
   AccountEmailChangedEvent,
   AccountEmailChangedPayload,
 } from "./account/index.js";
+
+export * from "./auth/index.js";

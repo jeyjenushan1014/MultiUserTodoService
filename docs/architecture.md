@@ -2931,3 +2931,39 @@ Not implemented:
 - Password reset
 - Email verification workflow
 - Outbox publisher
+
+
+---
+
+# Architecture documentation
+
+`docs/architecture.md`-ல் add செய்யவும்:
+
+```md
+## Password-reset request flow
+
+The Gateway exposes the public password-reset request endpoint. It validates the request and forwards it to the Account Service using the internal service credential and request ID.
+
+The Account Service normalizes the email address and searches for an active account. It always returns the same accepted response, regardless of whether the account exists. This prevents attackers from discovering registered email addresses.
+
+When the account exists, the service generates a cryptographically secure opaque reset token. Only the SHA-256 hash of the token is stored in the password-reset table.
+
+Within one PostgreSQL transaction, the Account Service:
+
+1. Invalidates previous unused reset tokens for the user.
+2. Stores the new reset-token hash and expiration time.
+3. Creates an `account.password-reset-requested` outbox event.
+
+The reset token and outbox event therefore cannot be partially created. If any database operation fails, the entire transaction is rolled back.
+
+The outbox publisher and notification delivery components process the event asynchronously. Email delivery failure does not corrupt the account or reset-token transaction.
+
+Password-reset tokens are:
+
+- cryptographically random;
+- stored as hashes;
+- short lived;
+- single purpose;
+- invalidated when a newer token is requested;
+- never returned by the public API;
+- never written to application logs.

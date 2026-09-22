@@ -68,8 +68,7 @@ async function parseJson(
     );
 
   if (
-    contentType === null ||
-    !contentType.includes(
+    !contentType?.includes(
       "application/json",
     )
   ) {

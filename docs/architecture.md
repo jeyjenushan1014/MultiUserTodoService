@@ -3015,3 +3015,58 @@ The following values must never appear in logs, API error responses, monitoring 
 - password hash.
 
 The `account.password-reset-completed` event contains only the account identifier and completion timestamp.
+
+## Transactional outbox publisher
+
+Account-domain changes and their corresponding events are stored in one PostgreSQL transaction.
+
+The Account Service does not publish directly to RabbitMQ inside an HTTP request. Publishing directly would create a dual-write problem where the database operation could succeed while message publication fails, or message publication could succeed while the database operation fails.
+
+Instead, the business transaction inserts an event into the `outbox_events` table.
+
+A separate outbox publisher worker:
+
+1. Claims pending events in batches.
+2. Uses a database lease to prevent other workers from claiming the same event.
+3. Publishes each event through a RabbitMQ confirm channel.
+4. Marks the event as published only after RabbitMQ acknowledges it.
+5. Schedules failed events for retry using exponential backoff.
+6. Releases its event leases during graceful shutdown.
+
+### Scaling
+
+Multiple outbox publisher instances may run concurrently.
+
+PostgreSQL `FOR UPDATE SKIP LOCKED` and the `locked_by` lease prevent workers from processing the same pending row simultaneously.
+
+If a worker crashes, its lease eventually expires and another worker can reclaim the event.
+
+### Delivery semantics
+
+The publisher provides at-least-once delivery.
+
+There is a small failure window after RabbitMQ acknowledges a message but before PostgreSQL records `published_at`. If the worker crashes during this window, the message can be published again.
+
+Consumers must therefore process messages idempotently using `eventId`.
+
+### RabbitMQ topology
+
+The durable topic exchange `todo.events` contains account-domain events.
+
+The durable `todo.notifications` queue subscribes to notification-related events such as `account.password-reset-requested`.
+
+Messages that the notification consumer rejects without requeueing are routed through `todo.events.dlx` to `todo.notifications.dlq`.
+
+### Dependency failure behaviour
+
+RabbitMQ is not required for synchronous account operations.
+
+When RabbitMQ is unavailable:
+
+- account operations continue writing outbox records;
+- the publisher retries later;
+- unpublished events remain durable in PostgreSQL;
+- API requests do not wait for RabbitMQ;
+- no committed account data is rolled back.
+
+This separates synchronous account availability from asynchronous notification availability.

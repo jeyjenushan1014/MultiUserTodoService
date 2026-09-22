@@ -70,6 +70,24 @@ export async function checkDatabaseHealth():
   }
 }
 
+export async function verifyDatabaseConnection():
+  Promise<void> {
+  try {
+    await database.query(
+      "SELECT 1",
+    );
+  } catch (error) {
+    logger.error(
+      {
+        error,
+      },
+      "PostgreSQL connection verification failed",
+    );
+
+    throw error;
+  }
+}
+
 export async function closeDatabase():
   Promise<void> {
   await database.end();

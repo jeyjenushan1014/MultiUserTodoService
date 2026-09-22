@@ -86,6 +86,14 @@ services:
     restart: unless-stopped
 
 
+
+    
+    
+
+    
+   
+  
+
   mailpit:
     image: axllent/mailpit:v1.27
 
@@ -135,6 +143,15 @@ services:
       DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
       DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
       PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      RABBITMQ_NOTIFICATION_DLQ: ${RABBITMQ_NOTIFICATION_DLQ:-todo.notifications.dlq}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-1000}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-60}
+      OUTBOX_MAX_RETRY_DELAY_SECONDS: ${OUTBOX_MAX_RETRY_DELAY_SECONDS:-300}
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       JWT_SECRET: ${JWT_SECRET}
@@ -161,6 +178,49 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+
+    restart: unless-stopped
+
+
+  account-outbox-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: account-service-runtime
+
+    command:
+      - node
+      - apps/account-service/dist/worker/outbox-publisher.worker.js
+
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      RABBITMQ_NOTIFICATION_DLQ: ${RABBITMQ_NOTIFICATION_DLQ:-todo.notifications.dlq}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-1000}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-60}
+      OUTBOX_MAX_RETRY_DELAY_SECONDS: ${OUTBOX_MAX_RETRY_DELAY_SECONDS:-300}
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
+      REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
+
+    depends_on:
+      account-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
 
     restart: unless-stopped
 

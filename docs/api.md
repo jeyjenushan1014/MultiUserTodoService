@@ -3085,3 +3085,84 @@ Example payload:
 ```
 
 The event never contains the reset token, new password or password hash.
+
+## Asynchronous Account Events
+
+The Account Service uses the transactional outbox pattern to publish account-domain events reliably.
+
+These events are not public REST endpoints. They are internal asynchronous messages published to RabbitMQ.
+
+### Exchange
+
+```text
+todo.events
+```
+
+Exchange type:
+
+```text
+topic
+```
+
+### Notification queue
+
+```text
+todo.notifications
+```
+
+### Dead-letter exchange
+
+```text
+todo.events.dlx
+```
+
+### Dead-letter queue
+
+```text
+todo.notifications.dlq
+```
+
+### Published event envelope
+
+```json
+{
+  "eventId": "5403d006-532f-4d5f-8200-9893fe84e00d",
+  "eventType": "account.password-reset-requested",
+  "eventVersion": 1,
+  "aggregateType": "account",
+  "aggregateId": "3bf53c86-0932-43d0-85ed-bd536c694677",
+  "occurredAt": "2026-09-22T10:00:00.000Z",
+  "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
+  "producer": "account-service",
+  "payload": {}
+}
+```
+
+### Account events
+
+| Event type | Purpose |
+|---|---|
+| `account.registered` | Indicates that an account was created. |
+| `account.email-changed` | Indicates that an account email address changed. |
+| `account.password-reset-requested` | Requests delivery of password-reset instructions. |
+| `account.password-reset-completed` | Indicates that a password reset completed successfully. |
+
+### Delivery guarantee
+
+The platform provides at-least-once event delivery.
+
+A message may be published more than once if the worker publishes the message successfully but fails before marking the outbox row as published.
+
+Consumers must use `eventId` as their idempotency key.
+
+### Failure behaviour
+
+When RabbitMQ is unavailable:
+
+1. The account transaction remains committed.
+2. The outbox event remains unpublished.
+3. The publisher records the failure.
+4. The publisher schedules a retry using exponential backoff.
+5. The public Account Service API remains available.
+
+RabbitMQ failure does not roll back an already committed account operation.

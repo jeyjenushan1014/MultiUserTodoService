@@ -18,6 +18,67 @@ const environmentSchema =
       .min(1)
       .max(65_535)
       .default(3001),
+
+    RABBITMQ_URL:
+  z
+    .string()
+    .min(1),
+
+RABBITMQ_EXCHANGE:
+  z
+    .string()
+    .min(1)
+    .default("todo.events"),
+
+RABBITMQ_NOTIFICATION_QUEUE:
+  z
+    .string()
+    .min(1)
+    .default("todo.notifications"),
+
+RABBITMQ_DEAD_LETTER_EXCHANGE:
+  z
+    .string()
+    .min(1)
+    .default("todo.events.dlx"),
+
+RABBITMQ_NOTIFICATION_DLQ:
+  z
+    .string()
+    .min(1)
+    .default("todo.notifications.dlq"),
+
+OUTBOX_BATCH_SIZE:
+  z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(20),
+
+OUTBOX_POLL_INTERVAL_MS:
+  z.coerce
+    .number()
+    .int()
+    .min(100)
+    .max(60_000)
+    .default(1000),
+
+OUTBOX_LOCK_TIMEOUT_SECONDS:
+  z.coerce
+    .number()
+    .int()
+    .min(10)
+    .max(3600)
+    .default(60),
+
+OUTBOX_MAX_RETRY_DELAY_SECONDS:
+  z.coerce
+    .number()
+    .int()
+    .min(10)
+    .max(86_400)
+    .default(300),
     
     PASSWORD_RESET_TOKEN_TTL_MINUTES: z.coerce
         .number()

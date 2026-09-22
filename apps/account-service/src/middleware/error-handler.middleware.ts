@@ -180,18 +180,20 @@ export const errorHandlerMiddleware:
      * - internal authentication failure
      */
     if (error instanceof AppError) {
+      const appError = error as AppError;
+
       const details =
         getErrorDetails(
-          error.details,
+          appError.details,
         );
 
       logger.warn(
         {
           errorCode:
-            error.code,
+            appError.code,
 
           statusCode:
-            error.statusCode,
+            appError.statusCode,
 
           requestId,
 
@@ -201,19 +203,19 @@ export const errorHandlerMiddleware:
           path:
             request.originalUrl,
         },
-        error.message,
+        appError.message,
       );
 
       const responseBody =
         createErrorResponse(
-          error.code,
-          error.message,
+          appError.code,
+          appError.message,
           requestId,
           details,
         );
 
       response
-        .status(error.statusCode)
+        .status(appError.statusCode)
         .json(responseBody);
 
       return;

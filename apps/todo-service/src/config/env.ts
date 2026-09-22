@@ -39,6 +39,86 @@ const environmentSchema =
           "REDIS_URL is required",
         ),
 
+    RABBITMQ_URL:
+      z
+        .string()
+        .min(
+          1,
+          "RABBITMQ_URL is required",
+        ),
+
+    RABBITMQ_EXCHANGE:
+      z
+        .string()
+        .min(1)
+        .default(
+          "todo.events",
+        ),
+
+    RABBITMQ_RETRY_EXCHANGE:
+      z
+        .string()
+        .min(1)
+        .default(
+          "todo.events.retry",
+        ),
+
+    RABBITMQ_DEAD_LETTER_EXCHANGE:
+      z
+        .string()
+        .min(1)
+        .default(
+          "todo.events.dlx",
+        ),
+
+    TODO_OWNER_QUEUE:
+      z
+        .string()
+        .min(1)
+        .default(
+          "todo.owner-projection",
+        ),
+
+    TODO_OWNER_RETRY_QUEUE:
+      z
+        .string()
+        .min(1)
+        .default(
+          "todo.owner-projection.retry",
+        ),
+
+    TODO_OWNER_DEAD_LETTER_QUEUE:
+      z
+        .string()
+        .min(1)
+        .default(
+          "todo.owner-projection.dlq",
+        ),
+
+    TODO_OWNER_CONSUMER_PREFETCH:
+      z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .default(10),
+
+    TODO_OWNER_RETRY_DELAY_MS:
+      z.coerce
+        .number()
+        .int()
+        .min(1000)
+        .max(300_000)
+        .default(5000),
+
+    TODO_OWNER_MAX_RETRIES:
+      z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(20)
+        .default(5),
+
     INTERNAL_SERVICE_SECRET:
       z
         .string()

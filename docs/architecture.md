@@ -3437,3 +3437,114 @@ On `SIGTERM` or `SIGINT`, the TODO Service:
 5. records the shutdown result.
 
 A shutdown timeout prevents the process from waiting indefinitely.
+
+## TODO owner projection
+
+The Account Service and TODO Service own separate PostgreSQL databases.
+
+The TODO Service does not query the Account Service database. Instead, it builds a minimal local owner projection from account-domain events.
+
+### Event source
+
+Successful account registration creates:
+
+```text
+account.registered
+```
+
+The Account Service transactional outbox publisher sends the event to the durable RabbitMQ topic exchange:
+
+```text
+todo.events
+```
+
+### Consumer queue
+
+The TODO owner projection consumer uses:
+
+```text
+todo.owner-projection
+```
+
+The queue is durable and binds to:
+
+```text
+account.registered
+```
+
+### Runtime validation
+
+RabbitMQ messages are untrusted input.
+
+The consumer validates:
+
+- event ID;
+- event type;
+- event version;
+- aggregate type;
+- aggregate ID;
+- occurred timestamp;
+- request ID;
+- producer;
+- payload user ID;
+- agreement between aggregate ID and payload user ID.
+
+Invalid messages do not reach PostgreSQL.
+
+### Idempotent processing
+
+RabbitMQ provides at-least-once delivery, so the same event may be received repeatedly.
+
+The `processed_events` table uses `event_id` as its primary key.
+
+Within one PostgreSQL transaction, the consumer:
+
+1. inserts the event ID into `processed_events`;
+2. inserts or updates the corresponding `todo_owners` row;
+3. commits both operations.
+
+If the event ID already exists, the event is treated as a duplicate and acknowledged without changing the owner projection.
+
+If owner insertion fails, the processed-event insertion is rolled back so the event can be retried.
+
+### Retry topology
+
+Transient processing failures are published to:
+
+```text
+todo.events.retry
+```
+
+The retry queue is:
+
+```text
+todo.owner-projection.retry
+```
+
+After its message TTL expires, RabbitMQ sends the message back to `todo.events` using the `account.registered` routing key.
+
+The retry count is carried in a message header.
+
+### Dead-letter behaviour
+
+Invalid events and events that exceed the maximum retry count are published to:
+
+```text
+todo.events.dlx
+```
+
+and stored in:
+
+```text
+todo.owner-projection.dlq
+```
+
+Dead-letter messages are retained for investigation and controlled replay.
+
+### Existing-account bootstrap
+
+RabbitMQ does not replay messages that were published before a queue was bound.
+
+When introducing the TODO Service to an existing production system, existing accounts require an explicit owner-projection backfill or replay procedure.
+
+New deployments should establish the owner-projection queue before accepting account registrations.

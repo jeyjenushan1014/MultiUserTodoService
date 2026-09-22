@@ -91,3 +91,33 @@ process.env.DATABASE_IDLE_TIMEOUT_MS ??=
 
 process.env.SHUTDOWN_TIMEOUT_MS ??=
   "10000";
+
+process.env.RABBITMQ_URL ??=
+  "amqp://todo_user:todo_password@localhost:5672";
+
+process.env.RABBITMQ_EXCHANGE ??=
+  "todo.events";
+
+process.env.RABBITMQ_RETRY_EXCHANGE ??=
+  "todo.events.retry";
+
+process.env.RABBITMQ_DEAD_LETTER_EXCHANGE ??=
+  "todo.events.dlx";
+
+process.env.TODO_OWNER_QUEUE ??=
+  "todo.owner-projection";
+
+process.env.TODO_OWNER_RETRY_QUEUE ??=
+  "todo.owner-projection.retry";
+
+process.env.TODO_OWNER_DEAD_LETTER_QUEUE ??=
+  "todo.owner-projection.dlq";
+
+process.env.TODO_OWNER_CONSUMER_PREFETCH ??=
+  "10";
+
+process.env.TODO_OWNER_RETRY_DELAY_MS ??=
+  "5000";
+
+process.env.TODO_OWNER_MAX_RETRIES ??=
+  "5";

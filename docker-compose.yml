@@ -313,6 +313,50 @@ services:
     restart: unless-stopped
 
 
+  todo-owner-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+
+    command:
+      - npm
+      - run
+      - start:owner-consumer
+      - -w
+      - "@todo/todo-service"
+
+    environment:
+      NODE_ENV: production
+      TODO_DATABASE_URL: >-
+        postgres://${TODO_POSTGRES_USER}:${TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${TODO_POSTGRES_DB}
+      REDIS_URL: >-
+        redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      RABBITMQ_URL: >-
+        amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_RETRY_EXCHANGE: ${RABBITMQ_RETRY_EXCHANGE:-todo.events.retry}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      TODO_OWNER_QUEUE: ${TODO_OWNER_QUEUE:-todo.owner-projection}
+      TODO_OWNER_RETRY_QUEUE: ${TODO_OWNER_RETRY_QUEUE:-todo.owner-projection.retry}
+      TODO_OWNER_DEAD_LETTER_QUEUE: ${TODO_OWNER_DEAD_LETTER_QUEUE:-todo.owner-projection.dlq}
+      TODO_OWNER_CONSUMER_PREFETCH: ${TODO_OWNER_CONSUMER_PREFETCH:-10}
+      TODO_OWNER_RETRY_DELAY_MS: ${TODO_OWNER_RETRY_DELAY_MS:-5000}
+      TODO_OWNER_MAX_RETRIES: ${TODO_OWNER_MAX_RETRIES:-5}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+      todo-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
   gateway:
     build:
       context: .

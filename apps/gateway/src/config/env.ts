@@ -20,6 +20,11 @@ const environmentSchema = z.object({
   ACCOUNT_SERVICE_URL: z
     .url(),
 
+  TODO_SERVICE_URL:
+  z.url(
+    "TODO_SERVICE_URL must be a valid URL",
+  ),
+
   DOWNSTREAM_TIMEOUT_MS: z.coerce
     .number()
     .int()

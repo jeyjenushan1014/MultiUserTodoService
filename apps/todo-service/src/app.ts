@@ -26,6 +26,11 @@ import {
   healthRouter,
 } from "./modules/health/health.routes.js";
 
+import {
+  todoRouter,
+} from "./modules/todo/todo.routes.js";
+
+
 export const app =
   express();
 
@@ -56,6 +61,12 @@ app.use(
   "/health",
   healthRouter,
 );
+
+app.use(
+  "/internal/v1/todos",
+  todoRouter,
+);
+
 
 app.use(
   notFoundMiddleware,

@@ -121,3 +121,9 @@ process.env.TODO_OWNER_RETRY_DELAY_MS ??=
 
 process.env.TODO_OWNER_MAX_RETRIES ??=
   "5";
+
+process.env.TODO_SERVICE_URL ??=
+  "http://localhost:3002";
+
+process.env.INTERNAL_IDENTITY_MAX_AGE_SECONDS ??=
+  "30";

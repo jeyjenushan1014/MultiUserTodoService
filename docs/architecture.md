@@ -3548,3 +3548,127 @@ RabbitMQ does not replay messages that were published before a queue was bound.
 When introducing the TODO Service to an existing production system, existing accounts require an explicit owner-projection backfill or replay procedure.
 
 New deployments should establish the owner-projection queue before accepting account registrations.
+
+## Create a TODO
+
+Creates a TODO item owned by the authenticated account.
+
+### Endpoint
+
+```http
+POST /api/v1/todos
+```
+
+### Authentication
+
+A valid access token is required.
+
+```http
+Authorization: Bearer <access-token>
+```
+
+The authenticated account becomes the TODO owner. The client cannot supply or override `ownerId`.
+
+### Request headers
+
+| Header | Required | Meaning |
+|---|---:|---|
+| `Authorization` | Yes | Bearer access token. |
+| `Content-Type` | Yes | Must be `application/json`. |
+| `X-Request-ID` | No | Optional UUID used for request tracing. |
+
+### Request body
+
+```json
+{
+  "title": "Complete backend task",
+  "description": "Implement the TODO creation endpoint",
+  "state": "pending",
+  "dueDate": "2026-09-25T12:00:00.000Z"
+}
+```
+
+### Request fields
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `title` | string | Yes | TODO title. Leading and trailing spaces are removed. Maximum 200 characters. |
+| `description` | string or null | No | Optional description. Maximum 5000 characters. Blank descriptions become `null`. |
+| `state` | string | No | TODO state. Defaults to `pending`. |
+| `dueDate` | ISO 8601 string or null | No | Optional due date. Defaults to `null`. |
+
+### Allowed state values
+
+| State | Meaning |
+|---|---|
+| `pending` | Work has not started. |
+| `in_progress` | Work is currently in progress. |
+| `completed` | Work has completed. |
+| `cancelled` | Work was intentionally cancelled. |
+
+### Successful response
+
+```http
+201 Created
+```
+
+```json
+{
+  "id": "18437c16-e15d-46fb-91d8-b369a73739ce",
+  "ownerId": "3bf53c86-0932-43d0-85ed-bd536c694677",
+  "title": "Complete backend task",
+  "description": "Implement the TODO creation endpoint",
+  "state": "pending",
+  "dueDate": "2026-09-25T12:00:00.000Z",
+  "createdAt": "2026-09-22T12:00:00.000Z",
+  "updatedAt": "2026-09-22T12:00:00.000Z"
+}
+```
+
+### Response fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | UUID string | TODO identifier. |
+| `ownerId` | UUID string | Authenticated owner identifier. |
+| `title` | string | TODO title. |
+| `description` | string or null | TODO description. |
+| `state` | string | Current TODO state. |
+| `dueDate` | ISO 8601 string or null | Optional due date. |
+| `createdAt` | ISO 8601 string | Creation timestamp. |
+| `updatedAt` | ISO 8601 string | Last-update timestamp. |
+
+### Status codes
+
+| Status | Code | Cause |
+|---:|---|---|
+| `201` | — | TODO created successfully. |
+| `400` | `VALIDATION_ERROR` | Request body is invalid. |
+| `400` | `INVALID_JSON` | Request body contains malformed JSON. |
+| `401` | Authentication error | Access token is missing, invalid or expired. |
+| `409` | `TODO_TITLE_ALREADY_EXISTS` | The owner already has an active TODO with the same normalized title. |
+| `413` | `PAYLOAD_TOO_LARGE` | Request body exceeds the configured limit. |
+| `503` | `OWNER_PROJECTION_NOT_READY` | The account has not yet been synchronized into the TODO Service. |
+| `503` | `SERVICE_UNAVAILABLE` | The TODO Service is unavailable. |
+| `504` | `DOWNSTREAM_TIMEOUT` | The TODO Service did not respond before the Gateway timeout. |
+| `500` | `INTERNAL_SERVER_ERROR` | An unexpected internal error occurred. |
+
+### Duplicate-title response
+
+```http
+409 Conflict
+```
+
+```json
+{
+  "error": {
+    "code": "TODO_TITLE_ALREADY_EXISTS",
+    "message": "An active TODO with this title already exists",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0"
+  }
+}
+```
+
+Title uniqueness is case-insensitive and ignores leading and trailing spaces for the same owner.
+
+Two different owners may use the same title.

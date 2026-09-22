@@ -370,6 +370,7 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
       ACCOUNT_SERVICE_URL: http://account-service:3001
+      TODO_SERVICE_URL: http://todo-service:3002
       DOWNSTREAM_TIMEOUT_MS: ${DOWNSTREAM_TIMEOUT_MS:-5000}
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -393,7 +394,8 @@ services:
     depends_on:
       account-service:
         condition: service_healthy
-        
+      todo-service:
+        condition: service_healthy
 
     restart: unless-stopped
 

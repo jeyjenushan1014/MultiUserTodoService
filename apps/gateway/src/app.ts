@@ -23,6 +23,10 @@ import {
 } from "./modules/user/profile/profile.routes.js";
 
 import {
+  todoRouter
+} from "./modules/todo/todo.routes.js"
+
+import {
   requestLoggerMiddleware,
 } from "./middleware/request-logger.middleware.js";
 
@@ -114,6 +118,11 @@ app.use(
 app.use(
   "/api/v1/auth/password-reset",
   passwordResetRouter,
+);
+
+app.use(
+  "/api/v1/todos",
+  todoRouter,
 );
 
 app.use(

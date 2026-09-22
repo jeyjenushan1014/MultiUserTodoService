@@ -62,6 +62,15 @@ const environmentSchema =
         .default(
           "todo.events.retry",
         ),
+      
+    INTERNAL_IDENTITY_MAX_AGE_SECONDS:
+  z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(300)
+    .default(30),
+    
 
     RABBITMQ_DEAD_LETTER_EXCHANGE:
       z

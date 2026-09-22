@@ -3070,3 +3070,190 @@ When RabbitMQ is unavailable:
 - no committed account data is rolled back.
 
 This separates synchronous account availability from asynchronous notification availability.
+
+## TODO Service architecture
+
+The TODO Service owns TODO-domain behaviour and TODO persistence.
+
+The service provides owner-scoped creation, listing, retrieval, partial update and deletion of TODO items.
+
+### Service ownership
+
+The Account Service owns:
+
+- accounts;
+- credentials;
+- sessions;
+- refresh tokens;
+- account events.
+
+The TODO Service owns:
+
+- TODO owners projected from account events;
+- TODO items;
+- TODO validation;
+- TODO ownership rules;
+- TODO persistence;
+- TODO caching;
+- TODO-domain health checks.
+
+The TODO Service must not access the Account Service database directly.
+
+### Public TODO API
+
+The API Gateway will expose the following public endpoints:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/v1/todos` | Create a TODO item. |
+| `GET` | `/api/v1/todos` | List the authenticated user's TODO items. |
+| `GET` | `/api/v1/todos/:todoId` | Retrieve one owned TODO item. |
+| `PATCH` | `/api/v1/todos/:todoId` | Partially update one owned TODO item. |
+| `DELETE` | `/api/v1/todos/:todoId` | Soft-delete one owned TODO item. |
+
+The API Gateway verifies the access token and passes signed internal identity information to the TODO Service.
+
+The TODO Service verifies the internal service credential and signed caller identity before processing an internal request.
+
+### TODO states
+
+The fixed TODO state set is:
+
+| State | Meaning |
+|---|---|
+| `pending` | Work has not started. |
+| `in_progress` | Work has started but is not complete. |
+| `completed` | Work has finished. |
+| `cancelled` | Work was intentionally cancelled. |
+
+Values outside this set are rejected before database access.
+
+### Naming conventions
+
+Public API fields use camelCase:
+
+```text
+ownerId
+dueDate
+createdAt
+updatedAt
+pageSize
+totalItems
+totalPages
+sortBy
+sortOrder
+```
+
+PostgreSQL columns use snake_case:
+
+```text
+owner_id
+due_date
+created_at
+updated_at
+deleted_at
+```
+
+The repository mapper converts persistence rows into API-domain objects.
+
+Database row representations are not exposed through public contracts.
+
+### Pagination
+
+The list endpoint uses page-based pagination.
+
+Defaults:
+
+```text
+page = 1
+pageSize = 20
+```
+
+Maximum page size:
+
+```text
+pageSize = 100
+```
+
+The response includes:
+
+- current page;
+- page size;
+- total number of items;
+- total number of pages.
+
+### Filtering
+
+The list endpoint can be filtered using one TODO state.
+
+Example:
+
+```http
+GET /api/v1/todos?state=pending
+```
+
+### Sorting
+
+The list endpoint supports:
+
+```text
+createdAt
+dueDate
+```
+
+The supported directions are:
+
+```text
+asc
+desc
+```
+
+Sorting values are allow-listed. Caller-supplied values are never inserted directly into SQL.
+
+### Ownership boundary
+
+Every TODO operation is scoped using the authenticated owner ID.
+
+A repository query for one TODO will use both:
+
+```text
+todo ID
+owner ID
+```
+
+A missing TODO and another user's TODO produce the same not-found response. This prevents ownership information from being disclosed.
+
+### Delete strategy
+
+TODO deletion uses soft deletion.
+
+A deleted TODO contains a `deleted_at` timestamp and is excluded from normal reads.
+
+Soft deletion allows the system to retain audit information while allowing a previously deleted title to be reused.
+
+### Layering
+
+TODO HTTP handling, business rules, persistence and caching are separated.
+
+```text
+Route
+  -> Validation
+  -> Controller
+  -> Service
+  -> Repository
+  -> PostgreSQL
+```
+
+Redis is accessed through a cache abstraction rather than directly from controllers or repositories.
+
+### Contract organization
+
+TODO contracts are stored in:
+
+```text
+packages/contracts/src/todo
+```
+
+Each concept has a focused file. The TODO `index.ts` file only exports the module's public contract.
+
+The contracts package contains no Express, PostgreSQL or Redis implementation.

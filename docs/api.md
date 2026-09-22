@@ -2895,3 +2895,193 @@ POST /api/v1/auth/password-reset/confirm
 ```
 
 The confirmation endpoint validates the token, replaces the password, marks the token as used and revokes existing user sessions.
+
+## Confirm Password Reset
+
+Confirms a password-reset request and replaces the account password.
+
+### Public endpoint
+
+```http
+POST /api/v1/auth/password-reset/confirm
+```
+
+### Internal endpoint
+
+```http
+POST /internal/v1/auth/password-reset/confirm
+```
+
+The internal endpoint is called by the API Gateway and must not be exposed publicly.
+
+### Authentication
+
+Authentication is not required.
+
+The password-reset token acts as a short-lived, single-use credential.
+
+### Request headers
+
+| Header | Required | Description |
+|---|---:|---|
+| `Content-Type` | Yes | Must be `application/json`. |
+| `X-Request-ID` | No | Optional UUID used for distributed request tracing. |
+
+### Request body
+
+```json
+{
+  "token": "secure-password-reset-token",
+  "newPassword": "StrongPassword123!"
+}
+```
+
+### Request fields
+
+| Field | Type | Required | Validation |
+|---|---|---:|---|
+| `token` | string | Yes | Must contain between 32 and 512 characters. |
+| `newPassword` | string | Yes | Must contain between 12 and 128 characters, including uppercase, lowercase, number and special character. |
+
+Additional request properties are rejected.
+
+### Successful response
+
+Status:
+
+```http
+204 No Content
+```
+
+The successful response does not contain a response body.
+
+After a successful password reset:
+
+- the password is replaced with the new password hash;
+- the reset token is marked as used;
+- all remaining reset tokens for the user are invalidated;
+- all existing sessions belonging to the user are revoked;
+- an `account.password-reset-completed` event is created;
+- the user must sign in again using the new password.
+
+### Invalid, expired or previously used token
+
+Status:
+
+```http
+400 Bad Request
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "INVALID_PASSWORD_RESET_TOKEN",
+    "message": "The password reset token is invalid or has expired",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0"
+  }
+}
+```
+
+The same response is returned for:
+
+- an unknown token;
+- an expired token;
+- an already-used token;
+- a token invalidated by a newer password-reset request.
+
+This prevents the API from revealing the internal state of a reset token.
+
+### Weak password
+
+Status:
+
+```http
+400 Bad Request
+```
+
+Example response:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
+    "details": [
+      {
+        "field": "newPassword",
+        "message": "Password must contain at least 12 characters"
+      }
+    ]
+  }
+}
+```
+
+### Malformed JSON
+
+Status:
+
+```http
+400 Bad Request
+```
+
+Response:
+
+```json
+{
+  "error": {
+    "code": "INVALID_JSON",
+    "message": "Request body contains invalid JSON",
+    "requestId": "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0"
+  }
+}
+```
+
+### Account Service unavailable
+
+Status:
+
+```http
+503 Service Unavailable
+```
+
+### Account Service timeout
+
+Status:
+
+```http
+504 Gateway Timeout
+```
+
+### Transaction behaviour
+
+Password replacement, reset-token consumption, session revocation and outbox-event creation are performed in one PostgreSQL transaction.
+
+If any operation fails, the entire transaction is rolled back.
+
+### Concurrent request behaviour
+
+The Account Service locks the reset-token row using PostgreSQL `FOR UPDATE`.
+
+If two requests attempt to consume the same reset token concurrently, only one request succeeds. The other request receives `INVALID_PASSWORD_RESET_TOKEN`.
+
+### Outbox event
+
+A successful reset creates:
+
+```text
+account.password-reset-completed
+```
+
+Example payload:
+
+```json
+{
+  "userId": "11da4df1-b840-4f1b-a6e0-e191b65c46df",
+  "completedAt": "2026-09-22T10:45:00.000Z"
+}
+```
+
+The event never contains the reset token, new password or password hash.

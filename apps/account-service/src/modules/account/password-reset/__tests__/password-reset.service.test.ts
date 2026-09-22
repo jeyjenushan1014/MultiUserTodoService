@@ -7,6 +7,10 @@ import {
 } from "vitest";
 
 import type {
+  PasswordHasher,
+} from "../../../../security/password-hasher.js";
+
+import type {
   PasswordResetRepository,
 } from "../password-reset.repository.interface.js";
 
@@ -14,27 +18,72 @@ import {
   PasswordResetService,
 } from "../password-reset.service.js";
 
-interface TestDependencies {
+interface Dependencies {
   readonly findActiveUserByEmailMock:
-    ReturnType<typeof vi.fn>;
+    ReturnType<
+      typeof vi.fn<
+        PasswordResetRepository[
+          "findActiveUserByEmail"
+        ]
+      >
+    >;
 
   readonly createPasswordResetMock:
-    ReturnType<typeof vi.fn>;
+    ReturnType<
+      typeof vi.fn<
+        PasswordResetRepository[
+          "createPasswordReset"
+        ]
+      >
+    >;
 
-  readonly repository:
-    PasswordResetRepository;
+  readonly completePasswordResetMock:
+    ReturnType<
+      typeof vi.fn<
+        PasswordResetRepository[
+          "completePasswordReset"
+        ]
+      >
+    >;
+
+  readonly hashPasswordMock:
+    ReturnType<
+      typeof vi.fn<
+        PasswordHasher["hash"]
+      >
+    >;
 
   readonly service:
     PasswordResetService;
 }
 
 function createDependencies():
-TestDependencies {
+Dependencies {
   const findActiveUserByEmailMock =
-    vi.fn();
+    vi.fn<
+      PasswordResetRepository[
+        "findActiveUserByEmail"
+      ]
+    >();
 
   const createPasswordResetMock =
-    vi.fn();
+    vi.fn<
+      PasswordResetRepository[
+        "createPasswordReset"
+      ]
+    >();
+
+  const completePasswordResetMock =
+    vi.fn<
+      PasswordResetRepository[
+        "completePasswordReset"
+      ]
+    >();
+
+  const hashPasswordMock =
+    vi.fn<
+      PasswordHasher["hash"]
+    >();
 
   const repository:
     PasswordResetRepository = {
@@ -43,15 +92,27 @@ TestDependencies {
 
       createPasswordReset:
         createPasswordResetMock,
+
+      completePasswordReset:
+        completePasswordResetMock,
+    };
+
+  const passwordHasher:
+    PasswordHasher = {
+      hash:
+        hashPasswordMock,
     };
 
   return {
     findActiveUserByEmailMock,
     createPasswordResetMock,
-    repository,
+    completePasswordResetMock,
+    hashPasswordMock,
+
     service:
       new PasswordResetService(
         repository,
+        passwordHasher,
       ),
   };
 }
@@ -64,170 +125,163 @@ describe(
     });
 
     it(
-      "creates a reset request for an existing user",
+      "completes a password reset",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .findActiveUserByEmailMock
-          .mockResolvedValue({
-            id:
-              "11da4df1-b840-4f1b-a6e0-e191b65c46df",
-            email:
-              "user@example.com",
-          });
+          .hashPasswordMock
+          .mockResolvedValue(
+            "new-password-hash",
+          );
 
         dependencies
-          .createPasswordResetMock
-          .mockResolvedValue(undefined);
+          .completePasswordResetMock
+          .mockResolvedValue({
+            completed: true,
+          });
 
-        const result =
-          await dependencies
-            .service
-            .requestReset({
-              email:
-                " USER@EXAMPLE.COM ",
-              requestId:
-                "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
-            });
-
-        expect(result).toEqual({
-          message:
-            "If an account exists for this email, password reset instructions will be sent",
-        });
+        await dependencies
+          .service
+          .confirmReset({
+            token:
+              "a-secure-password-reset-token-containing-more-than-32-characters",
+            newPassword:
+              "StrongPassword123!",
+            requestId:
+              "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
+          });
 
         expect(
           dependencies
-            .findActiveUserByEmailMock,
+            .hashPasswordMock,
         ).toHaveBeenCalledWith(
-          "user@example.com",
+          "StrongPassword123!",
         );
 
         expect(
           dependencies
-            .createPasswordResetMock,
+            .completePasswordResetMock,
         ).toHaveBeenCalledTimes(1);
 
         const firstCall =
           dependencies
-            .createPasswordResetMock
+            .completePasswordResetMock
             .mock.calls[0];
 
         expect(firstCall).toBeDefined();
 
         const resetData =
-          firstCall?.[0] as
-            | {
-                tokenHash: string;
-                resetToken: string;
-                userId: string;
-                requestId: string;
-              }
-            | undefined;
-
-        expect(resetData).toBeDefined();
-        expect(
-          resetData?.tokenHash,
-        ).toMatch(/^[a-f0-9]{64}$/);
+          firstCall?.[0];
 
         expect(
-          resetData?.resetToken,
-        ).not.toBe(
           resetData?.tokenHash,
+        ).toMatch(
+          /^[a-f0-9]{64}$/,
         );
 
         expect(
-          resetData?.userId,
+          resetData?.newPasswordHash,
         ).toBe(
-          "11da4df1-b840-4f1b-a6e0-e191b65c46df",
+          "new-password-hash",
+        );
+
+        expect(
+          resetData?.requestId,
+        ).toBe(
+          "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
         );
       },
     );
 
     it(
-      "returns the generic response when the user does not exist",
+      "rejects an invalid or expired token",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .findActiveUserByEmailMock
-          .mockResolvedValue(undefined);
+          .hashPasswordMock
+          .mockResolvedValue(
+            "new-password-hash",
+          );
 
-        const result =
-          await dependencies
+        dependencies
+          .completePasswordResetMock
+          .mockResolvedValue({
+            completed: false,
+          });
+
+        await expect(
+          dependencies
             .service
-            .requestReset({
-              email:
-                "missing@example.com",
+            .confirmReset({
+              token:
+                "an-invalid-reset-token-containing-more-than-32-characters",
+              newPassword:
+                "StrongPassword123!",
               requestId:
                 "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
-            });
-
-        expect(result).toEqual({
-          message:
-            "If an account exists for this email, password reset instructions will be sent",
+            }),
+        ).rejects.toMatchObject({
+          statusCode: 400,
+          code:
+            "INVALID_PASSWORD_RESET_TOKEN",
         });
-
-        expect(
-          dependencies
-            .createPasswordResetMock,
-        ).not.toHaveBeenCalled();
       },
     );
 
     it(
-      "does not hide database failures",
+      "propagates password hashing failures",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .findActiveUserByEmailMock
+          .hashPasswordMock
           .mockRejectedValue(
             new Error(
-              "database unavailable",
+              "password hashing failed",
             ),
           );
 
         await expect(
           dependencies
             .service
-            .requestReset({
-              email:
-                "user@example.com",
+            .confirmReset({
+              token:
+                "a-secure-password-reset-token-containing-more-than-32-characters",
+              newPassword:
+                "StrongPassword123!",
               requestId:
                 "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
             }),
         ).rejects.toThrow(
-          "database unavailable",
+          "password hashing failed",
         );
 
         expect(
           dependencies
-            .createPasswordResetMock,
+            .completePasswordResetMock,
         ).not.toHaveBeenCalled();
       },
     );
 
     it(
-      "does not report success when transactional persistence fails",
+      "propagates transactional database failures",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .findActiveUserByEmailMock
-          .mockResolvedValue({
-            id:
-              "11da4df1-b840-4f1b-a6e0-e191b65c46df",
-            email:
-              "user@example.com",
-          });
+          .hashPasswordMock
+          .mockResolvedValue(
+            "new-password-hash",
+          );
 
         dependencies
-          .createPasswordResetMock
+          .completePasswordResetMock
           .mockRejectedValue(
             new Error(
               "transaction failed",
@@ -237,9 +291,11 @@ describe(
         await expect(
           dependencies
             .service
-            .requestReset({
-              email:
-                "user@example.com",
+            .confirmReset({
+              token:
+                "a-secure-password-reset-token-containing-more-than-32-characters",
+              newPassword:
+                "StrongPassword123!",
               requestId:
                 "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
             }),

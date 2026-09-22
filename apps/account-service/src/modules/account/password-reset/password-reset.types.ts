@@ -14,3 +14,15 @@ export interface CreatePasswordResetData {
   readonly requestId: string;
   readonly eventId: string;
 }
+
+export interface CompletePasswordResetData {
+  readonly tokenHash: string;
+  readonly newPasswordHash: string;
+  readonly occurredAt: Date;
+  readonly requestId: string;
+  readonly eventId: string;
+}
+
+export interface CompletePasswordResetResult {
+  readonly completed: boolean;
+}

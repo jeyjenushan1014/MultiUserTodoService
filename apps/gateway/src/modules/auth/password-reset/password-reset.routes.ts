@@ -7,10 +7,12 @@ import {
 } from "../../../middleware/validate-body.middleware.js";
 
 import {
+  confirmPasswordResetController,
   passwordResetRequestController,
 } from "./password-reset.controller.js";
 
 import {
+  confirmPasswordResetSchema,
   passwordResetRequestSchema,
 } from "./password-reset.validation.js";
 
@@ -23,4 +25,12 @@ passwordResetRouter.post(
     passwordResetRequestSchema,
   ),
   passwordResetRequestController,
+);
+
+passwordResetRouter.post(
+  "/confirm",
+  validateBody(
+    confirmPasswordResetSchema,
+  ),
+  confirmPasswordResetController,
 );

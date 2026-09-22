@@ -2967,3 +2967,51 @@ Password-reset tokens are:
 - invalidated when a newer token is requested;
 - never returned by the public API;
 - never written to application logs.
+
+
+## Password-reset confirmation flow
+
+The password-reset confirmation endpoint accepts a short-lived reset token and a new password.
+
+The API Gateway validates the request structure and forwards it to the Account Service through the internal service endpoint.
+
+The Account Service hashes the received reset token using SHA-256. The raw token is never used directly in a database query.
+
+The service hashes the new password before opening the PostgreSQL transaction. Password hashing is intentionally computationally expensive, so performing it before the transaction avoids holding database locks while bcrypt is running.
+
+Within one PostgreSQL transaction, the Account Service:
+
+1. Locates a matching unused and unexpired reset token.
+2. Locks the token row using `FOR UPDATE`.
+3. Replaces the user's password hash.
+4. Marks all reset tokens belonging to the user as used.
+5. Revokes every active session belonging to the user.
+6. Creates an `account.password-reset-completed` outbox event.
+7. Commits the transaction.
+
+If any operation fails, the entire transaction is rolled back. The password, reset-token state, session state and outbox event therefore cannot become partially updated.
+
+### Replay prevention
+
+Password-reset tokens are single use.
+
+The token row is locked while the reset transaction executes. Concurrent requests using the same token cannot both succeed. After the first request commits, the token has a `used_at` value and is no longer considered valid.
+
+### Session security
+
+All existing sessions are revoked after a password reset.
+
+This protects the account if an attacker previously obtained a refresh token or authenticated session. The legitimate user must sign in again using the new password.
+
+Refresh-token validation must always verify that the parent session remains active, unexpired and not revoked.
+
+### Sensitive-data handling
+
+The following values must never appear in logs, API error responses, monitoring labels or completed-event payloads:
+
+- raw password-reset token;
+- reset-token hash;
+- new password;
+- password hash.
+
+The `account.password-reset-completed` event contains only the account identifier and completion timestamp.

@@ -14,6 +14,10 @@ import type {
 } from "@todo/contracts";
 
 import type {
+  ConfirmPasswordResetRequest,
+} from "@todo/contracts";
+
+import type {
   PasswordResetRequest,
   PasswordResetRequestedResponse,
 } from "@todo/contracts";
@@ -422,3 +426,17 @@ export async function requestPasswordReset(
 
   return result;
 }
+
+export async function confirmPasswordReset(
+  request: ConfirmPasswordResetRequest,
+  requestId: string,
+): Promise<void> {
+  await sendAccountRequest<never>({
+    method: "POST",
+    path:
+      "/internal/v1/auth/password-reset/confirm",
+    requestId,
+    body: request,
+  });
+}
+

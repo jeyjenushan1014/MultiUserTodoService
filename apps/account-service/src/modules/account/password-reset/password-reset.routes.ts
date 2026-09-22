@@ -11,6 +11,14 @@ import {
 } from "../../../middleware/validate-body.middleware.js";
 
 import {
+  BcryptPasswordService,
+} from "../../../security/password-hasher.js";
+
+import {
+  PasswordResetController,
+} from "./password-reset.controller.js";
+
+import {
   PostgresPasswordResetRepository,
 } from "./password-reset.repository.js";
 
@@ -19,19 +27,20 @@ import {
 } from "./password-reset.service.js";
 
 import {
-  PasswordResetController,
-} from "./password-reset.controller.js";
-
-import {
+  confirmPasswordResetSchema,
   passwordResetRequestSchema,
 } from "./password-reset.validation.js";
 
 const repository =
   new PostgresPasswordResetRepository();
 
+const passwordHasher =
+  new BcryptPasswordService();
+
 const service =
   new PasswordResetService(
     repository,
+    passwordHasher,
   );
 
 const controller =
@@ -49,4 +58,13 @@ passwordResetRouter.post(
     passwordResetRequestSchema,
   ),
   controller.requestReset,
+);
+
+passwordResetRouter.post(
+  "/confirm",
+  requireInternalService,
+  validateBody(
+    confirmPasswordResetSchema,
+  ),
+  controller.confirmReset,
 );

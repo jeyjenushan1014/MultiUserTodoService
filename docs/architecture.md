@@ -3352,3 +3352,88 @@ The TODO schema is managed only by repository migration files.
 Once committed, a migration is immutable. Schema corrections must be introduced through a new migration.
 
 Applying all TODO migrations to an empty PostgreSQL database produces the complete TODO schema.
+
+## TODO Service runtime foundation
+
+The TODO Service is an internal Node.js and TypeScript service listening on port `3002` inside the Docker network.
+
+Public clients do not access it directly. TODO API requests are routed through the API Gateway.
+
+### Required and optional dependencies
+
+PostgreSQL is required because it is the source of truth for TODO data.
+
+Redis is optional because it is a performance optimization.
+
+If PostgreSQL is unavailable during startup, the service fails startup and logs the cause.
+
+If Redis is unavailable, the service starts in degraded mode and uses PostgreSQL without caching.
+
+### Health model
+
+The service exposes separate health routes:
+
+```text
+GET /health/live
+GET /health/ready
+```
+
+Liveness confirms that the process is running.
+
+Readiness checks PostgreSQL and Redis separately.
+
+| PostgreSQL | Redis | Readiness |
+|---|---|---|
+| Available | Available | Healthy |
+| Available | Unavailable | Degraded |
+| Unavailable | Any state | Unhealthy |
+
+### Request processing
+
+Middleware executes in this order:
+
+```text
+Helmet
+-> Request context
+-> Request logging
+-> JSON parsing
+-> Routes
+-> Not-found handling
+-> Error handling
+```
+
+Every request receives a UUID request ID. A valid caller-provided `X-Request-ID` is preserved; otherwise, the service generates one.
+
+Request logs contain:
+
+- request ID;
+- HTTP method;
+- request path;
+- response status;
+- duration in milliseconds.
+
+Request bodies and credentials are not logged.
+
+### Error handling
+
+All errors use the shared API error shape.
+
+Malformed JSON returns `INVALID_JSON`.
+
+Oversized request bodies return `PAYLOAD_TOO_LARGE`.
+
+Unknown routes return `ROUTE_NOT_FOUND`.
+
+Unexpected errors return a generic response without exposing stack traces, SQL statements or internal details.
+
+### Graceful shutdown
+
+On `SIGTERM` or `SIGINT`, the TODO Service:
+
+1. stops accepting new HTTP connections;
+2. allows current requests to finish;
+3. closes the PostgreSQL pool;
+4. closes the Redis connection;
+5. records the shutdown result.
+
+A shutdown timeout prevents the process from waiting indefinitely.

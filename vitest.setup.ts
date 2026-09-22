@@ -61,3 +61,33 @@ process.env.ACCESS_TOKEN_TTL_SECONDS ??=
 
 process.env.REFRESH_TOKEN_TTL_SECONDS ??=
   "604800";
+
+process.env.TODO_SERVICE_PORT ??=
+  "3002";
+
+process.env.TODO_DATABASE_URL ??=
+  "postgres://todo_user:todo_password@localhost:5433/todo_db";
+
+process.env.REDIS_URL ??=
+  "redis://localhost:6379";
+
+process.env.INTERNAL_SERVICE_SECRET ??=
+  "test-internal-service-secret-containing-at-least-32-characters";
+
+process.env.REQUEST_BODY_LIMIT ??=
+  "100kb";
+
+process.env.LOG_LEVEL ??=
+  "silent";
+
+process.env.DATABASE_POOL_MAX ??=
+  "10";
+
+process.env.DATABASE_CONNECTION_TIMEOUT_MS ??=
+  "5000";
+
+process.env.DATABASE_IDLE_TIMEOUT_MS ??=
+  "30000";
+
+process.env.SHUTDOWN_TIMEOUT_MS ??=
+  "10000";

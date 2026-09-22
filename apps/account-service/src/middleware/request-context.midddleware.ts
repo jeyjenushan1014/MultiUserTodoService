@@ -39,9 +39,10 @@ export const requestContextMiddleware:
     const requestId =
       getRequestId(
         (() => {
-          const header = request.get(
-            REQUEST_ID_HEADER,
-          );
+          const header =
+            request.headers[
+              REQUEST_ID_HEADER
+            ];
 
           return Array.isArray(header)
             ? header[0]

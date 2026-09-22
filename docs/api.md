@@ -3166,3 +3166,129 @@ When RabbitMQ is unavailable:
 5. The public Account Service API remains available.
 
 RabbitMQ failure does not roll back an already committed account operation.
+
+## TODO Service health
+
+The TODO Service exposes separate liveness and readiness endpoints.
+
+These endpoints are used internally by Docker and deployment infrastructure.
+
+### Liveness
+
+```http
+GET /health/live
+```
+
+Liveness reports whether the TODO Service process is running.
+
+It does not check PostgreSQL or Redis.
+
+#### Authentication
+
+Authentication is not required.
+
+#### Successful response
+
+```http
+200 OK
+```
+
+```json
+{
+  "status": "healthy",
+  "service": "todo-service"
+}
+```
+
+#### Response fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `status` | string | Process status. The liveness value is `healthy`. |
+| `service` | string | The responding service name. |
+
+---
+
+### Readiness
+
+```http
+GET /health/ready
+```
+
+Readiness checks PostgreSQL and Redis separately.
+
+#### Authentication
+
+Authentication is not required.
+
+#### Healthy response
+
+```http
+200 OK
+```
+
+```json
+{
+  "status": "healthy",
+  "service": "todo-service",
+  "dependencies": {
+    "database": "available",
+    "cache": "available"
+  }
+}
+```
+
+#### Degraded response
+
+Redis is an optional performance dependency. If PostgreSQL is available but Redis is unavailable, the service remains operational.
+
+```http
+200 OK
+```
+
+```json
+{
+  "status": "degraded",
+  "service": "todo-service",
+  "dependencies": {
+    "database": "available",
+    "cache": "unavailable"
+  }
+}
+```
+
+#### Unhealthy response
+
+PostgreSQL is a required dependency.
+
+```http
+503 Service Unavailable
+```
+
+```json
+{
+  "status": "unhealthy",
+  "service": "todo-service",
+  "dependencies": {
+    "database": "unavailable",
+    "cache": "available"
+  }
+}
+```
+
+#### Response fields
+
+| Field | Type | Allowed values | Meaning |
+|---|---|---|---|
+| `status` | string | `healthy`, `degraded`, `unhealthy` | Overall readiness state. |
+| `service` | string | `todo-service` | The responding service. |
+| `dependencies.database` | string | `available`, `unavailable` | PostgreSQL availability. |
+| `dependencies.cache` | string | `available`, `unavailable` | Redis availability. |
+
+#### Status codes
+
+| Status | Cause |
+|---:|---|
+| `200` | Service is healthy or operating without Redis in degraded mode. |
+| `503` | PostgreSQL is unavailable. |
+| `500` | An unexpected internal health-check failure occurred. |

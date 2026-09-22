@@ -180,7 +180,7 @@ export const errorHandlerMiddleware:
      * - internal authentication failure
      */
     if (error instanceof AppError) {
-      const appError = error as AppError;
+      const appError = error;
 
       const details =
         getErrorDetails(

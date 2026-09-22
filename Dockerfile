@@ -61,6 +61,34 @@ RUN npm run build -w @todo/common
 
 
 # ==========================================================
+# Build TODO Service
+# ==========================================================
+FROM dependencies AS todo-service-builder
+
+WORKDIR /app
+
+COPY tsconfig.base.json ./
+
+COPY packages/contracts \
+  ./packages/contracts
+
+COPY packages/common \
+  ./packages/common
+
+COPY apps/todo-service \
+  ./apps/todo-service
+
+RUN npm run build \
+  -w @todo/contracts
+
+RUN npm run build \
+  -w @todo/common
+
+RUN npm run build \
+  -w @todo/todo-service
+
+
+# ==========================================================
 # TODO Service migration image
 # ==========================================================
 FROM dependencies AS todo-migrations-runtime
@@ -86,6 +114,9 @@ COPY apps/gateway \
   ./apps/gateway
 
 RUN npm run build -w @todo/gateway
+
+
+
 
 
 # ==========================================================
@@ -124,6 +155,61 @@ COPY apps/gateway/package.json \
 
 RUN npm ci --omit=dev \
   && npm cache clean --force
+
+
+# ==========================================================
+# TODO Service production image
+# ==========================================================
+FROM node:24-alpine AS todo-service-runtime
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+
+COPY packages/contracts/package.json \
+  ./packages/contracts/package.json
+
+COPY packages/common/package.json \
+  ./packages/common/package.json
+
+COPY apps/todo-service/package.json \
+  ./apps/todo-service/package.json
+
+RUN npm ci \
+  --omit=dev \
+  --workspace @todo/todo-service \
+  --include-workspace-root \
+  && npm cache clean --force
+
+COPY --from=todo-service-builder \
+  /app/packages/contracts/dist \
+  ./packages/contracts/dist
+
+COPY --from=todo-service-builder \
+  /app/packages/contracts/package.json \
+  ./packages/contracts/package.json
+
+COPY --from=todo-service-builder \
+  /app/packages/common/dist \
+  ./packages/common/dist
+
+COPY --from=todo-service-builder \
+  /app/packages/common/package.json \
+  ./packages/common/package.json
+
+COPY --from=todo-service-builder \
+  /app/apps/todo-service/dist \
+  ./apps/todo-service/dist
+
+COPY --from=todo-service-builder \
+  /app/apps/todo-service/package.json \
+  ./apps/todo-service/package.json
+
+USER node
+
+CMD ["node", "apps/todo-service/dist/src/server.js"]
 
 
 # ==========================================================

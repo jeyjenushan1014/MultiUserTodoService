@@ -12,10 +12,10 @@
   ],
   
   "scripts": {
-    "build": "npm run build -w @todo/contracts && npm run build -w @todo/common && npm run build -w @todo/account-service && npm run build -w @todo/gateway",
+    "build": "npm run build -w @todo/contracts && npm run build -w @todo/common && npm run build -w @todo/account-service && npm run build -w @todo/gateway && npm run build -w @todo/todo-service",
     "build:packages": "npm run build -w @todo/contracts && npm run build -w @todo/common",
     "lint": "npm run build:packages && eslint \"packages/**/*.ts\" \"apps/**/*.ts\" --max-warnings=0",
-    "test": "npm run test -w @todo/common && npm run test -w @todo/account-service && npm run test -w @todo/gateway",
+    "test": "npm run test -w @todo/common && npm run test -w @todo/account-service && npm run test -w @todo/gateway && npm run test -w @todo/todo-service",
     "check": "npm run lint && npm run build && npm test",
     "migrate:account": "npm run migrate -w @todo/account-service",
     "clean": "node scripts/clean.mjs",

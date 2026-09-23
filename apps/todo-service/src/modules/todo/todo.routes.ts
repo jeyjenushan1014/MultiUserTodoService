@@ -2,6 +2,11 @@ import {
   Router,
 } from "express";
 
+
+import {
+  validateQuery,
+} from "../../middleware/validate-query.middleware.js";
+
 import {
   requireInternalIdentity,
 } from "../../middleware/internal-service-auth.middleware.js";
@@ -21,6 +26,15 @@ import {
 import {
   TodoService,
 } from "./todo.service.js";
+
+
+import {
+  listTodosQuerySchema,
+} from "./list/list-todos.validation.js";
+
+import {
+  listTodosController,
+} from "./list/list-todo.controller.js";
 
 import {
   createTodoSchema,
@@ -49,4 +63,12 @@ todoRouter.post(
     createTodoSchema,
   ),
   controller.create,
+);
+
+todoRouter.get(
+  "/",
+  validateQuery(
+    listTodosQuerySchema,
+  ),
+  listTodosController,
 );

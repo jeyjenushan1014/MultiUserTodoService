@@ -3672,3 +3672,604 @@ The authenticated account becomes the TODO owner. The client cannot supply or ov
 Title uniqueness is case-insensitive and ignores leading and trailing spaces for the same owner.
 
 Two different owners may use the same title.
+
+# Part 6 — Paginated TODO Listing Architecture
+
+## 1. Overview
+
+The paginated TODO listing feature allows an authenticated user to retrieve only their own active TODO items.
+
+Public endpoint:
+
+```http
+GET /api/v1/todos
+```
+
+Internal endpoint:
+
+```http
+GET /internal/v1/todos
+```
+
+The implementation provides:
+
+- JWT authentication at the API Gateway.
+- Pagination validation at both service boundaries.
+- Signed identity propagation from the Gateway.
+- Owner-scoped PostgreSQL queries.
+- Deterministic result ordering.
+- Consistent pagination metadata.
+- Protection against SQL injection.
+- Standardized error responses.
+- No direct public access to the TODO Service.
+
+Filtering and client-selectable sorting are not part of this section. They are introduced in Part 7.
+
+---
+
+## 2. Request flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant TodoService as TODO Service
+    participant PostgreSQL
+
+    Client->>Gateway: GET /api/v1/todos?page=1&pageSize=20
+    Gateway->>Gateway: Validate access token
+    Gateway->>Gateway: Validate pagination query
+    Gateway->>Gateway: Create signed identity
+    Gateway->>TodoService: GET /internal/v1/todos
+    TodoService->>TodoService: Verify internal identity
+    TodoService->>TodoService: Validate pagination query
+    TodoService->>PostgreSQL: Count owner's active TODOs
+    TodoService->>PostgreSQL: Retrieve requested page
+    PostgreSQL-->>TodoService: Count and TODO rows
+    TodoService-->>Gateway: Items and pagination
+    Gateway-->>Client: 200 OK
+```
+
+---
+
+## 3. Component responsibilities
+
+| Component | Responsibility |
+|---|---|
+| Client | Sends the access token and optional pagination parameters |
+| Gateway authentication middleware | Verifies the JWT access token |
+| Gateway query-validation middleware | Validates `page` and `pageSize` |
+| Gateway TODO controller | Retrieves the caller identity and forwards the request |
+| Gateway TODO Service client | Creates signed internal identity headers and calls the TODO Service |
+| TODO internal-identity middleware | Verifies that the request came from a trusted Gateway |
+| TODO query-validation middleware | Independently validates internal query parameters |
+| List TODO service | Coordinates the use case and calculates `totalPages` |
+| Repository interface | Provides a persistence abstraction |
+| PostgreSQL repository | Counts and retrieves only the owner’s TODOs |
+| TODO mapper | Converts database rows into API response objects |
+| Error middleware | Produces standardized error responses |
+
+---
+
+## 4. Public and internal boundaries
+
+The client can access only the Gateway:
+
+```text
+Client → Gateway
+```
+
+The Gateway communicates with the TODO Service through the internal Docker network:
+
+```text
+Gateway → TODO Service
+```
+
+The TODO Service port should not be published to the host machine in production.
+
+The public route is:
+
+```http
+GET /api/v1/todos
+```
+
+The internal route is:
+
+```http
+GET /internal/v1/todos
+```
+
+The internal route requires:
+
+- Internal service secret.
+- Encoded caller identity.
+- HMAC identity signature.
+- Matching request ID.
+- Acceptable identity timestamp.
+
+---
+
+## 5. Authentication architecture
+
+The Gateway validates the public JWT.
+
+The access token must contain:
+
+| Claim | Purpose |
+|---|---|
+| `sub` | Authenticated user ID |
+| `sid` | Account session ID |
+| `email` | Authenticated account email |
+| `iss` | Expected token issuer |
+| `aud` | Expected token audience |
+| `exp` | Token expiration time |
+| `iat` | Token issue time |
+
+After successful verification, the Gateway creates a `CallerIdentity`:
+
+```ts
+interface CallerIdentity {
+  readonly userId: string;
+  readonly sessionId: string;
+  readonly email: string;
+}
+```
+
+The request must not accept an owner ID from the client. Ownership always comes from:
+
+```ts
+identity.userId
+```
+
+---
+
+## 6. Internal identity propagation
+
+The Gateway creates an internal identity envelope similar to:
+
+```json
+{
+  "userId": "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+  "sessionId": "651d82a8-cab8-49b0-aa33-8aa8f895e42d",
+  "email": "user@example.com",
+  "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+  "issuedAt": 1789984005
+}
+```
+
+The identity is encoded and signed using HMAC-SHA256.
+
+The TODO Service verifies:
+
+1. The internal service key.
+2. The encoded identity.
+3. The HMAC signature.
+4. The identity timestamp.
+5. The request ID.
+6. The required identity fields.
+
+The TODO Service does not trust a public `ownerId` query parameter.
+
+---
+
+## 7. Validation architecture
+
+The query is validated twice.
+
+### Gateway validation
+
+The Gateway validates the public input before forwarding it.
+
+This:
+
+- Rejects invalid requests quickly.
+- Avoids unnecessary internal network calls.
+- Produces a stable public error response.
+
+### TODO Service validation
+
+The TODO Service validates the internal request again.
+
+This:
+
+- Protects the service independently.
+- Prevents the TODO Service from trusting upstream input automatically.
+- Keeps service-boundary validation explicit.
+
+The supported query parameters are:
+
+| Parameter | Type | Default | Rules |
+|---|---|---:|---|
+| `page` | Integer | `1` | Minimum `1` |
+| `pageSize` | Integer | `20` | Minimum `1`, maximum `100` |
+
+Unknown parameters are rejected.
+
+For example, this request is rejected:
+
+```http
+GET /api/v1/todos?ownerId=another-user
+```
+
+The client is not permitted to choose the owner.
+
+---
+
+## 8. Layer organization
+
+```text
+apps/
+├── gateway/
+│   └── src/
+│       ├── clients/
+│       │   └── todo-service.client.ts
+│       ├── middleware/
+│       │   ├── authenticate.middleware.ts
+│       │   └── validate-query.middleware.ts
+│       └── modules/
+│           └── todo/
+│               ├── todo.routes.ts
+│               └── list/
+│                   ├── list-todos.controller.ts
+│                   ├── list-todos.validation.ts
+│                   └── __tests__/
+│                       └── list-todos.validation.test.ts
+│
+└── todo-service/
+    └── src/
+        ├── middleware/
+        │   ├── internal-identity.middleware.ts
+        │   └── validate-query.middleware.ts
+        └── modules/
+            └── todo/
+                ├── todo.mapper.ts
+                ├── todo.routes.ts
+                ├── todo.types.ts
+                └── list/
+                    ├── list-todos.controller.ts
+                    ├── list-todos.repository.interface.ts
+                    ├── list-todos.service.ts
+                    ├── list-todos.types.ts
+                    ├── list-todos.validation.ts
+                    ├── postgres-list-todos.repository.ts
+                    └── __tests__/
+                        ├── list-todos.service.test.ts
+                        └── list-todos.validation.test.ts
+```
+
+---
+
+## 9. Repository abstraction
+
+The application service depends on the repository interface:
+
+```ts
+export interface ListTodosRepository {
+  listTodos(
+    parameters: ListTodosParameters,
+  ): Promise<ListTodosRepositoryResult>;
+}
+```
+
+The dependency direction is:
+
+```text
+ListTodosService
+        ↓
+ListTodosRepository
+        ↑
+PostgresListTodosRepository
+```
+
+This supports the dependency-inversion principle.
+
+The service can be tested using a mocked repository without connecting to PostgreSQL.
+
+---
+
+## 10. Ownership enforcement
+
+Owner isolation is enforced directly in PostgreSQL:
+
+```sql
+WHERE owner_id = $1
+  AND deleted_at IS NULL
+```
+
+The `$1` value is taken from the verified internal identity:
+
+```ts
+identity.userId
+```
+
+It is not taken from:
+
+- The request body.
+- Query parameters.
+- Route parameters.
+- Client-controlled headers.
+
+This means User A cannot list User B’s TODOs by modifying the request.
+
+---
+
+## 11. Parameterized SQL
+
+The repository uses PostgreSQL parameters:
+
+```sql
+WHERE owner_id = $1
+LIMIT $2
+OFFSET $3
+```
+
+Parameter values are passed separately:
+
+```ts
+[
+  ownerId,
+  pageSize,
+  offset,
+]
+```
+
+The repository does not concatenate client input into the SQL statement.
+
+This prevents SQL injection through pagination or identity values.
+
+---
+
+## 12. Pagination calculation
+
+The requested row offset is calculated as:
+
+```text
+offset = (page - 1) × pageSize
+```
+
+Examples:
+
+| Page | Page size | Offset |
+|---:|---:|---:|
+| 1 | 20 | 0 |
+| 2 | 20 | 20 |
+| 3 | 20 | 40 |
+| 5 | 10 | 40 |
+
+The total number of pages is calculated as:
+
+```text
+totalPages = ceil(totalItems / pageSize)
+```
+
+Examples:
+
+| Total items | Page size | Total pages |
+|---:|---:|---:|
+| 0 | 20 | 0 |
+| 1 | 20 | 1 |
+| 20 | 20 | 1 |
+| 21 | 20 | 2 |
+| 41 | 20 | 3 |
+| 45 | 10 | 5 |
+
+When `totalItems` is zero, `totalPages` is also zero.
+
+---
+
+## 13. Pagination consistency
+
+The PostgreSQL repository performs two queries:
+
+1. Count the owner’s active TODOs.
+2. Retrieve the requested page.
+
+Both queries execute inside a read-only repeatable-read transaction:
+
+```sql
+BEGIN
+ISOLATION LEVEL REPEATABLE READ
+READ ONLY
+```
+
+This ensures both queries use the same database snapshot.
+
+Without a consistent snapshot, a concurrent create or delete operation could cause:
+
+- The count to show one value.
+- The returned items to represent another database state.
+
+The transaction is committed after both queries succeed.
+
+If either query fails:
+
+1. The transaction is rolled back.
+2. The database client is released.
+3. The error is sent to the global error middleware.
+
+---
+
+## 14. Deterministic ordering
+
+Part 6 uses fixed ordering:
+
+```sql
+ORDER BY
+  created_at DESC,
+  id DESC
+```
+
+This returns the newest TODOs first.
+
+The ID is used as a tie-breaker when multiple TODOs have the same `created_at` timestamp.
+
+Without a deterministic secondary order, records with identical timestamps could move between pages across requests.
+
+Client-selectable ordering is introduced in Part 7.
+
+---
+
+## 15. Soft-deleted TODOs
+
+The query excludes soft-deleted TODOs:
+
+```sql
+AND deleted_at IS NULL
+```
+
+A deleted TODO therefore:
+
+- Does not appear in `items`.
+- Is not included in `totalItems`.
+- Does not affect `totalPages`.
+
+---
+
+## 16. Empty collection behaviour
+
+When a user has no TODOs, the service returns:
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "totalItems": 0,
+    "totalPages": 0
+  }
+}
+```
+
+The status remains:
+
+```http
+200 OK
+```
+
+An empty collection is a valid result and is not a `404` error.
+
+---
+
+## 17. Page beyond the final page
+
+If the user requests a page beyond the final page, the service returns an empty `items` array while preserving the correct totals.
+
+Example:
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 10,
+    "pageSize": 20,
+    "totalItems": 3,
+    "totalPages": 1
+  }
+}
+```
+
+The status is:
+
+```http
+200 OK
+```
+
+This is not considered an error because the collection exists, but the requested page contains no records.
+
+---
+
+## 18. Error behaviour
+
+| Failure | HTTP status | Error code |
+|---|---:|---|
+| Missing access token | 401 | `AUTHENTICATION_REQUIRED` |
+| Malformed authorization header | 401 | `INVALID_AUTHORIZATION_HEADER` |
+| Invalid or expired token | 401 | `INVALID_ACCESS_TOKEN` |
+| Invalid page | 400 | `VALIDATION_ERROR` |
+| Invalid page size | 400 | `VALIDATION_ERROR` |
+| Unknown query parameter | 400 | `VALIDATION_ERROR` |
+| Invalid internal identity | 401 | `INVALID_INTERNAL_IDENTITY` |
+| TODO Service unavailable | 503 | `SERVICE_UNAVAILABLE` |
+| TODO Service timeout | 504 | `DOWNSTREAM_TIMEOUT` |
+| Unexpected database failure | 500 | `INTERNAL_SERVER_ERROR` |
+
+Internal SQL errors, stack traces and database details are never returned to clients.
+
+---
+
+## 19. Reliability behaviour
+
+### Database client release
+
+The repository releases the PostgreSQL client inside `finally`:
+
+```ts
+finally {
+  client.release();
+}
+```
+
+The client is therefore released after:
+
+- Successful execution.
+- Count query failure.
+- List query failure.
+- Commit failure.
+- Rollback attempt.
+
+### Rollback failure
+
+If rollback itself fails:
+
+- The rollback error is logged.
+- The original operation failure continues to the error middleware.
+- The database client is still released.
+
+### TODO Service outage
+
+If the TODO Service is unavailable, the Gateway converts the network failure into a controlled `503` response.
+
+### TODO Service timeout
+
+If the TODO Service does not respond before the configured deadline, the Gateway aborts the downstream request and returns `504`.
+
+---
+
+## 20. Security decisions
+
+- Authentication occurs before query validation and controller execution.
+- Owner identity comes only from the verified JWT.
+- Internal identity is signed.
+- The TODO Service verifies internal calls independently.
+- Client-supplied owner IDs are rejected.
+- SQL input uses positional parameters.
+- Deleted records are excluded.
+- Unknown query parameters are rejected.
+- Internal service addresses are not exposed.
+- PostgreSQL errors are not exposed to clients.
+- Access tokens and internal secrets are not written to logs.
+
+---
+
+## 21. Requirements satisfied
+
+| Requirement | Implementation |
+|---|---|
+| FR-10 | Authenticated users list only their own TODOs |
+| FR-11 | Pagination returns page, page size, total items and total pages |
+| DR-4 | Every TODO uses a primary key |
+| DR-6 | Ownership is enforced through `owner_id` |
+| DR-7 | Owner-scoped listing index supports retrieval |
+| DR-9 | Related count and page operations use one consistent transaction |
+| SR-1 | SQL values use PostgreSQL parameters |
+| SR-6 | Protected endpoint requires authentication |
+| SR-7 | Query input is validated |
+| SR-8 | Internal implementation details are not exposed |
+| SR-9 | Runtime configuration is supplied through environment variables |
+| OR-4 | Request IDs flow through Gateway and TODO Service logs |
+| OR-5 | Secrets and tokens are excluded from logs |
+| QR-1 | Strict TypeScript types are used |
+| QR-3 | Controller, service and repository responsibilities are separated |
+| QR-4 | Errors use the standardized error response structure |
+| QR-5 | API fields use consistent camelCase naming |

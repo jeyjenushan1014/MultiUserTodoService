@@ -3416,3 +3416,650 @@ The authenticated account becomes the TODO owner. The client cannot supply or ov
 Title uniqueness is case-insensitive and ignores leading and trailing spaces for the same owner.
 
 Two different owners may use the same title.
+
+# Part 6 — List TODOs API
+
+## 1. Endpoint summary
+
+| Method | Public endpoint | Authentication | Purpose |
+|---|---|---|---|
+| `GET` | `/api/v1/todos` | Bearer access token | Return the authenticated user’s TODOs with pagination |
+
+Internal service endpoint:
+
+```http
+GET /internal/v1/todos
+```
+
+Clients must use only the public Gateway endpoint.
+
+---
+
+## 2. List TODOs
+
+Returns active TODOs owned by the authenticated user.
+
+The authenticated owner is derived from the access token. The client cannot provide an `ownerId`.
+
+### Request
+
+```http
+GET /api/v1/todos
+```
+
+### Authentication
+
+Required:
+
+```http
+Authorization: Bearer <access-token>
+```
+
+### Optional request ID
+
+The client may provide:
+
+```http
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+```
+
+When it is absent, the Gateway creates a request ID.
+
+The same request ID is propagated to the TODO Service and included in error responses.
+
+---
+
+## 3. Query parameters
+
+| Parameter | Type | Required | Default | Minimum | Maximum |
+|---|---|---:|---:|---:|---:|
+| `page` | Integer | No | `1` | `1` | No explicit maximum |
+| `pageSize` | Integer | No | `20` | `1` | `100` |
+
+Unknown query parameters are rejected.
+
+### Default request
+
+```http
+GET /api/v1/todos
+```
+
+Equivalent request:
+
+```http
+GET /api/v1/todos?page=1&pageSize=20
+```
+
+### Second-page request
+
+```http
+GET /api/v1/todos?page=2&pageSize=20
+```
+
+### Maximum page-size request
+
+```http
+GET /api/v1/todos?page=1&pageSize=100
+```
+
+---
+
+## 4. Complete example request
+
+```http
+GET /api/v1/todos?page=1&pageSize=20 HTTP/1.1
+Host: localhost:3000
+Authorization: Bearer <access-token>
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+Accept: application/json
+```
+
+PowerShell example:
+
+```powershell
+curl.exe -i `
+  "http://localhost:3000/api/v1/todos?page=1&pageSize=20" `
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" `
+  -H "X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20"
+```
+
+---
+
+## 5. Successful response
+
+Status:
+
+```http
+200 OK
+```
+
+Body:
+
+```json
+{
+  "items": [
+    {
+      "id": "9f134ed0-4503-4a23-a189-f065fe9fd838",
+      "ownerId": "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+      "title": "Finish TODO API",
+      "description": "Complete the paginated list operation",
+      "state": "pending",
+      "dueDate": "2026-09-25T10:00:00.000Z",
+      "createdAt": "2026-09-22T08:00:00.000Z",
+      "updatedAt": "2026-09-22T08:00:00.000Z"
+    },
+    {
+      "id": "67ac15ee-f42e-4bb0-8470-a60414e8b22f",
+      "ownerId": "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+      "title": "Write API documentation",
+      "description": null,
+      "state": "in_progress",
+      "dueDate": null,
+      "createdAt": "2026-09-22T07:30:00.000Z",
+      "updatedAt": "2026-09-22T07:45:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "totalItems": 2,
+    "totalPages": 1
+  }
+}
+```
+
+---
+
+## 6. Response fields
+
+### TODO item
+
+| Field | Type | Nullable | Description |
+|---|---|---:|---|
+| `id` | UUID string | No | Unique TODO identifier |
+| `ownerId` | UUID string | No | Authenticated owner identifier |
+| `title` | String | No | TODO title |
+| `description` | String | Yes | Optional TODO description |
+| `state` | String | No | Current TODO state |
+| `dueDate` | ISO-8601 string | Yes | Optional due date |
+| `createdAt` | ISO-8601 string | No | Creation timestamp |
+| `updatedAt` | ISO-8601 string | No | Last-update timestamp |
+
+### Pagination object
+
+| Field | Type | Description |
+|---|---|---|
+| `page` | Integer | Requested page number |
+| `pageSize` | Integer | Number of items requested per page |
+| `totalItems` | Integer | Total active TODOs owned by the authenticated user |
+| `totalPages` | Integer | Total pages calculated from `totalItems` and `pageSize` |
+
+---
+
+## 7. Supported TODO states
+
+A returned TODO state is one of:
+
+```text
+pending
+in_progress
+completed
+cancelled
+```
+
+State filtering is not included in Part 6.
+
+---
+
+## 8. Fixed ordering
+
+Part 6 uses fixed ordering:
+
+1. Newest `createdAt` first.
+2. Descending `id` when timestamps are identical.
+
+Equivalent database order:
+
+```sql
+ORDER BY
+  created_at DESC,
+  id DESC
+```
+
+Client-selectable sorting is introduced in Part 7.
+
+---
+
+## 9. Empty collection response
+
+If the authenticated user has no active TODOs, the API returns:
+
+Status:
+
+```http
+200 OK
+```
+
+Body:
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "totalItems": 0,
+    "totalPages": 0
+  }
+}
+```
+
+An empty collection is not a `404` response.
+
+---
+
+## 10. Page beyond the final page
+
+If the client requests a page beyond the available data, the API returns an empty collection with the correct totals.
+
+Request:
+
+```http
+GET /api/v1/todos?page=10&pageSize=20
+```
+
+Response:
+
+```http
+200 OK
+```
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 10,
+    "pageSize": 20,
+    "totalItems": 3,
+    "totalPages": 1
+  }
+}
+```
+
+---
+
+## 11. Standard error structure
+
+Every controlled error uses:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable message",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+Validation errors can additionally contain:
+
+```json
+{
+  "details": [
+    {
+      "field": "page",
+      "message": "Validation message"
+    }
+  ]
+}
+```
+
+---
+
+## 12. Missing access token
+
+Request:
+
+```http
+GET /api/v1/todos
+```
+
+Response status:
+
+```http
+401 Unauthorized
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "AUTHENTICATION_REQUIRED",
+    "message": "An access token is required",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+---
+
+## 13. Invalid authorization header
+
+Request:
+
+```http
+Authorization: Basic invalid-value
+```
+
+Response status:
+
+```http
+401 Unauthorized
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "INVALID_AUTHORIZATION_HEADER",
+    "message": "Authorization header must use the Bearer scheme",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+---
+
+## 14. Invalid or expired access token
+
+Response status:
+
+```http
+401 Unauthorized
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "INVALID_ACCESS_TOKEN",
+    "message": "The access token is invalid or expired",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+The response does not reveal whether the failure was caused by:
+
+- Token expiry.
+- Invalid signature.
+- Invalid issuer.
+- Invalid audience.
+- Missing JWT claims.
+
+---
+
+## 15. Invalid page
+
+Request:
+
+```http
+GET /api/v1/todos?page=0
+```
+
+Response status:
+
+```http
+400 Bad Request
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request query parameters are invalid",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+    "details": [
+      {
+        "field": "page",
+        "message": "Too small: expected number to be >=1"
+      }
+    ]
+  }
+}
+```
+
+The exact Zod validation message can vary slightly between versions. The stable API values are:
+
+```text
+HTTP status: 400
+Error code: VALIDATION_ERROR
+Field: page
+```
+
+---
+
+## 16. Invalid page size
+
+Request:
+
+```http
+GET /api/v1/todos?pageSize=101
+```
+
+Response status:
+
+```http
+400 Bad Request
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request query parameters are invalid",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+    "details": [
+      {
+        "field": "pageSize",
+        "message": "Too big: expected number to be <=100"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 17. Decimal pagination value
+
+Request:
+
+```http
+GET /api/v1/todos?page=1.5
+```
+
+Response status:
+
+```http
+400 Bad Request
+```
+
+Pagination values must be integers.
+
+---
+
+## 18. Unknown query parameter
+
+Request:
+
+```http
+GET /api/v1/todos?ownerId=another-user
+```
+
+Response status:
+
+```http
+400 Bad Request
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request query parameters are invalid",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+    "details": [
+      {
+        "field": "query",
+        "message": "Unrecognized key: \"ownerId\""
+      }
+    ]
+  }
+}
+```
+
+Clients cannot select the TODO owner.
+
+---
+
+## 19. TODO Service unavailable
+
+When the Gateway cannot connect to the TODO Service:
+
+Status:
+
+```http
+503 Service Unavailable
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "TODO service is temporarily unavailable",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+---
+
+## 20. TODO Service timeout
+
+When the TODO Service exceeds the Gateway downstream timeout:
+
+Status:
+
+```http
+504 Gateway Timeout
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "DOWNSTREAM_TIMEOUT",
+    "message": "TODO service did not respond in time",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+---
+
+## 21. Unexpected internal failure
+
+Status:
+
+```http
+500 Internal Server Error
+```
+
+Example body:
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "An unexpected error occurred",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+The API never returns:
+
+- PostgreSQL SQL statements.
+- Table names.
+- Database hostnames.
+- Database credentials.
+- Internal service secrets.
+- Access tokens.
+- Stack traces.
+
+---
+
+## 22. Ownership rules
+
+The endpoint follows these ownership rules:
+
+1. The authenticated access token identifies the user.
+2. The Gateway creates a signed internal identity.
+3. The TODO Service verifies the identity.
+4. The repository applies `owner_id = authenticated user ID`.
+5. TODOs belonging to other users are excluded.
+6. Soft-deleted TODOs are excluded.
+7. `totalItems` counts only the authenticated user’s active TODOs.
+8. The client cannot override the owner.
+
+---
+
+## 23. Status-code summary
+
+| Situation | HTTP status | Error code |
+|---|---:|---|
+| TODOs returned | 200 | Not applicable |
+| No TODOs found | 200 | Not applicable |
+| Requested page is empty | 200 | Not applicable |
+| Invalid page | 400 | `VALIDATION_ERROR` |
+| Invalid page size | 400 | `VALIDATION_ERROR` |
+| Unknown query parameter | 400 | `VALIDATION_ERROR` |
+| Missing access token | 401 | `AUTHENTICATION_REQUIRED` |
+| Malformed authorization header | 401 | `INVALID_AUTHORIZATION_HEADER` |
+| Invalid or expired access token | 401 | `INVALID_ACCESS_TOKEN` |
+| TODO Service unavailable | 503 | `SERVICE_UNAVAILABLE` |
+| TODO Service timeout | 504 | `DOWNSTREAM_TIMEOUT` |
+| Unexpected failure | 500 | `INTERNAL_SERVER_ERROR` |
+
+---
+
+## 24. Current limitations
+
+Part 6 does not provide:
+
+- State filtering.
+- Client-selectable sorting.
+- Due-date sorting.
+- Redis response caching.
+
+These capabilities are introduced in later parts.
+
+The current supported request is:
+
+```http
+GET /api/v1/todos?page=<integer>&pageSize=<integer>
+```

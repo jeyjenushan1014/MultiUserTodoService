@@ -1,6 +1,11 @@
+
 import {
   Router,
 } from "express";
+
+import {
+  listTodosQuerySchema,
+} from "../todo/list/list-todos.validation.js";
 
 import {
   authenticate,
@@ -17,6 +22,8 @@ import {
 import {
   createTodoSchema,
 } from "./todo.validation.js";
+import { validateQuery } from "../../middleware/validate-query.middleware.js";
+import { listTodosController } from "./list/todo.controller.js";
 
 export const todoRouter =
   Router();
@@ -28,4 +35,13 @@ todoRouter.post(
     createTodoSchema,
   ),
   createTodoController,
+);
+
+
+todoRouter.get(
+  "/",
+  validateQuery(
+    listTodosQuerySchema,
+  ),
+  listTodosController,
 );

@@ -70,6 +70,20 @@ const environmentSchema =
     .min(5)
     .max(300)
     .default(30),
+
+
+REDIS_CONNECT_TIMEOUT_MS: z.coerce
+  .number()
+  .int()
+  .positive()
+  .default(2000),
+
+CACHE_TTL_SECONDS: z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(3600)
+  .default(60),
     
 
     RABBITMQ_DEAD_LETTER_EXCHANGE:

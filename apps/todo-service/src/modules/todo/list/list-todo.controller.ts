@@ -8,6 +8,15 @@ import type {
   ListTodosResponse,
 } from "@todo/contracts";
 
+
+import {
+  CachedListTodosRepository,
+} from "../cache/cached.list.todos.repository.js";
+
+import {
+  RedisTodoReadCache,
+} from "../cache/redis.todo.read.cache.js";
+
 import {
   getValidatedQuery,
 } from "../../../middleware/validate-query.middleware.js";
@@ -28,8 +37,17 @@ import {
   ListTodosService,
 } from "./list-todo.service.js";
 
-const repository =
+const postgresRepository =
   new PostgresListTodosRepository();
+
+const readCache =
+  new RedisTodoReadCache();
+
+const repository =
+  new CachedListTodosRepository(
+    postgresRepository,
+    readCache,
+  );
 
 const service =
   new ListTodosService(

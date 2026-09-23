@@ -4820,3 +4820,85 @@ After successful deletion:
 | TODO Service unavailable | 503 | `SERVICE_UNAVAILABLE` |
 | TODO Service timeout | 504 | `DOWNSTREAM_TIMEOUT` |
 
+# Part 11 — TODO Read Caching
+
+## Cached endpoints
+
+The following endpoints use Redis cache-aside reads:
+
+```http
+GET /api/v1/todos
+GET /api/v1/todos/{todoId}
+```
+
+The public request and response formats do not change.
+
+## Cache behaviour
+
+For each request:
+
+1. The TODO Service reads the owner’s cache version.
+2. It builds an owner-scoped cache key.
+3. It checks Redis.
+4. On a cache hit, it returns the validated cached value.
+5. On a cache miss, it reads PostgreSQL.
+6. The PostgreSQL result is stored with a TTL.
+7. If Redis is unavailable, PostgreSQL is used directly.
+
+## Cache isolation
+
+Cache keys contain the authenticated owner ID.
+
+A user cannot read another user’s TODO cache entries.
+
+Cached item values are also checked to ensure:
+
+```text
+cached ownerId = authenticated ownerId
+cached TODO id = requested TODO id
+```
+
+## List cache identity
+
+The list cache key varies by:
+
+- Owner ID.
+- Page.
+- Page size.
+- State filter.
+- Sort field.
+- Sort order.
+- Cache version.
+
+Different queries therefore receive different cache entries.
+
+## TTL
+
+Cache entries expire after:
+
+```env
+CACHE_TTL_SECONDS=60
+```
+
+## Redis failure
+
+Redis is an optimization, not the source of truth.
+
+If Redis is unavailable:
+
+- Read requests continue through PostgreSQL.
+- The API does not return stale data from a local process cache.
+- Cache failures are logged.
+- PostgreSQL failures still return the normal internal error response.
+
+## Cache logging
+
+The TODO Service logs:
+
+- Cache resource type.
+- Cache operation.
+- Cache availability.
+- Cache hit or miss.
+- Cache TTL on writes.
+
+Access tokens and Redis credentials are never logged.

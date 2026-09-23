@@ -15,32 +15,32 @@ export const cache =
     url:
       env.REDIS_URL,
 
-    disableOfflineQueue:
-      true,
-
     socket: {
       connectTimeout:
-        5000,
+        env.REDIS_CONNECT_TIMEOUT_MS,
 
       reconnectStrategy(
-        retries: number,
+        retries,
       ): number {
         return Math.min(
-          100 * 2 ** retries,
-          5000,
+          retries * 100,
+          3000,
         );
       },
     },
+
+    disableOfflineQueue:
+      true,
   });
 
 cache.on(
   "error",
-  (error: Error) => {
+  (error: unknown) => {
     logger.warn(
       {
-        err: error,
+        error,
       },
-      "TODO cache connection error",
+      "Redis client error",
     );
   },
 );
@@ -49,7 +49,7 @@ cache.on(
   "reconnecting",
   () => {
     logger.warn(
-      "TODO cache reconnecting",
+      "Redis client reconnecting",
     );
   },
 );
@@ -58,13 +58,13 @@ cache.on(
   "ready",
   () => {
     logger.info(
-      "TODO cache connected",
+      "Redis client ready",
     );
   },
 );
 
 export async function connectCache():
-Promise<void> {
+  Promise<void> {
   if (
     cache.isOpen ||
     cache.isReady

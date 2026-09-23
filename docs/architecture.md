@@ -4476,3 +4476,94 @@ The response does not include a body because the resource is no longer available
 | SR-7 | UUID is validated at both boundaries |
 | SR-8 | Ownership and database information are hidden |
 | QR-3 | Controller, service and repository responsibilities are separated |
+
+# Part 11 — Redis Read-Cache Architecture
+
+## Cache-aside flow
+
+```mermaid
+flowchart TD
+    A["Read request"] --> B{"Redis ready?"}
+    B -->|No| E["Read PostgreSQL"]
+    B -->|Yes| C["Build owner/version key"]
+    C --> D{"Valid cache hit?"}
+    D -->|Yes| H["Return cached result"]
+    D -->|No| E
+    E --> F{"Cache lookup was available?"}
+    F -->|Yes| G["Store result with TTL"]
+    F -->|No| H2["Return database result"]
+    G --> H2
+```
+
+## Decorator design
+
+Caching is implemented as a repository decorator.
+
+```text
+GetTodoService
+    ↓
+CachedGetTodoRepository
+    ↓
+PostgresGetTodoRepository
+```
+
+```text
+ListTodosService
+    ↓
+CachedListTodosRepository
+    ↓
+PostgresListTodosRepository
+```
+
+Business services do not depend on Redis.
+
+## Owner-scoped version keys
+
+Each owner has a version key:
+
+```text
+todo:cache-version:{ownerId}
+```
+
+Read keys contain that version:
+
+```text
+todo:{ownerId}:v:{version}:item:{todoId}
+todo:{ownerId}:v:{version}:list:{queryHash}
+```
+
+Part 12 increments the owner version after successful writes. Older entries become unreachable and expire through their TTL.
+
+This avoids request-time wildcard deletion.
+
+## No process-local fallback map
+
+The service does not maintain a process-local map of blocked users or cached values.
+
+A process-local map would:
+
+- Grow independently on every service instance.
+- Produce inconsistent behaviour across replicas.
+- Require manual cleanup.
+- Create memory-growth risks during prolonged outages.
+
+When Redis is unavailable, the system uses PostgreSQL directly.
+
+## Runtime cache validation
+
+Redis values are treated as untrusted external data.
+
+Every cached item or list is validated before use.
+
+Invalid cache values are removed when possible, and PostgreSQL is used as the source of truth.
+
+## Requirements satisfied
+
+| Requirement | Implementation |
+|---|---|
+| CR-1 | Repeated item and list reads use Redis |
+| CR-2 | Redis values use an expiry TTL |
+| CR-3 | Owner ID is included in every cache key |
+| CR-5 | Redis failures fall back to PostgreSQL |
+| CR-6 | Cache hits, misses and failures are logged |
+| QR-3 | Cache behaviour is isolated through repository decorators |

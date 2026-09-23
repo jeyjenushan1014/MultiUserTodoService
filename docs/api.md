@@ -5039,3 +5039,42 @@ PostgreSQL always wins.
 ## Consistency guarantee
 
 An old cached value cannot become valid again after Redis recovery because cache keys contain the durable PostgreSQL version.
+
+
+# Part 14 — API Verification Coverage
+
+The TODO API is verified through unit and end-to-end tests.
+
+## Automated endpoint coverage
+
+| Endpoint | Covered behaviours |
+|---|---|
+| `POST /api/v1/auth/register` | Successful account creation |
+| `POST /api/v1/auth/login` | Access-token creation |
+| `POST /api/v1/todos` | Creation, normalization, duplicate titles and concurrency |
+| `GET /api/v1/todos` | Isolation, pagination, filtering, sorting and cache freshness |
+| `GET /api/v1/todos/{todoId}` | Owner access, missing resource and cross-owner protection |
+| `PATCH /api/v1/todos/{todoId}` | Partial update, cache freshness and cross-owner protection |
+| `DELETE /api/v1/todos/{todoId}` | Soft deletion, repeated deletion and cross-owner protection |
+
+## Uniform ownership failures
+
+The tests confirm that missing, deleted and cross-owner resources return:
+
+```http
+404 Not Found
+```
+
+```json
+{
+  "error": {
+    "code": "TODO_NOT_FOUND",
+    "message": "TODO was not found",
+    "requestId": "<request-id>"
+  }
+}
+```
+
+## Dependency failure verification
+
+Redis, PostgreSQL and downstream service outages are verified separately because these tests intentionally alter the running Docker environment.

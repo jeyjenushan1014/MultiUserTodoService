@@ -1,23 +1,26 @@
-
 import {
   Router,
 } from "express";
-
-import {
-  listTodosQuerySchema,
-} from "../todo/list/list-todos.validation.js";
-
-import {
-  deleteTodoController,
-} from "./delete/delete.todo.controller.js";
 
 import {
   authenticate,
 } from "../../middleware/authenticate.middleware.js";
 
 import {
+  validateBody,
+} from "../../middleware/validate-body.middleware.js";
+
+import {
   validateParams,
 } from "../../middleware/validate-params.middleware.js";
+
+import {
+  validateQuery,
+} from "../../middleware/validate-query.middleware.js";
+
+import {
+  deleteTodoController,
+} from "./delete/delete.todo.controller.js";
 
 import {
   getTodoController,
@@ -28,12 +31,20 @@ import {
 } from "./get/get.todo.validation.js";
 
 import {
-  validateBody,
-} from "../../middleware/validate-body.middleware.js";
+  listTodosQuerySchema,
+} from "./list/list-todos.validation.js";
+
+import {
+  listTodosController,
+} from "./list/todo.controller.js";
 
 import {
   createTodoController,
 } from "./todo.controller.js";
+
+import {
+  createTodoSchema,
+} from "./todo.validation.js";
 
 import {
   updateTodoController,
@@ -43,24 +54,28 @@ import {
   updateTodoBodySchema,
 } from "./update/update.todo.validation.js";
 
-import {
-  createTodoSchema,
-} from "./todo.validation.js";
-import { validateQuery } from "../../middleware/validate-query.middleware.js";
-import { listTodosController } from "./list/todo.controller.js";
-
 export const todoRouter =
   Router();
 
+/*
+ * Every TODO operation requires a valid
+ * authenticated user.
+ *
+ * Applying authentication at router level
+ * prevents any protected controller from
+ * executing without authentication context.
+ */
+todoRouter.use(
+  authenticate,
+);
+
 todoRouter.post(
   "/",
-  authenticate,
   validateBody(
     createTodoSchema,
   ),
   createTodoController,
 );
-
 
 todoRouter.get(
   "/",

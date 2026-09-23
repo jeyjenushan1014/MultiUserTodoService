@@ -4749,3 +4749,56 @@ This is accepted to guarantee correctness while still avoiding heavier TODO list
 | DR-6 | Version ownership follows the TODO owner projection |
 | DR-7 | Owner version lookup uses the owner primary key |
 | DR-9 | Mutation and durable invalidation are transactionally linked |
+
+# Part 14 — Testing Architecture
+
+## Test pyramid
+
+```mermaid
+flowchart TD
+    A["Manual dependency-failure tests"] --> B["Docker E2E tests"]
+    B --> C["Repository and cache integration tests"]
+    C --> D["Service and validation unit tests"]
+```
+
+The broad unit-test base provides fast feedback. Docker E2E tests verify service integration, while manual failure tests intentionally manipulate infrastructure.
+
+## E2E boundary
+
+The E2E suite communicates only with the public Gateway:
+
+```text
+Test → Gateway → Services → Databases and Redis
+```
+
+It does not call internal service routes directly.
+
+This verifies:
+
+- Public authentication.
+- Gateway routing.
+- Signed identity propagation.
+- Internal validation.
+- Business services.
+- PostgreSQL persistence.
+- RabbitMQ owner projection.
+- Redis cache behaviour.
+- Public error mapping.
+
+## Unique test identities
+
+Every E2E run generates new email addresses using a timestamp and UUID. This prevents test collisions without deleting existing development data.
+
+## Owner projection handling
+
+The E2E test retries TODO creation only when the API returns:
+
+```text
+503 OWNER_PROJECTION_NOT_READY
+```
+
+Other unexpected responses fail immediately.
+
+## Destructive failure tests
+
+Redis, PostgreSQL, RabbitMQ and service-stop scenarios are not included in the regular automated suite because they alter shared Docker state. They are executed as controlled manual reliability tests.

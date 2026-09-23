@@ -136,7 +136,9 @@ implements RegistrationRepository {
     user.id,
     event.eventType,
     event.eventVersion,
-    JSON.stringify(event),
+    JSON.stringify(
+  event.payload,
+),
     event.requestId,
     data.createdAt,
   ],

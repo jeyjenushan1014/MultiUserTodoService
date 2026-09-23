@@ -9,6 +9,8 @@ import type {
   ListTodosResponse,
   UpdateTodoRequest,
   UpdateTodoResponse,
+  ShareTodoResponse,
+  CreateTodoShareRequest
 } from "@todo/contracts";
 
 import {
@@ -630,4 +632,58 @@ export async function deleteTodoById(
 
     requestId,
   });
+}
+
+/*
+POST /internal/v1/todos/:todoId/shares
+*/
+export async function shareTodo(
+  todoId:
+    string,
+  request:
+    CreateTodoShareRequest,
+  identity:
+    CallerIdentity,
+  requestId:
+    string,
+): Promise<ShareTodoResponse> {
+  const endpoint =
+    new URL(
+      `/internal/v1/todos/${
+        encodeURIComponent(
+          todoId,
+        )
+      }/shares`,
+      env.TODO_SERVICE_URL,
+    );
+
+  const result =
+    await sendTodoRequest<
+      ShareTodoResponse
+    >({
+      method:
+        "POST",
+
+      endpoint,
+
+      identity,
+
+      requestId,
+
+      body:
+        request,
+    });
+
+  if (
+    result === undefined ||
+    !isRecord(result)
+  ) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "TODO service returned an invalid response",
+    );
+  }
+
+  return result;
 }

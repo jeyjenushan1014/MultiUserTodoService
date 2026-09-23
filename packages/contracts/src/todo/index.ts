@@ -39,6 +39,8 @@ export type {
   UpdateTodoResponse,
 } from "./update.todo.contract.js";
 
+export * from "./share/index.js"
+
 
 
 

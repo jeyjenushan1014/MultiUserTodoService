@@ -5244,3 +5244,50 @@ The sharing model supports:
 - sharing again after withdrawal.
 
 Recipient identity is represented by the stable Account Service user ID rather than a copied email address.
+
+
+
+## Share a TODO
+
+```http
+POST /api/v1/todos/{todoId}/shares
+```
+
+Authentication is required.
+
+Request:
+
+```json
+{
+  "recipientEmail": "recipient@example.com"
+}
+```
+
+Successful response:
+
+```http
+HTTP/1.1 201 Created
+```
+
+```json
+{
+  "id": "22222222-2222-4222-8222-222222222222",
+  "todoId": "11111111-1111-4111-8111-111111111111",
+  "ownerId": "33333333-3333-4333-8333-333333333333",
+  "recipientId": "44444444-4444-4444-8444-444444444444",
+  "permission": "state-update",
+  "sharedAt": "2026-09-23T17:30:00.000Z"
+}
+```
+
+Possible errors:
+
+| Status | Code | Meaning |
+|---:|---|---|
+| 400 | `VALIDATION_ERROR` | Invalid TODO ID, email or request shape |
+| 401 | authentication error | Missing or invalid access token |
+| 404 | `ACCOUNT_NOT_FOUND` | Recipient account does not exist |
+| 404 | `TODO_NOT_FOUND` | TODO missing or not owned by caller |
+| 409 | `TODO_SELF_SHARE_NOT_ALLOWED` | Owner attempted to share with themselves |
+| 409 | `TODO_ALREADY_SHARED` | Active share already exists |
+| 429 | `RATE_LIMIT_EXCEEDED` | Gateway rate limit exceeded |

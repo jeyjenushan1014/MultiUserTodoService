@@ -7,6 +7,14 @@ import {
 } from "./update/update.todo.controller.js";
 
 import {
+  shareTodoController,
+} from "./share/share.todo.controller.js";
+
+import {
+  createTodoShareBodySchema,
+} from "./share/share.todo.validation.js";
+
+import {
   updateTodoBodySchema,
 } from "./update/update.todo.validation.js";
 
@@ -105,6 +113,17 @@ todoRouter.get(
     listTodosQuerySchema,
   ),
   listTodosController,
+);
+
+todoRouter.post(
+  "/:todoId/shares",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  validateBody(
+    createTodoShareBodySchema,
+  ),
+  shareTodoController,
 );
 
 todoRouter.get(

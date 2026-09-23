@@ -7,6 +7,14 @@ import {
 } from "../../middleware/authenticate.middleware.js";
 
 import {
+  shareTodoController,
+} from "./share/share-todo.controller.js";
+
+import {
+  shareTodoBodySchema,
+} from "./share/share-todo.validation.js";
+
+import {
   validateBody,
 } from "../../middleware/validate-body.middleware.js";
 
@@ -83,6 +91,17 @@ todoRouter.get(
     listTodosQuerySchema,
   ),
   listTodosController,
+);
+
+todoRouter.post(
+  "/:todoId/shares",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  validateBody(
+    shareTodoBodySchema,
+  ),
+  shareTodoController,
 );
 
 todoRouter.get(

@@ -16,6 +16,12 @@ import type {
   RegisterAccountResponse,
 } from "@todo/contracts";
 
+
+import type {
+   ResolveAccountRequest,
+   ResolveAccountResponse
+    } from "@todo/contracts";
+
 import {
   AppError,
   encodeIdentity,
@@ -711,4 +717,46 @@ export async function confirmPasswordReset(
     body:
       request,
   });
+}
+/*
+Resolves an account email into the stable Account
+Service user identifier.
+
+This is an internal service operation and does not
+require a signed caller identity.
+*/
+export async function resolveAccountByEmail(
+  request:
+    ResolveAccountRequest,
+  requestId:
+    string,
+): Promise<ResolveAccountResponse> {
+  const result =
+    await sendAccountRequest<
+      ResolveAccountResponse
+    >({
+      method:
+        "POST",
+
+      path:
+        "/internal/v1/accounts/resolve",
+
+      requestId,
+
+      body:
+        request,
+    });
+
+  if (
+    result === undefined ||
+    !isRecord(result)
+  ) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
 }

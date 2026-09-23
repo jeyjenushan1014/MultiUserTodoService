@@ -4437,3 +4437,199 @@ The API does not reveal whether another user owns the requested TODO.
 | TODO soft-deleted | 404 | `TODO_NOT_FOUND` |
 | TODO Service unavailable | 503 | `SERVICE_UNAVAILABLE` |
 | TODO Service timeout | 504 | `DOWNSTREAM_TIMEOUT` |
+
+
+# Part 9 — Partially Update a TODO
+
+## Endpoint
+
+Updates one or more editable fields of an active TODO owned by the authenticated user.
+
+```http
+PATCH /api/v1/todos/{todoId}
+```
+
+## Authentication
+
+```http
+Authorization: Bearer <access-token>
+```
+
+## Path parameter
+
+| Parameter | Type | Required |
+|---|---|---:|
+| `todoId` | UUID | Yes |
+
+## Request fields
+
+| Field | Type | Required | Behaviour |
+|---|---|---:|---|
+| `title` | String | No | Trimmed, non-empty, maximum 200 characters |
+| `description` | String or null | No | Trimmed; blank becomes null |
+| `state` | String | No | `pending`, `in_progress`, `completed`, `cancelled` |
+| `dueDate` | ISO-8601 string or null | No | Null removes the due date |
+
+At least one field is required.
+
+Unknown and protected fields are rejected.
+
+## Title-only update
+
+```http
+PATCH /api/v1/todos/9f134ed0-4503-4a23-a189-f065fe9fd838
+Content-Type: application/json
+Authorization: Bearer <access-token>
+```
+
+```json
+{
+  "title": "Updated TODO title"
+}
+```
+
+## State-only update
+
+```json
+{
+  "state": "completed"
+}
+```
+
+## Clear description
+
+```json
+{
+  "description": null
+}
+```
+
+## Clear due date
+
+```json
+{
+  "dueDate": null
+}
+```
+
+## Multiple-field update
+
+```json
+{
+  "title": "Updated TODO",
+  "description": "Updated description",
+  "state": "in_progress",
+  "dueDate": "2026-09-30T10:00:00.000Z"
+}
+```
+
+## Successful response
+
+```http
+200 OK
+```
+
+```json
+{
+  "id": "9f134ed0-4503-4a23-a189-f065fe9fd838",
+  "ownerId": "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+  "title": "Updated TODO",
+  "description": "Updated description",
+  "state": "in_progress",
+  "dueDate": "2026-09-30T10:00:00.000Z",
+  "createdAt": "2026-09-22T08:00:00.000Z",
+  "updatedAt": "2026-09-23T08:00:00.000Z"
+}
+```
+
+## Empty update
+
+```json
+{}
+```
+
+Response:
+
+```http
+400 Bad Request
+```
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request body is invalid",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## Invalid state
+
+```json
+{
+  "state": "deleted"
+}
+```
+
+Response:
+
+```http
+400 Bad Request
+```
+
+## Duplicate active title
+
+```http
+409 Conflict
+```
+
+```json
+{
+  "error": {
+    "code": "TODO_TITLE_ALREADY_EXISTS",
+    "message": "An active TODO with this title already exists",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+The same title remains allowed for different owners.
+
+## Not found response
+
+The same response is used when:
+
+- The TODO does not exist.
+- The TODO belongs to another owner.
+- The TODO was soft-deleted.
+
+```http
+404 Not Found
+```
+
+```json
+{
+  "error": {
+    "code": "TODO_NOT_FOUND",
+    "message": "TODO was not found",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## Status summary
+
+| Situation | HTTP status | Error code |
+|---|---:|---|
+| Update succeeded | 200 | Not applicable |
+| Invalid UUID | 400 | `VALIDATION_ERROR` |
+| Invalid or empty body | 400 | `VALIDATION_ERROR` |
+| Missing token | 401 | `AUTHENTICATION_REQUIRED` |
+| Invalid token | 401 | `INVALID_ACCESS_TOKEN` |
+| TODO not found | 404 | `TODO_NOT_FOUND` |
+| Cross-owner update | 404 | `TODO_NOT_FOUND` |
+| Duplicate active title | 409 | `TODO_TITLE_ALREADY_EXISTS` |
+| TODO Service unavailable | 503 | `SERVICE_UNAVAILABLE` |
+| TODO Service timeout | 504 | `DOWNSTREAM_TIMEOUT` |
+

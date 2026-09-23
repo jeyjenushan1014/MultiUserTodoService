@@ -19,6 +19,12 @@ import type {
 
 import type {
   
+  UpdateTodoRequest,
+  UpdateTodoResponse,
+} from "@todo/contracts";
+
+import type {
+  
   GetTodoResponse,
 } from "@todo/contracts";
 
@@ -137,7 +143,9 @@ function createIdentityHeaders(
 interface TodoRequestOptions {
   readonly method:
     | "GET"
-    | "POST";
+    | "POST"
+    | "PATCH"
+    | "DELETE"
   readonly endpoint: URL;
   readonly requestId: string;
   readonly identity: CallerIdentity;
@@ -459,6 +467,42 @@ export async function getTodoById(
       endpoint,
       identity,
       requestId,
+    });
+
+  if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "TODO service returned an invalid response",
+    );
+  }
+
+  return result;
+}
+
+export async function updateTodo(
+  todoId: string,
+  body: UpdateTodoRequest,
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<UpdateTodoResponse> {
+  const endpoint =
+    new URL(
+      `/internal/v1/todos/${encodeURIComponent(
+        todoId,
+      )}`,
+      env.TODO_SERVICE_URL,
+    );
+
+  const result =
+    await sendTodoRequest<
+      UpdateTodoResponse
+    >({
+      method: "PATCH",
+      endpoint,
+      identity,
+      requestId,
+      body,
     });
 
   if (result === undefined) {

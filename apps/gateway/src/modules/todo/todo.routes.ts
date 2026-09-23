@@ -32,6 +32,14 @@ import {
 } from "./todo.controller.js";
 
 import {
+  updateTodoController,
+} from "./update/update.todo.controller.js";
+
+import {
+  updateTodoBodySchema,
+} from "./update/update.todo.validation.js";
+
+import {
   createTodoSchema,
 } from "./todo.validation.js";
 import { validateQuery } from "../../middleware/validate-query.middleware.js";
@@ -64,4 +72,15 @@ todoRouter.get(
     getTodoParamsSchema,
   ),
   getTodoController,
+);
+
+todoRouter.patch(
+  "/:todoId",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  validateBody(
+    updateTodoBodySchema,
+  ),
+  updateTodoController,
 );

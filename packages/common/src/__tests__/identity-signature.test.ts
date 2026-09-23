@@ -16,100 +16,265 @@ import {
 } from "../security/identity-signature.js";
 
 const secret =
-  "this-is-a-test-secret-with-more-than-32-characters";
+  "test-internal-secret-with-at-least-32-characters";
 
-const identity:
-  InternalIdentityEnvelope = {
-    userId:
-      "a95fd118-f777-4500-9ea9-7d1a650fdadb",
-    sessionId:
-      "29686b93-e275-428d-a7ef-cd86267bb53f",
-    email: "user@example.com",
+function createIdentity():
+  InternalIdentityEnvelope {
+  return {
+    issuer:
+      "gateway",
+
+    audience:
+      "todo-service",
+
     requestId:
-      "49ba39a3-437e-48c8-bac0-b3fcb5f35ca2",
-    issuedAt: 1_750_000_000,
+      "b4f29a51-bcc9-4c7d-9a62-2562ff18ea0d",
+
+    issuedAt:
+      1_790_150_000,
+
+    expiresAt:
+      1_790_150_030,
+
+    userId:
+      "98671bf7-07fe-484c-a63b-884d58ffec54",
+
+    email:
+      "user@example.com",
+
+    sessionId:
+      "83a32d9d-7401-4576-896e-580afecba95a",
   };
+}
 
-describe("identity-signature utilities", () => {
-  it("encodes and decodes an identity", () => {
-    const encoded =
-      encodeIdentity(identity);
+describe(
+  "identity signature",
+  () => {
+    it(
+      "encodes and decodes a valid identity",
+      () => {
+        const identity =
+          createIdentity();
 
-    expect(
-      decodeIdentity(encoded),
-    ).toEqual(identity);
-  });
+        const encodedIdentity =
+          encodeIdentity(
+            identity,
+          );
 
-  it("accepts a correct signature", () => {
-    const encoded =
-      encodeIdentity(identity);
+        expect(
+          decodeIdentity(
+            encodedIdentity,
+          ),
+        ).toEqual(
+          identity,
+        );
+      },
+    );
 
-    const signature =
-      signIdentity(
-        encoded,
-        secret,
-      );
+    it(
+      "creates a hexadecimal SHA-256 signature",
+      () => {
+        const signature =
+          signIdentity(
+            encodeIdentity(
+              createIdentity(),
+            ),
+            secret,
+          );
 
-    expect(
-      verifyIdentitySignature(
-        encoded,
-        signature,
-        secret,
-      ),
-    ).toBe(true);
-  });
+        expect(
+          signature,
+        ).toMatch(
+          /^[0-9a-f]{64}$/u,
+        );
+      },
+    );
 
-  it("rejects a modified identity", () => {
-    const encoded =
-      encodeIdentity(identity);
+    it(
+      "accepts a valid signature",
+      () => {
+        const encodedIdentity =
+          encodeIdentity(
+            createIdentity(),
+          );
 
-    const signature =
-      signIdentity(
-        encoded,
-        secret,
-      );
+        const signature =
+          signIdentity(
+            encodedIdentity,
+            secret,
+          );
 
-    const modified =
-      `${encoded}modified`;
+        expect(
+          verifyIdentitySignature(
+            encodedIdentity,
+            signature,
+            secret,
+          ),
+        ).toBe(
+          true,
+        );
+      },
+    );
 
-    expect(
-      verifyIdentitySignature(
-        modified,
-        signature,
-        secret,
-      ),
-    ).toBe(false);
-  });
+    it(
+      "rejects a modified identity",
+      () => {
+        const originalIdentity =
+          encodeIdentity(
+            createIdentity(),
+          );
 
-  it("rejects a signature made with another secret", () => {
-    const encoded =
-      encodeIdentity(identity);
+        const signature =
+          signIdentity(
+            originalIdentity,
+            secret,
+          );
 
-    const signature =
-      signIdentity(
-        encoded,
-        "another-secret-with-more-than-32-characters",
-      );
+        const modifiedIdentity =
+          encodeIdentity({
+            ...createIdentity(),
 
-    expect(
-      verifyIdentitySignature(
-        encoded,
-        signature,
-        secret,
-      ),
-    ).toBe(false);
-  });
+            audience:
+              "account-service",
+          });
 
-  it("rejects a malformed signature", () => {
-    const encoded =
-      encodeIdentity(identity);
+        expect(
+          verifyIdentitySignature(
+            modifiedIdentity,
+            signature,
+            secret,
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
 
-    expect(
-      verifyIdentitySignature(
-        encoded,
-        "not-a-hex-signature",
-        secret,
-      ),
-    ).toBe(false);
-  });
-});
+    it(
+      "rejects a signature made with another secret",
+      () => {
+        const encodedIdentity =
+          encodeIdentity(
+            createIdentity(),
+          );
+
+        const signature =
+          signIdentity(
+            encodedIdentity,
+            "different-secret-with-at-least-32-characters",
+          );
+
+        expect(
+          verifyIdentitySignature(
+            encodedIdentity,
+            signature,
+            secret,
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+    it(
+      "rejects a malformed signature",
+      () => {
+        expect(
+          verifyIdentitySignature(
+            encodeIdentity(
+              createIdentity(),
+            ),
+            "invalid-signature",
+            secret,
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+    it(
+      "rejects identity JSON with missing fields",
+      () => {
+        const invalidIdentity =
+          Buffer
+            .from(
+              JSON.stringify({
+                issuer:
+                  "gateway",
+
+                audience:
+                  "todo-service",
+              }),
+              "utf8",
+            )
+            .toString(
+              "base64url",
+            );
+
+        expect(
+          () => decodeIdentity(
+            invalidIdentity,
+          ),
+        ).toThrow(
+          "Internal identity has an invalid structure",
+        );
+      },
+    );
+
+    it(
+      "rejects malformed JSON",
+      () => {
+        const invalidIdentity =
+          Buffer
+            .from(
+              "not-json",
+              "utf8",
+            )
+            .toString(
+              "base64url",
+            );
+
+        expect(
+          () => decodeIdentity(
+            invalidIdentity,
+          ),
+        ).toThrow(
+          "Internal identity is not valid Base64URL JSON",
+        );
+      },
+    );
+
+    it(
+      "rejects an expiry before the issue time",
+      () => {
+        const identity = {
+          ...createIdentity(),
+
+          expiresAt:
+            1_790_149_999,
+        };
+
+        const encodedIdentity =
+          Buffer
+            .from(
+              JSON.stringify(
+                identity,
+              ),
+              "utf8",
+            )
+            .toString(
+              "base64url",
+            );
+
+        expect(
+          () => decodeIdentity(
+            encodedIdentity,
+          ),
+        ).toThrow(
+          "Internal identity has an invalid structure",
+        );
+      },
+    );
+  },
+);

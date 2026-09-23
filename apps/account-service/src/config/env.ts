@@ -18,6 +18,12 @@ const environmentSchema =
       .min(1)
       .max(65_535)
       .default(3001),
+    INTERNAL_IDENTITY_MAX_AGE_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(60)
+    .default(30),
 
     RABBITMQ_URL:
   z

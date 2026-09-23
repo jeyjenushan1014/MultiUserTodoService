@@ -32,7 +32,8 @@ export type {
 export type {
   CallerIdentity,
   InternalIdentityEnvelope,
-} from "./identity/caller-identity.contract.js";
+  InternalServiceAudience,
+} from "./identity/index.js";
 
 export type {
   AuthenticatedAccount,

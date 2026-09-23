@@ -53,6 +53,13 @@ const environmentSchema = z.object({
    .default(
     "todo-platform",
    ),
+   INTERNAL_IDENTITY_TTL_SECONDS:
+  z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(60)
+    .default(30),
 
   
 

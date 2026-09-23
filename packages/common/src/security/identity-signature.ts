@@ -1,59 +1,40 @@
 /*
-This code creates a small signed identity mechanisim for communication between microservices.
+Internal signed identity flow:
 
-The main idea:
-identity Object -> JSON -> Base64URL -> HMAC signature 
--> receiver verifies signature -> decode identity
-
+Identity object
+  -> JSON
+  -> Base64URL
+  -> HMAC-SHA256 signature
+  -> receiver verifies signature
+  -> receiver decodes and validates identity
 */
 
-
 import {
-  createHmac,//Create a cryptographic signature
-  timingSafeEqual,//used to securely compare 2 signatures
+  createHmac,
+  timingSafeEqual,
 } from "node:crypto";
 
 import type {
   InternalIdentityEnvelope,
 } from "@todo/contracts";
 
+import {
+  isInternalIdentityEnvelope,
+} from "./internal-identity.validator.js";
 
-//This functions accepts an identity object and returns a string
 /*
-Javascript object -> JSON String -> UTF-8 bytes -> Base64URL string
+Creates the expected HMAC signature as raw bytes.
+
+Keeping this operation in one function prevents the
+signing and verification implementations from
+becoming different.
 */
-export function encodeIdentity(
-  identity: InternalIdentityEnvelope,
-): string {
-  return Buffer
-    .from(
-      JSON.stringify(identity),
-      "utf8",
-    )
-    .toString("base64url");
-}
-
-
-// It can get the object from the Base64URL
-export function decodeIdentity(
-  encodedIdentity: string,
-): InternalIdentityEnvelope {
-  const decoded = Buffer
-    .from(
-      encodedIdentity,
-      "base64url",
-    )
-    .toString("utf8");
-
-  return JSON.parse(
-    decoded,
-  ) as InternalIdentityEnvelope;
-}
-
-export function signIdentity(
-  encodedIdentity: string,
-  secret: string,
-): string {
+function createSignatureBuffer(
+  encodedIdentity:
+    string,
+  secret:
+    string,
+): Buffer {
   return createHmac(
     "sha256",
     secret,
@@ -62,16 +43,108 @@ export function signIdentity(
       encodedIdentity,
       "utf8",
     )
-    .digest("hex");
+    .digest();
 }
 
+/*
+Encodes the trusted identity for transmission in an
+HTTP header.
+*/
+export function encodeIdentity(
+  identity:
+    InternalIdentityEnvelope,
+): string {
+  return Buffer
+    .from(
+      JSON.stringify(
+        identity,
+      ),
+      "utf8",
+    )
+    .toString(
+      "base64url",
+    );
+}
+
+/*
+Decodes and validates the identity at runtime.
+
+A TypeScript assertion is not used here because
+external request headers are untrusted runtime data.
+*/
+export function decodeIdentity(
+  encodedIdentity:
+    string,
+): InternalIdentityEnvelope {
+  let parsedIdentity:
+    unknown;
+
+  try {
+    const decodedIdentity =
+      Buffer
+        .from(
+          encodedIdentity,
+          "base64url",
+        )
+        .toString(
+          "utf8",
+        );
+
+    parsedIdentity =
+      JSON.parse(
+        decodedIdentity,
+      ) as unknown;
+  } catch {
+    throw new Error(
+      "Internal identity is not valid Base64URL JSON",
+    );
+  }
+
+  if (
+    !isInternalIdentityEnvelope(
+      parsedIdentity,
+    )
+  ) {
+    throw new Error(
+      "Internal identity has an invalid structure",
+    );
+  }
+
+  return parsedIdentity;
+}
+
+/*
+Creates a 64-character hexadecimal HMAC-SHA256
+signature.
+*/
+export function signIdentity(
+  encodedIdentity:
+    string,
+  secret:
+    string,
+): string {
+  return createSignatureBuffer(
+    encodedIdentity,
+    secret,
+  ).toString(
+    "hex",
+  );
+}
+
+/*
+Verifies the hexadecimal HMAC signature using a
+timing-safe comparison.
+*/
 export function verifyIdentitySignature(
-  encodedIdentity: string,
-  receivedSignature: string,
-  secret: string,
+  encodedIdentity:
+    string,
+  receivedSignature:
+    string,
+  secret:
+    string,
 ): boolean {
   if (
-    !/^[0-9a-f]{64}$/i.test(
+    !/^[0-9a-f]{64}$/iu.test(
       receivedSignature,
     )
   ) {
@@ -79,12 +152,9 @@ export function verifyIdentitySignature(
   }
 
   const expectedSignature =
-    Buffer.from(
-      signIdentity(
-        encodedIdentity,
-        secret,
-      ),
-      "hex",
+    createSignatureBuffer(
+      encodedIdentity,
+      secret,
     );
 
   const suppliedSignature =
@@ -93,12 +163,15 @@ export function verifyIdentitySignature(
       "hex",
     );
 
-  return (
-    expectedSignature.length ===
-      suppliedSignature.length &&
-    timingSafeEqual(
-      expectedSignature,
-      suppliedSignature,
-    )
+  if (
+    expectedSignature.length !==
+    suppliedSignature.length
+  ) {
+    return false;
+  }
+
+  return timingSafeEqual(
+    expectedSignature,
+    suppliedSignature,
   );
 }

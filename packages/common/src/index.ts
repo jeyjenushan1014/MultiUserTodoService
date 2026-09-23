@@ -38,3 +38,7 @@ export {
   createOpaqueToken,
   hashOpaqueToken,
 } from "./security/opaque-token.js";
+
+export {
+  isInternalIdentityEnvelope,
+} from "./security/internal-identity.validator.js";

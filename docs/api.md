@@ -5078,3 +5078,55 @@ The tests confirm that missing, deleted and cross-owner resources return:
 ## Dependency failure verification
 
 Redis, PostgreSQL and downstream service outages are verified separately because these tests intentionally alter the running Docker environment.
+
+## Internal Service Authentication
+
+Internal Account Service and TODO Service endpoints are not public client APIs. Public clients access business operations through the Gateway.
+
+Service-only internal requests use:
+
+```http
+X-Internal-Service-Key: configured-service-secret
+X-Request-ID: trusted-request-id
+```
+
+Authenticated internal requests additionally use:
+
+```http
+X-Internal-Identity: base64url-encoded-identity
+X-Internal-Signature: hexadecimal-hmac-sha256-signature
+```
+
+The signed identity is short-lived and bound to the target service and request ID.
+
+Invalid internal authentication returns:
+
+```http
+HTTP/1.1 401 Unauthorized
+```
+
+Example:
+
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED_INTERNAL_REQUEST",
+    "message": "Internal request authentication failed",
+    "requestId": "9d591bcc-859c-4e88-b95c-bf391ead793d"
+  }
+}
+```
+
+An invalid or expired caller identity may return:
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_IDENTITY_INVALID",
+    "message": "Internal identity authentication failed",
+    "requestId": "9d591bcc-859c-4e88-b95c-bf391ead793d"
+  }
+}
+```
+
+Internal authentication headers must never be accepted from a public client as proof of authentication. The Gateway creates the trusted internal identity only after validating the public access token.

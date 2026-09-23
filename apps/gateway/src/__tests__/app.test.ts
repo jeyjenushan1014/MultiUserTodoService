@@ -1,6 +1,4 @@
-import {
-  randomUUID,
-} from "node:crypto";
+
 
 import request from "supertest";
 
@@ -100,25 +98,39 @@ describe("Gateway application", () => {
     ).toMatch(UUID_PATTERN);
   });
 
-  it("preserves a valid request ID", async () => {
-    const requestId =
-      randomUUID();
+it(
+  "replaces a valid caller-supplied request ID",
+  async () => {
+    const callerRequestId =
+      "30031ba4-f863-4345-8552-34c450ea1c89";
 
     const response =
       await request(app)
         .get("/health")
         .set(
           REQUEST_ID_HEADER,
-          requestId,
+          callerRequestId,
         )
         .expect(200);
 
-    expect(
+    const trustedRequestId =
       response.headers[
         REQUEST_ID_HEADER
-      ],
-    ).toBe(requestId);
-  });
+      ];
+
+    expect(
+      trustedRequestId,
+    ).not.toBe(
+      callerRequestId,
+    );
+
+    expect(
+      trustedRequestId,
+    ).toMatch(
+      UUID_PATTERN,
+    );
+  },
+);
 
   it("replaces an invalid request ID", async () => {
     const invalidRequestId =

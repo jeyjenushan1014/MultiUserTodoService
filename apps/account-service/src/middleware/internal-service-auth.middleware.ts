@@ -1,3 +1,12 @@
+/*
+Protects Account Service internal routes.
+
+Registration, login, refresh and password-reset
+operations do not yet have an authenticated caller,
+but they must still prove that the request originated
+from the Gateway.
+*/
+
 import {
   timingSafeEqual,
 } from "node:crypto";
@@ -14,25 +23,45 @@ import {
   env,
 } from "../config/env.js";
 
-function safeEqual(
-  received: string,
-  expected: string,
+const INTERNAL_SERVICE_KEY_HEADER =
+  "x-internal-service-key";
+
+function createAuthenticationError():
+  AppError {
+  return new AppError(
+    401,
+    "UNAUTHORIZED_INTERNAL_REQUEST",
+    "Internal request authentication failed",
+  );
+}
+
+function secretsMatch(
+  suppliedSecret:
+    string,
+  expectedSecret:
+    string,
 ): boolean {
-  const receivedBuffer =
-    Buffer.from(received, "utf8");
+  const suppliedBuffer =
+    Buffer.from(
+      suppliedSecret,
+      "utf8",
+    );
 
   const expectedBuffer =
-    Buffer.from(expected, "utf8");
+    Buffer.from(
+      expectedSecret,
+      "utf8",
+    );
 
   if (
-    receivedBuffer.length !==
+    suppliedBuffer.length !==
     expectedBuffer.length
   ) {
     return false;
   }
 
   return timingSafeEqual(
-    receivedBuffer,
+    suppliedBuffer,
     expectedBuffer,
   );
 }
@@ -43,24 +72,21 @@ export const requireInternalService:
     _response,
     next,
   ): void => {
-    const receivedSecret =
+    const suppliedServiceKey =
       request.header(
-        "x-internal-service-key",
+        INTERNAL_SERVICE_KEY_HEADER,
       );
 
     if (
-      receivedSecret === undefined ||
-      !safeEqual(
-        receivedSecret,
+      suppliedServiceKey === undefined ||
+      suppliedServiceKey.length === 0 ||
+      !secretsMatch(
+        suppliedServiceKey,
         env.INTERNAL_SERVICE_SECRET,
       )
     ) {
       next(
-        new AppError(
-          401,
-          "INTERNAL_SERVICE_UNAUTHORIZED",
-          "Internal service authentication failed",
-        ),
+        createAuthenticationError(),
       );
 
       return;

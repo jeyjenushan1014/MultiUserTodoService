@@ -4997,3 +4997,45 @@ CACHE_TTL_SECONDS
 ```
 
 This avoids expensive Redis key scanning.
+
+# Part 13 — Redis Outage Consistency
+
+## Public API behaviour
+
+The public API structures do not change.
+
+Redis remains an optional performance dependency. PostgreSQL remains the source of truth.
+
+## Mutation during Redis outage
+
+If Redis is unavailable during a successful create, update or delete:
+
+1. The PostgreSQL mutation succeeds.
+2. PostgreSQL increments the owner’s durable cache version in the same transaction.
+3. The API returns its normal successful response.
+4. Reads use PostgreSQL while Redis is unavailable.
+5. After Redis recovers, the service uses the PostgreSQL version.
+6. Older cached generations remain unreachable.
+
+## Read during Redis outage
+
+Read endpoints continue using PostgreSQL:
+
+```http
+GET /api/v1/todos
+GET /api/v1/todos/{todoId}
+```
+
+Redis unavailability does not produce incorrect cached data.
+
+## Redis recovery
+
+When Redis returns, its version marker is compared with PostgreSQL.
+
+If the versions differ, Redis is synchronized to the PostgreSQL value.
+
+PostgreSQL always wins.
+
+## Consistency guarantee
+
+An old cached value cannot become valid again after Redis recovery because cache keys contain the durable PostgreSQL version.

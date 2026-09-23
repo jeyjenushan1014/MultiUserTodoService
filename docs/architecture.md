@@ -4674,3 +4674,78 @@ Part 13 introduces durable invalidation recovery for this failure scenario.
 | CR-5 | Redis invalidation errors do not lose successful database writes |
 | CR-6 | Invalidation success and failure are logged |
 | QR-3 | Invalidation is separated through an interface and decorators |
+
+# Part 13 — Durable Cache Consistency
+
+## Source of truth
+
+Each TODO owner has a durable PostgreSQL cache version:
+
+```text
+todo_owners.cache_version
+```
+
+A database trigger increments this value in the same transaction as every TODO insert, update or delete.
+
+```mermaid
+sequenceDiagram
+    participant API as TODO Service
+    participant PostgreSQL
+    participant Redis
+
+    API->>PostgreSQL: Mutate TODO
+    PostgreSQL->>PostgreSQL: Increment owner cache version
+    PostgreSQL-->>API: Commit mutation and version
+    API->>Redis: Synchronize durable version
+    alt Redis available
+        Redis-->>API: Version stored
+    else Redis unavailable
+        API->>API: Log and continue
+    end
+```
+
+## Read path
+
+Before using a cached TODO response:
+
+1. Confirm Redis is available.
+2. Read the durable owner version from PostgreSQL.
+3. Reconcile Redis’s marker to that value.
+4. Build the item or list key using the durable version.
+5. Read the cached value.
+6. Fall back to PostgreSQL on any cache failure.
+
+## Correctness during outages
+
+The invalidation state does not depend on Redis availability.
+
+The durable version is committed with the business mutation. Redis can therefore be unavailable for the complete mutation without losing invalidation information.
+
+## No local block map
+
+The implementation does not maintain per-user cache-block entries in application memory.
+
+This prevents:
+
+- Memory growth during long Redis outages.
+- Inconsistent behaviour across service instances.
+- Lost invalidation state after restart.
+- Timer accumulation.
+
+## Performance trade-off
+
+Every cached read performs one indexed scalar lookup against `todo_owners`.
+
+This is accepted to guarantee correctness while still avoiding heavier TODO list, filtering, sorting and pagination queries.
+
+## Requirements satisfied
+
+| Requirement | Implementation |
+|---|---|
+| CR-3 | Durable versions are owner-scoped |
+| CR-4 | Mutation and version increment occur in one transaction |
+| CR-5 | Redis failure cannot reactivate stale cached data |
+| CR-6 | Reconciliation and failures are logged |
+| DR-6 | Version ownership follows the TODO owner projection |
+| DR-7 | Owner version lookup uses the owner primary key |
+| DR-9 | Mutation and durable invalidation are transactionally linked |

@@ -10,6 +10,10 @@ import {
   createTodoVersionKey,
 } from "./todo.cache.keys.js";
 
+import {
+  getDurableTodoCacheVersion,
+} from "./postgres.todo.cache.version.js";
+
 import type {
   TodoCacheInvalidator,
 } from "./todo.cache.invalidator.interface.js";
@@ -19,60 +23,91 @@ implements TodoCacheInvalidator {
   public async invalidateOwner(
     ownerId: string,
   ): Promise<void> {
-    if (!cache.isReady) {
-      /*
-       * The database mutation has already succeeded.
-       * A cache infrastructure failure must not change
-       * that successful business result into an API
-       * failure.
-       *
-       * Part 13 adds durable recovery for this case.
-       */
+    /*
+     * The PostgreSQL trigger has already incremented
+     * the durable version inside the TODO mutation
+     * transaction.
+     */
+    const durableVersion =
+      await getDurableTodoCacheVersion(
+        ownerId,
+      );
+
+    if (
+      durableVersion ===
+      undefined
+    ) {
       logger.warn(
         {
           ownerId,
           cacheOperation:
-            "invalidate",
+            "synchronize-version",
+        },
+        "TODO owner cache version was not found",
+      );
+
+      return;
+    }
+
+    if (!cache.isReady) {
+      /*
+       * No data is lost here. PostgreSQL already owns
+       * the new durable version.
+       */
+      logger.warn(
+        {
+          ownerId,
+          durableVersion,
           cacheAvailable:
             false,
+          cacheOperation:
+            "synchronize-version",
         },
-        "TODO cache invalidation skipped because Redis is unavailable",
+        "Redis unavailable; durable TODO cache version remains in PostgreSQL",
       );
 
       return;
     }
 
     try {
-      const newVersion =
-        await cache.incr(
-          createTodoVersionKey(
-            ownerId,
-          ),
-        );
+      /*
+       * SET is used instead of INCR.
+       *
+       * PostgreSQL is now the authoritative version
+       * owner, so Redis must be synchronized to that
+       * exact value.
+       */
+      await cache.set(
+        createTodoVersionKey(
+          ownerId,
+        ),
+        durableVersion,
+      );
 
       logger.info(
         {
           ownerId,
           cacheOperation:
-            "invalidate",
+            "synchronize-version",
           cacheVersion:
-            newVersion,
+            durableVersion,
         },
-        "TODO cache version incremented",
+        "Redis TODO cache version synchronized with PostgreSQL",
       );
     } catch (error) {
       /*
-       * Do not throw here because the PostgreSQL
-       * mutation has already committed.
+       * The database mutation and durable version
+       * increment have already committed.
        */
       logger.warn(
         {
           error,
           ownerId,
+          durableVersion,
           cacheOperation:
-            "invalidate",
+            "synchronize-version",
         },
-        "TODO cache invalidation failed after successful database mutation",
+        "Redis TODO cache version synchronization failed",
       );
     }
   }

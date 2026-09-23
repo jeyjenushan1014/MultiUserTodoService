@@ -30,12 +30,19 @@ import {
   createTodoVersionKey,
 } from "./todo.cache.keys.js";
 
+import {
+  getDurableTodoCacheVersion,
+} from "./postgres.todo.cache.version.js";
+
 import type {
   TodoItemCacheLookup,
   TodoListCacheLookup,
   TodoReadCache,
 } from "./todo.read.cache.interface.js";
 
+type CacheResource =
+  | "todo-item"
+  | "todo-list";
 
 function createListQueryIdentifier(
   parameters:
@@ -44,12 +51,14 @@ function createListQueryIdentifier(
   return [
     `page=${parameters.page}`,
     `pageSize=${parameters.pageSize}`,
-    `state=${parameters.state ?? "all"}`,
+    `state=${
+      parameters.state ??
+      "all"
+    }`,
     `sortBy=${parameters.sortBy}`,
     `sortOrder=${parameters.sortOrder}`,
   ].join("&");
 }
-
 
 function parseJson(
   serializedValue: string,
@@ -63,64 +72,146 @@ function parseJson(
   }
 }
 
-
+/*
+ * PostgreSQL is the authoritative cache-version
+ * owner.
+ *
+ * Redis stores only a synchronized copy of the
+ * version for operational visibility.
+ */
 async function getCacheVersion(
   ownerId: string,
-): Promise<string | undefined> {
+): Promise<
+  string | undefined
+> {
+  /*
+   * When Redis is unavailable, there is no reason
+   * to query the PostgreSQL cache version because
+   * no cached value can be read.
+   */
   if (!cache.isReady) {
     return undefined;
   }
 
+  let durableVersion:
+    string | undefined;
+
   try {
-    const version =
-      await cache.get(
-        createTodoVersionKey(
-          ownerId,
-        ),
+    durableVersion =
+      await getDurableTodoCacheVersion(
+        ownerId,
+      );
+  } catch (error) {
+    /*
+     * If the durable PostgreSQL version cannot be
+     * verified, cached data must not be trusted.
+     */
+    logger.warn(
+      {
+        error,
+        ownerId,
+        cacheOperation:
+          "read-durable-version",
+        cacheAvailable:
+          cache.isReady,
+      },
+      "Durable TODO cache version read failed; bypassing cache",
+    );
+
+    return undefined;
+  }
+
+  if (
+    durableVersion ===
+    undefined
+  ) {
+    logger.warn(
+      {
+        ownerId,
+        cacheOperation:
+          "read-durable-version",
+        cacheAvailable:
+          cache.isReady,
+      },
+      "TODO owner cache version was not found; bypassing cache",
+    );
+
+    return undefined;
+  }
+
+  try {
+    const versionKey =
+      createTodoVersionKey(
+        ownerId,
       );
 
-    if (version === null) {
-      return "0";
-    }
+    const redisVersion =
+      await cache.get(
+        versionKey,
+      );
 
-    if (!/^\d+$/.test(version)) {
-      logger.warn(
+    if (
+      redisVersion !==
+      durableVersion
+    ) {
+      /*
+       * Redis may contain:
+       *
+       * 1. No version after a Redis restart.
+       * 2. An old version after an outage.
+       * 3. A value from an earlier deployment.
+       *
+       * PostgreSQL always wins.
+       */
+      await cache.set(
+        versionKey,
+        durableVersion,
+      );
+
+      logger.info(
         {
+          ownerId,
           cacheOperation:
-            "read-version",
+            "reconcile-version",
           cacheAvailable:
             true,
-          ownerId,
+          durableVersion,
+          previousRedisVersion:
+            redisVersion,
         },
-        "Invalid TODO cache version; bypassing cache",
+        "Redis TODO cache version reconciled with PostgreSQL",
       );
-
-      return undefined;
     }
 
-    return version;
+    /*
+     * Never return redisVersion here.
+     *
+     * Cache keys must always use the durable
+     * PostgreSQL version.
+     */
+    return durableVersion;
   } catch (error) {
     logger.warn(
       {
         error,
+        ownerId,
+        durableVersion,
         cacheOperation:
-          "read-version",
+          "reconcile-version",
         cacheAvailable:
           false,
-        ownerId,
       },
-      "TODO cache version read failed",
+      "Redis TODO cache version reconciliation failed; bypassing cache",
     );
 
     return undefined;
   }
 }
 
-
 async function readCacheValue(
   cacheKey: string,
   resourceType:
-    "todo-item" | "todo-list",
+    CacheResource,
 ): Promise<
   string | null | undefined
 > {
@@ -138,10 +229,13 @@ async function readCacheValue(
       {
         cacheOperation:
           "read",
+
         cacheResource:
           resourceType,
+
         cacheHit:
           value !== null,
+
         cacheAvailable:
           true,
       },
@@ -155,12 +249,16 @@ async function readCacheValue(
     logger.warn(
       {
         error,
+
         cacheOperation:
           "read",
+
         cacheResource:
           resourceType,
+
         cacheHit:
           false,
+
         cacheAvailable:
           false,
       },
@@ -170,7 +268,6 @@ async function readCacheValue(
     return undefined;
   }
 }
-
 
 async function deleteInvalidValue(
   cacheKey: string,
@@ -195,12 +292,11 @@ async function deleteInvalidValue(
   }
 }
 
-
 async function writeCacheValue(
   cacheKey: string,
   value: unknown,
   resourceType:
-    "todo-item" | "todo-list",
+    CacheResource,
 ): Promise<void> {
   if (!cache.isReady) {
     return;
@@ -222,10 +318,13 @@ async function writeCacheValue(
       {
         cacheOperation:
           "write",
+
         cacheResource:
           resourceType,
+
         cacheAvailable:
           true,
+
         cacheTtlSeconds:
           env.CACHE_TTL_SECONDS,
       },
@@ -235,10 +334,13 @@ async function writeCacheValue(
     logger.warn(
       {
         error,
+
         cacheOperation:
           "write",
+
         cacheResource:
           resourceType,
+
         cacheAvailable:
           false,
       },
@@ -246,7 +348,6 @@ async function writeCacheValue(
     );
   }
 }
-
 
 export class RedisTodoReadCache
 implements TodoReadCache {
@@ -256,12 +357,25 @@ implements TodoReadCache {
   ): Promise<
     TodoItemCacheLookup | undefined
   > {
+    /*
+     * This returns the PostgreSQL version.
+     * It never trusts Redis as the authoritative
+     * version source.
+     */
     const version =
       await getCacheVersion(
         ownerId,
       );
 
-    if (version === undefined) {
+    if (
+      version ===
+      undefined
+    ) {
+      /*
+       * Returning undefined instructs the cache
+       * decorator to bypass Redis completely and use
+       * PostgreSQL.
+       */
       return undefined;
     }
 
@@ -282,6 +396,10 @@ implements TodoReadCache {
       serializedValue ===
       undefined
     ) {
+      /*
+       * Redis command failure or Redis became
+       * unavailable after version resolution.
+       */
       return undefined;
     }
 
@@ -289,6 +407,11 @@ implements TodoReadCache {
       serializedValue ===
       null
     ) {
+      /*
+       * Redis is available, but this key does not
+       * exist. The decorator can query PostgreSQL
+       * and store the result using this exact key.
+       */
       return {
         cacheKey,
       };
@@ -306,8 +429,12 @@ implements TodoReadCache {
         {
           cacheOperation:
             "validate",
+
           cacheResource:
             "todo-item",
+
+          cacheHit:
+            false,
         },
         "Invalid TODO item cache value; using PostgreSQL",
       );
@@ -322,9 +449,11 @@ implements TodoReadCache {
     }
 
     /*
-     * Defence in depth against a cache entry
-     * stored under an incorrect owner or
-     * item key.
+     * Defence in depth:
+     *
+     * Even though the key contains the owner and
+     * TODO ID, the cached payload must contain the
+     * same values.
      */
     if (
       parsed.data.ownerId !==
@@ -336,8 +465,12 @@ implements TodoReadCache {
         {
           cacheOperation:
             "validate-ownership",
+
           cacheResource:
             "todo-item",
+
+          cacheHit:
+            false,
         },
         "TODO cache ownership mismatch; using PostgreSQL",
       );
@@ -353,11 +486,11 @@ implements TodoReadCache {
 
     return {
       cacheKey,
+
       value:
         parsed.data,
     };
   }
-
 
   public async storeItem(
     cacheKey: string,
@@ -370,19 +503,24 @@ implements TodoReadCache {
     );
   }
 
-
   public async lookupList(
     parameters:
       ListTodosParameters,
   ): Promise<
     TodoListCacheLookup | undefined
   > {
+    /*
+     * The owner version comes from PostgreSQL.
+     */
     const version =
       await getCacheVersion(
         parameters.ownerId,
       );
 
-    if (version === undefined) {
+    if (
+      version ===
+      undefined
+    ) {
       return undefined;
     }
 
@@ -433,8 +571,12 @@ implements TodoReadCache {
         {
           cacheOperation:
             "validate",
+
           cacheResource:
             "todo-list",
+
+          cacheHit:
+            false,
         },
         "Invalid TODO list cache value; using PostgreSQL",
       );
@@ -460,8 +602,12 @@ implements TodoReadCache {
         {
           cacheOperation:
             "validate-ownership",
+
           cacheResource:
             "todo-list",
+
+          cacheHit:
+            false,
         },
         "TODO list cache ownership mismatch; using PostgreSQL",
       );
@@ -487,7 +633,6 @@ implements TodoReadCache {
       },
     };
   }
-
 
   public async storeList(
     cacheKey: string,

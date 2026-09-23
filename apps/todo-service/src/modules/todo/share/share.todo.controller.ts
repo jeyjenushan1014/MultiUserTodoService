@@ -9,9 +9,6 @@ import type {
 
 import {
   AppError,
-} from "@todo/common";
-
-import {
   getRequestId,
 } from "@todo/common";
 
@@ -48,25 +45,22 @@ export const shareTodoController:
         );
 
       /*
-       * validateParams already validated todoId.
-       * validateBody already validated and replaced request.body.
+       * Express defines a route parameter as
+       * string | string[]. Narrow it to string.
        */
-    const todoIdParameter =
-  request.params.todoId;
+      const todoIdParameter =
+        request.params.todoId;
 
-if (
-  typeof todoIdParameter !==
-  "string"
-) {
-  throw new AppError(
-    400,
-    "VALIDATION_ERROR",
-    "TODO identifier is invalid",
-  );
-}
-
-const todoId =
-  todoIdParameter;
+      if (
+        typeof todoIdParameter !==
+        "string"
+      ) {
+        throw new AppError(
+          400,
+          "VALIDATION_ERROR",
+          "TODO identifier is invalid",
+        );
+      }
 
       const body =
         request.body as
@@ -75,23 +69,26 @@ const todoId =
       const requestId =
         getRequestId();
 
-      if (
-        todoId === undefined ||
-        requestId === undefined
-      ) {
-        throw new Error(
-          "Required request context is unavailable",
+      if (requestId === undefined) {
+        throw new AppError(
+          500,
+          "REQUEST_CONTEXT_MISSING",
+          "Request context is unavailable",
         );
       }
 
       const result:
         ShareTodoResponse =
         await service.execute({
-          todoId,
+          todoId:
+            todoIdParameter,
+
           ownerId:
             identity.userId,
+
           recipientId:
             body.recipientId,
+
           requestId,
         });
 

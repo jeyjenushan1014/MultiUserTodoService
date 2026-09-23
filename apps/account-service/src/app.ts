@@ -6,6 +6,10 @@ import {
 } from "./middleware/error-handler.middleware.js";
 
 import {
+  accountLookupRouter,
+} from "./modules/account/lookup/account-lookup.routes.js";
+
+import {
   notFoundMiddleware,
 } from "./middleware/not-found.middleware.js";
 
@@ -100,6 +104,11 @@ app.use(
 app.use(
   "/internal/v1/accounts",
   internalEmailChangeRouter,
+);
+
+app.use(
+  "/internal/v1/accounts",
+  accountLookupRouter,
 );
 
 app.use(

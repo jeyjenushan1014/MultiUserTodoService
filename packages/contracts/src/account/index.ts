@@ -10,6 +10,12 @@ export type {
 } from "./account.event.contract.js";
 
 export type {
+  ResolvedAccount,
+  ResolveAccountRequest,
+  ResolveAccountResponse,
+} from "./account-lookup.contract.js";
+
+export type {
   AuthenticatedAccount,
   LoginAccountRequest,
   LoginAccountResponse,

@@ -4802,3 +4802,4 @@ Other unexpected responses fail immediately.
 ## Destructive failure tests
 
 Redis, PostgreSQL, RabbitMQ and service-stop scenarios are not included in the regular automated suite because they alter shared Docker state. They are executed as controlled manual reliability tests.
+

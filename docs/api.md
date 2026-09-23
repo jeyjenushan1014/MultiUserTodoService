@@ -5163,3 +5163,68 @@ Retry-After: 42
 Authentication and password-reset endpoints use stricter policies than general API routes.
 
 Rate-limit counters are shared through Redis across Gateway instances.
+
+## Internal Account Resolution
+
+### Resolve account by email
+
+```http
+POST /internal/v1/accounts/resolve
+```
+
+This is an internal service endpoint and requires:
+
+```http
+X-Internal-Service-Key: configured-internal-secret
+X-Request-ID: trusted-request-id
+Content-Type: application/json
+```
+
+Request:
+
+```json
+{
+  "email": "recipient@example.com"
+}
+```
+
+Successful response:
+
+```http
+HTTP/1.1 200 OK
+```
+
+```json
+{
+  "data": {
+    "account": {
+      "id": "29159e6a-3dc0-4415-ac22-d75aec4b3069",
+      "email": "recipient@example.com"
+    }
+  }
+}
+```
+
+Missing account:
+
+```http
+HTTP/1.1 404 Not Found
+```
+
+```json
+{
+  "error": {
+    "code": "ACCOUNT_NOT_FOUND",
+    "message": "The requested account was not found",
+    "requestId": "9d591bcc-859c-4e88-b95c-bf391ead793d"
+  }
+}
+```
+
+Validation failure:
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+The endpoint is not available directly through the public Gateway API.

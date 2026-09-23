@@ -8,6 +8,10 @@ import {
 } from "../todo/list/list-todos.validation.js";
 
 import {
+  deleteTodoController,
+} from "./delete/delete.todo.controller.js";
+
+import {
   authenticate,
 } from "../../middleware/authenticate.middleware.js";
 
@@ -83,4 +87,12 @@ todoRouter.patch(
     updateTodoBodySchema,
   ),
   updateTodoController,
+);
+
+todoRouter.delete(
+  "/:todoId",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  deleteTodoController,
 );

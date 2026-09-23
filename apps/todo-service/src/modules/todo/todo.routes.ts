@@ -27,6 +27,10 @@ import {
 } from "./todo.controller.js";
 
 import {
+  deleteTodoController,
+} from "./delete/delete.todo.controller.js";
+
+import {
   PostgresTodoRepository,
 } from "./todo.repository.js";
 
@@ -108,4 +112,12 @@ todoRouter.patch(
     updateTodoBodySchema,
   ),
   updateTodoController,
+);
+
+todoRouter.delete(
+  "/:todoId",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  deleteTodoController,
 );

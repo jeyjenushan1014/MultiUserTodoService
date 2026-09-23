@@ -4368,3 +4368,111 @@ Both boundaries require a valid UUID.
 | SR-8 | Ownership information and database errors are hidden |
 | QR-3 | Controller, service and repository are separated |
 | QR-4 | Errors use the shared error response |
+
+# Part 10 — TODO Deletion Architecture
+
+## Overview
+
+TODO deletion is implemented as an owner-scoped soft delete.
+
+The database record is retained, but `deleted_at` is assigned the current timestamp.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant TodoService as TODO Service
+    participant PostgreSQL
+
+    Client->>Gateway: DELETE /api/v1/todos/{todoId}
+    Gateway->>Gateway: Authenticate and validate UUID
+    Gateway->>TodoService: Signed identity and TODO ID
+    TodoService->>TodoService: Verify identity and UUID
+    TodoService->>PostgreSQL: Owner-scoped atomic soft delete
+    PostgreSQL-->>TodoService: Deleted ID or no row
+    TodoService-->>Gateway: 204 or uniform 404
+    Gateway-->>Client: Public response
+```
+
+## Soft-delete query
+
+```sql
+UPDATE todos
+SET
+  deleted_at = CURRENT_TIMESTAMP,
+  updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+  AND owner_id = $2
+  AND deleted_at IS NULL
+RETURNING id;
+```
+
+## Why soft delete is used
+
+Soft deletion provides:
+
+- Auditability.
+- Protection from accidental physical deletion.
+- Consistent filtering through `deleted_at IS NULL`.
+- Future recovery support.
+- Historical record retention.
+
+Deleted TODOs are not returned by public APIs.
+
+## Atomic concurrency behaviour
+
+The operation uses one PostgreSQL statement.
+
+When two requests delete the same TODO concurrently:
+
+1. One request updates the active row and receives `204`.
+2. The second request no longer matches `deleted_at IS NULL`.
+3. The second request receives `404 TODO_NOT_FOUND`.
+
+No separate existence check is required.
+
+## Owner isolation
+
+The delete statement includes:
+
+```sql
+AND owner_id = $2
+```
+
+The owner ID comes from the verified internal identity, not from the client.
+
+Missing, cross-owner and already-deleted TODOs all affect zero rows and produce the same response.
+
+## Active-title uniqueness after deletion
+
+The title uniqueness index applies only to active records:
+
+```sql
+WHERE deleted_at IS NULL
+```
+
+After deletion, the owner may create a new TODO using the deleted TODO’s title.
+
+## Response design
+
+Successful deletion returns:
+
+```http
+204 No Content
+```
+
+The response does not include a body because the resource is no longer available through the active API.
+
+## Requirements satisfied
+
+| Requirement | Implementation |
+|---|---|
+| FR-17 | Authenticated owner can delete an active TODO |
+| FR-18 | Deleted titles are removed from active uniqueness scope |
+| FR-20 | Missing and cross-owner deletes return the same response |
+| DR-5 | Partial unique index supports title reuse after deletion |
+| SR-1 | TODO and owner IDs use PostgreSQL parameters |
+| SR-6 | Gateway authentication is required |
+| SR-7 | UUID is validated at both boundaries |
+| SR-8 | Ownership and database information are hidden |
+| QR-3 | Controller, service and repository responsibilities are separated |

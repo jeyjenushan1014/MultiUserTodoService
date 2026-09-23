@@ -4633,3 +4633,190 @@ The same response is used when:
 | TODO Service unavailable | 503 | `SERVICE_UNAVAILABLE` |
 | TODO Service timeout | 504 | `DOWNSTREAM_TIMEOUT` |
 
+# Part 10 — Delete a TODO
+
+## Endpoint
+
+Soft-deletes an active TODO owned by the authenticated user.
+
+```http
+DELETE /api/v1/todos/{todoId}
+```
+
+## Authentication
+
+```http
+Authorization: Bearer <access-token>
+```
+
+## Path parameter
+
+| Parameter | Type | Required | Description |
+|---|---|---:|---|
+| `todoId` | UUID | Yes | Identifier of the TODO to delete |
+
+## Example request
+
+```http
+DELETE /api/v1/todos/9f134ed0-4503-4a23-a189-f065fe9fd838
+Authorization: Bearer <access-token>
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+```
+
+## PowerShell example
+
+```powershell
+curl.exe -i `
+  -X DELETE `
+  "http://localhost:3000/api/v1/todos/9f134ed0-4503-4a23-a189-f065fe9fd838" `
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" `
+  -H "X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20"
+```
+
+## Successful response
+
+```http
+204 No Content
+```
+
+The response has no JSON body.
+
+## Invalid TODO ID
+
+```http
+DELETE /api/v1/todos/not-a-uuid
+```
+
+Response:
+
+```http
+400 Bad Request
+```
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request path parameters are invalid",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+    "details": [
+      {
+        "field": "todoId",
+        "message": "Invalid UUID"
+      }
+    ]
+  }
+}
+```
+
+## TODO not found
+
+The same response is returned when:
+
+- The TODO does not exist.
+- The TODO belongs to another owner.
+- The TODO was already deleted.
+
+```http
+404 Not Found
+```
+
+```json
+{
+  "error": {
+    "code": "TODO_NOT_FOUND",
+    "message": "TODO was not found",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## Missing access token
+
+```http
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "AUTHENTICATION_REQUIRED",
+    "message": "An access token is required",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## Invalid or expired token
+
+```http
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "INVALID_ACCESS_TOKEN",
+    "message": "The access token is invalid or expired",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## TODO Service unavailable
+
+```http
+503 Service Unavailable
+```
+
+```json
+{
+  "error": {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "TODO service is temporarily unavailable",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## TODO Service timeout
+
+```http
+504 Gateway Timeout
+```
+
+```json
+{
+  "error": {
+    "code": "DOWNSTREAM_TIMEOUT",
+    "message": "TODO service did not respond in time",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## Behaviour after deletion
+
+After successful deletion:
+
+- `GET /api/v1/todos/{todoId}` returns `404`.
+- `PATCH /api/v1/todos/{todoId}` returns `404`.
+- Repeating the same `DELETE` returns `404`.
+- The TODO is excluded from list results.
+- The TODO is excluded from pagination totals.
+- The original title can be used by a new active TODO.
+
+## Status summary
+
+| Situation | HTTP status | Error code |
+|---|---:|---|
+| Delete succeeded | 204 | Not applicable |
+| Invalid UUID | 400 | `VALIDATION_ERROR` |
+| Missing token | 401 | `AUTHENTICATION_REQUIRED` |
+| Invalid token | 401 | `INVALID_ACCESS_TOKEN` |
+| TODO missing | 404 | `TODO_NOT_FOUND` |
+| Cross-owner delete | 404 | `TODO_NOT_FOUND` |
+| TODO already deleted | 404 | `TODO_NOT_FOUND` |
+| TODO Service unavailable | 503 | `SERVICE_UNAVAILABLE` |
+| TODO Service timeout | 504 | `DOWNSTREAM_TIMEOUT` |
+

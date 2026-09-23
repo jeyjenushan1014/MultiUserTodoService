@@ -516,4 +516,27 @@ export async function updateTodo(
   return result;
 }
 
+export async function deleteTodoById(
+  todoId: string,
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<void> {
+  const endpoint =
+    new URL(
+      `/internal/v1/todos/${encodeURIComponent(
+        todoId,
+      )}`,
+      env.TODO_SERVICE_URL,
+    );
+
+  await sendTodoRequest<
+    undefined
+  >({
+    method: "DELETE",
+    endpoint,
+    identity,
+    requestId,
+  });
+}
+
 

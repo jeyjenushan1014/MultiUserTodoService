@@ -4246,3 +4246,194 @@ Response:
 Filtering and sorting never change ownership enforcement.
 
 The API always returns only TODOs belonging to the authenticated user.
+
+
+# Part 8 — Get One TODO
+
+## Endpoint
+
+Returns one active TODO owned by the authenticated user.
+
+```http
+GET /api/v1/todos/{todoId}
+```
+
+## Authentication
+
+```http
+Authorization: Bearer <access-token>
+```
+
+## Path parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---:|---|
+| `todoId` | UUID | Yes | TODO identifier |
+
+## Example request
+
+```http
+GET /api/v1/todos/9f134ed0-4503-4a23-a189-f065fe9fd838
+Authorization: Bearer <access-token>
+X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20
+```
+
+## PowerShell example
+
+```powershell
+curl.exe -i `
+  "http://localhost:3000/api/v1/todos/9f134ed0-4503-4a23-a189-f065fe9fd838" `
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" `
+  -H "X-Request-ID: 42c06bb5-a32d-4da8-8050-ddc480972b20"
+```
+
+## Successful response
+
+```http
+200 OK
+```
+
+```json
+{
+  "id": "9f134ed0-4503-4a23-a189-f065fe9fd838",
+  "ownerId": "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+  "title": "Test owner-scoped retrieval",
+  "description": null,
+  "state": "pending",
+  "dueDate": null,
+  "createdAt": "2026-09-22T08:00:00.000Z",
+  "updatedAt": "2026-09-22T08:00:00.000Z"
+}
+```
+
+## Invalid TODO ID
+
+```http
+GET /api/v1/todos/not-a-uuid
+```
+
+Response:
+
+```http
+400 Bad Request
+```
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request path parameters are invalid",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+    "details": [
+      {
+        "field": "todoId",
+        "message": "Invalid UUID"
+      }
+    ]
+  }
+}
+```
+
+## TODO not found
+
+The same response is returned when:
+
+- The TODO does not exist.
+- The TODO belongs to another user.
+- The TODO was deleted.
+
+Response:
+
+```http
+404 Not Found
+```
+
+```json
+{
+  "error": {
+    "code": "TODO_NOT_FOUND",
+    "message": "TODO was not found",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+The API does not reveal whether another user owns the requested TODO.
+
+## Missing access token
+
+```http
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "AUTHENTICATION_REQUIRED",
+    "message": "An access token is required",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## Invalid or expired token
+
+```http
+401 Unauthorized
+```
+
+```json
+{
+  "error": {
+    "code": "INVALID_ACCESS_TOKEN",
+    "message": "The access token is invalid or expired",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## TODO Service unavailable
+
+```http
+503 Service Unavailable
+```
+
+```json
+{
+  "error": {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "TODO service is temporarily unavailable",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## TODO Service timeout
+
+```http
+504 Gateway Timeout
+```
+
+```json
+{
+  "error": {
+    "code": "DOWNSTREAM_TIMEOUT",
+    "message": "TODO service did not respond in time",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20"
+  }
+}
+```
+
+## Status summary
+
+| Situation | HTTP status | Error code |
+|---|---:|---|
+| Owned TODO found | 200 | Not applicable |
+| Invalid UUID | 400 | `VALIDATION_ERROR` |
+| Missing token | 401 | `AUTHENTICATION_REQUIRED` |
+| Invalid token | 401 | `INVALID_ACCESS_TOKEN` |
+| TODO missing | 404 | `TODO_NOT_FOUND` |
+| TODO belongs to another user | 404 | `TODO_NOT_FOUND` |
+| TODO soft-deleted | 404 | `TODO_NOT_FOUND` |
+| TODO Service unavailable | 503 | `SERVICE_UNAVAILABLE` |
+| TODO Service timeout | 504 | `DOWNSTREAM_TIMEOUT` |

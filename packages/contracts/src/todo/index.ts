@@ -18,6 +18,7 @@ export type {
 
 export type {
   GetTodoResponse,
+  GetTodoParams
 } from "./get.todo.contract.js";
 
 export type {
@@ -37,6 +38,8 @@ export type {
   UpdateTodoRequest,
   UpdateTodoResponse,
 } from "./update.todo.contract.js";
+
+
 
 
 

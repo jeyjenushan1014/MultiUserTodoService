@@ -12,6 +12,18 @@ import {
 } from "../../middleware/authenticate.middleware.js";
 
 import {
+  validateParams,
+} from "../../middleware/validate-params.middleware.js";
+
+import {
+  getTodoController,
+} from "./get/get.todo.controller.js";
+
+import {
+  getTodoParamsSchema,
+} from "./get/get.todo.validation.js";
+
+import {
   validateBody,
 } from "../../middleware/validate-body.middleware.js";
 
@@ -44,4 +56,12 @@ todoRouter.get(
     listTodosQuerySchema,
   ),
   listTodosController,
+);
+
+todoRouter.get(
+  "/:todoId",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  getTodoController,
 );

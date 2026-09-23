@@ -17,6 +17,10 @@ import type {
   ListTodosResponse,
 } from "@todo/contracts";
 
+import type {
+  
+  GetTodoResponse,
+} from "@todo/contracts";
 
 
 import {
@@ -433,3 +437,39 @@ export async function listTodos(
 
   return result;
 }
+
+export async function getTodoById(
+  todoId: string,
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<GetTodoResponse> {
+  const endpoint =
+    new URL(
+      `/internal/v1/todos/${encodeURIComponent(
+        todoId,
+      )}`,
+      env.TODO_SERVICE_URL,
+    );
+
+  const result =
+    await sendTodoRequest<
+      GetTodoResponse
+    >({
+      method: "GET",
+      endpoint,
+      identity,
+      requestId,
+    });
+
+  if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "TODO service returned an invalid response",
+    );
+  }
+
+  return result;
+}
+
+

@@ -4273,3 +4273,98 @@ If the TODO Service does not respond before the configured deadline, the Gateway
 | QR-3 | Controller, service and repository responsibilities are separated |
 | QR-4 | Errors use the standardized error response structure |
 | QR-5 | API fields use consistent camelCase naming |
+
+
+# Part 8 — Owner-Scoped TODO Retrieval
+
+## Overview
+
+The Get TODO operation retrieves one active TODO belonging to the authenticated user.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant TodoService as TODO Service
+    participant PostgreSQL
+
+    Client->>Gateway: GET /api/v1/todos/{todoId}
+    Gateway->>Gateway: Verify JWT
+    Gateway->>Gateway: Validate UUID
+    Gateway->>TodoService: Signed identity and TODO ID
+    TodoService->>TodoService: Verify identity
+    TodoService->>TodoService: Validate UUID
+    TodoService->>PostgreSQL: Query by ID and owner
+    PostgreSQL-->>TodoService: One row or no row
+    TodoService-->>Gateway: TODO or uniform 404
+    Gateway-->>Client: Response
+```
+
+## Owner-scoped repository query
+
+```sql
+SELECT
+  id,
+  owner_id,
+  title,
+  description,
+  state,
+  due_date,
+  created_at,
+  updated_at
+FROM todos
+WHERE id = $1
+  AND owner_id = $2
+  AND deleted_at IS NULL
+LIMIT 1;
+```
+
+The query requires both the TODO ID and authenticated owner ID.
+
+## Information-leak prevention
+
+The repository returns no row when:
+
+1. The TODO does not exist.
+2. The TODO belongs to another owner.
+3. The TODO was soft-deleted.
+
+The service converts every result into the same error:
+
+```text
+404 TODO_NOT_FOUND
+```
+
+It never returns `403` for another owner’s TODO because that would confirm that the identifier exists.
+
+## Validation boundaries
+
+The Gateway validates the public `todoId`.
+
+The TODO Service independently validates the internal `todoId`.
+
+Both boundaries require a valid UUID.
+
+## Security properties
+
+- Public authentication occurs at the Gateway.
+- Caller identity is signed before internal propagation.
+- Owner ID is never accepted from the client.
+- The repository applies owner isolation.
+- SQL parameters prevent injection.
+- Deleted records are excluded.
+- Cross-owner access does not reveal resource existence.
+- Database errors are not returned to clients.
+
+## Requirements satisfied
+
+| Requirement | Implementation |
+|---|---|
+| FR-14 | Retrieve one owned TODO by ID |
+| FR-20 | Missing and cross-owner access return identical responses |
+| SR-1 | ID and owner use SQL parameters |
+| SR-6 | Authentication is required |
+| SR-7 | UUID validation occurs at both boundaries |
+| SR-8 | Ownership information and database errors are hidden |
+| QR-3 | Controller, service and repository are separated |
+| QR-4 | Errors use the shared error response |

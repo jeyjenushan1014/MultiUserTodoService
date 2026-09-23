@@ -27,6 +27,17 @@ import {
   TodoService,
 } from "./todo.service.js";
 
+import {
+  validateParams,
+} from "../../middleware/validate-params.middleware.js";
+
+import {
+  getTodoController,
+} from "./get/get.todo.controller.js";
+
+import {
+  getTodoParamsSchema,
+} from "./get/get.todo.validation.js";
 
 import {
   listTodosQuerySchema,
@@ -71,4 +82,12 @@ todoRouter.get(
     listTodosQuerySchema,
   ),
   listTodosController,
+);
+
+todoRouter.get(
+  "/:todoId",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  getTodoController,
 );

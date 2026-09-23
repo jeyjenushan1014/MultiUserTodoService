@@ -4902,3 +4902,98 @@ The TODO Service logs:
 - Cache TTL on writes.
 
 Access tokens and Redis credentials are never logged.
+
+# Part 12 — TODO Cache Invalidation
+
+## Affected write endpoints
+
+Successful operations on these endpoints invalidate the authenticated owner’s TODO cache:
+
+```http
+POST /api/v1/todos
+PATCH /api/v1/todos/{todoId}
+DELETE /api/v1/todos/{todoId}
+```
+
+The public response structures do not change.
+
+## Invalidation behaviour
+
+After a successful database mutation, the TODO Service increments:
+
+```text
+todo:version:{ownerId}
+```
+
+Future reads use the new version and no longer access cache entries created before the mutation.
+
+## Successful create
+
+After:
+
+```http
+POST /api/v1/todos
+```
+
+the following cached data becomes unreachable:
+
+- Cached TODO lists.
+- Cached state-filtered lists.
+- Cached sorted lists.
+- Cached pagination pages.
+- Cached individual TODO values under the earlier owner version.
+
+## Successful update
+
+After:
+
+```http
+PATCH /api/v1/todos/{todoId}
+```
+
+both item and list caches are invalidated.
+
+This is necessary because an update may affect:
+
+- The item representation.
+- State filters.
+- Due-date sorting.
+- Creation-date list contents.
+- Duplicate-title behaviour.
+
+## Successful delete
+
+After:
+
+```http
+DELETE /api/v1/todos/{todoId}
+```
+
+both item and list caches are invalidated.
+
+Deleted TODOs therefore disappear from future item and list reads.
+
+## Failed mutations
+
+Cache invalidation does not run when the business operation fails.
+
+Examples:
+
+- Invalid request.
+- TODO not found.
+- Cross-owner update.
+- Cross-owner delete.
+- Duplicate title conflict.
+- Database failure before mutation completion.
+
+## Old cache entries
+
+Old versioned entries are not synchronously deleted.
+
+They become unreachable and expire through:
+
+```env
+CACHE_TTL_SECONDS
+```
+
+This avoids expensive Redis key scanning.

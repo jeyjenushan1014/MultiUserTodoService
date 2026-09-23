@@ -1,7 +1,3 @@
-import {
-  createHash,
-} from "node:crypto";
-
 import type {
   TodoResponse,
 } from "@todo/contracts";
@@ -28,41 +24,18 @@ import {
   cachedTodoSchema,
 } from "./todo.cache.schema.js";
 
+import {
+  createTodoItemCacheKey,
+  createTodoListCacheKey,
+  createTodoVersionKey,
+} from "./todo.cache.keys.js";
+
 import type {
   TodoItemCacheLookup,
   TodoListCacheLookup,
   TodoReadCache,
 } from "./todo.read.cache.interface.js";
 
-const CACHE_VERSION_PREFIX =
-  "todo:cache-version";
-
-const TODO_CACHE_PREFIX =
-  "todo";
-
-function createVersionKey(
-  ownerId: string,
-): string {
-  return [
-    CACHE_VERSION_PREFIX,
-    ownerId,
-  ].join(":");
-}
-
-function createItemKey(
-  ownerId: string,
-  version: string,
-  todoId: string,
-): string {
-  return [
-    TODO_CACHE_PREFIX,
-    ownerId,
-    "v",
-    version,
-    "item",
-    todoId,
-  ].join(":");
-}
 
 function createListQueryIdentifier(
   parameters:
@@ -77,34 +50,6 @@ function createListQueryIdentifier(
   ].join("&");
 }
 
-function createListKey(
-  ownerId: string,
-  version: string,
-  parameters:
-    ListTodosParameters,
-): string {
-  const queryIdentifier =
-    createListQueryIdentifier(
-      parameters,
-    );
-
-  const queryHash =
-    createHash("sha256")
-      .update(
-        queryIdentifier,
-        "utf8",
-      )
-      .digest("hex");
-
-  return [
-    TODO_CACHE_PREFIX,
-    ownerId,
-    "v",
-    version,
-    "list",
-    queryHash,
-  ].join(":");
-}
 
 function parseJson(
   serializedValue: string,
@@ -118,6 +63,7 @@ function parseJson(
   }
 }
 
+
 async function getCacheVersion(
   ownerId: string,
 ): Promise<string | undefined> {
@@ -128,7 +74,7 @@ async function getCacheVersion(
   try {
     const version =
       await cache.get(
-        createVersionKey(
+        createTodoVersionKey(
           ownerId,
         ),
       );
@@ -170,11 +116,14 @@ async function getCacheVersion(
   }
 }
 
+
 async function readCacheValue(
   cacheKey: string,
   resourceType:
     "todo-item" | "todo-list",
-): Promise<string | null | undefined> {
+): Promise<
+  string | null | undefined
+> {
   if (!cache.isReady) {
     return undefined;
   }
@@ -222,6 +171,7 @@ async function readCacheValue(
   }
 }
 
+
 async function deleteInvalidValue(
   cacheKey: string,
 ): Promise<void> {
@@ -244,6 +194,7 @@ async function deleteInvalidValue(
     );
   }
 }
+
 
 async function writeCacheValue(
   cacheKey: string,
@@ -296,6 +247,7 @@ async function writeCacheValue(
   }
 }
 
+
 export class RedisTodoReadCache
 implements TodoReadCache {
   public async lookupItem(
@@ -314,7 +266,7 @@ implements TodoReadCache {
     }
 
     const cacheKey =
-      createItemKey(
+      createTodoItemCacheKey(
         ownerId,
         version,
         todoId,
@@ -370,8 +322,9 @@ implements TodoReadCache {
     }
 
     /*
-     * Defence in depth against a cache entry stored
-     * under an incorrect owner or item key.
+     * Defence in depth against a cache entry
+     * stored under an incorrect owner or
+     * item key.
      */
     if (
       parsed.data.ownerId !==
@@ -405,6 +358,7 @@ implements TodoReadCache {
     };
   }
 
+
   public async storeItem(
     cacheKey: string,
     todo: TodoResponse,
@@ -415,6 +369,7 @@ implements TodoReadCache {
       "todo-item",
     );
   }
+
 
   public async lookupList(
     parameters:
@@ -431,11 +386,16 @@ implements TodoReadCache {
       return undefined;
     }
 
+    const queryIdentifier =
+      createListQueryIdentifier(
+        parameters,
+      );
+
     const cacheKey =
-      createListKey(
+      createTodoListCacheKey(
         parameters.ownerId,
         version,
-        parameters,
+        queryIdentifier,
       );
 
     const serializedValue =
@@ -527,6 +487,7 @@ implements TodoReadCache {
       },
     };
   }
+
 
   public async storeList(
     cacheKey: string,

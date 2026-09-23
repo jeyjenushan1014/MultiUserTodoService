@@ -11,15 +11,15 @@ import type {
 
 import {
   getInternalCallerIdentity,
-} from "../../middleware/internal-service-auth.middleware.js";
+} from "../../../middleware/internal-service-auth.middleware.js";
 
 import type {
   InternalIdentityLocals,
-} from "../../middleware/internal-service-auth.middleware.js";
+} from "../../../middleware/internal-service-auth.middleware.js";
 
 import type {
-  TodoService,
-} from "./todo.service.js";
+  CreateTodoService,
+} from "./create.todo.service.js";
 
 type CreateTodoHttpResponse =
   Response<
@@ -27,10 +27,10 @@ type CreateTodoHttpResponse =
     InternalIdentityLocals
   >;
 
-export class TodoController {
+export class CreateTodoController {
   public constructor(
     private readonly service:
-      TodoService,
+      CreateTodoService,
   ) {}
 
   public create = async (
@@ -51,7 +51,7 @@ export class TodoController {
 
       const result =
         await this.service
-          .create({
+          .execute({
             ownerId:
               identity.userId,
 

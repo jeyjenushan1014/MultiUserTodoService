@@ -4,7 +4,7 @@ import type {
 
 import type {
   CreateTodoData,
-} from "./todo.types.js";
+} from "../todo.types.js";
 
 export type CreateTodoRepositoryResult =
   | {

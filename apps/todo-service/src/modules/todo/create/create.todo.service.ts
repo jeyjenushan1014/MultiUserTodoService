@@ -12,8 +12,12 @@ import {
 } from "@todo/common";
 
 import type {
+  TodoCacheInvalidator,
+} from "../cache/todo.cache.invalidator.interface.js";
+
+import type {
   TodoRepository,
-} from "./todo.repository.interface.js";
+} from "./create.todo.repository.interface.js";
 
 export interface CreateTodoCommand {
   readonly ownerId: string;
@@ -61,15 +65,21 @@ function parseDueDate(
   );
 }
 
-export class TodoService {
+export class CreateTodoService {
   public constructor(
     private readonly repository:
       TodoRepository,
+
+    private readonly cacheInvalidator:
+      TodoCacheInvalidator,
   ) {}
 
-  public async create(
-    command: CreateTodoCommand,
-  ): Promise<CreateTodoResponse> {
+  public async execute(
+    command:
+      CreateTodoCommand,
+  ): Promise<
+    CreateTodoResponse
+  > {
     const result =
       await this.repository
         .create({
@@ -126,6 +136,19 @@ export class TodoService {
         "The account is not yet ready for TODO operations",
       );
     }
+
+    /*
+     * At this point the PostgreSQL creation has
+     * succeeded.
+     *
+     * Incrementing the owner's Redis cache version
+     * makes every previous list and item cache entry
+     * unreachable.
+     */
+    await this.cacheInvalidator
+      .invalidateOwner(
+        command.ownerId,
+      );
 
     return result.todo;
   }

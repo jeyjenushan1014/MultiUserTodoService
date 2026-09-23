@@ -23,8 +23,8 @@ import {
 } from "../../middleware/validate-body.middleware.js";
 
 import {
-  TodoController,
-} from "./todo.controller.js";
+  CreateTodoController,
+} from "./create/create.todo.controller.js";
 
 import {
   deleteTodoController,
@@ -32,11 +32,11 @@ import {
 
 import {
   PostgresTodoRepository,
-} from "./todo.repository.js";
+} from "./create/create.todo.repository.js";
 
 import {
-  TodoService,
-} from "./todo.service.js";
+  CreateTodoService,
+} from "./create/create.todo.service.js"
 
 import {
   validateParams,
@@ -62,29 +62,41 @@ import {
   createTodoSchema,
 } from "./todo.validation.js";
 
-const repository =
-  new PostgresTodoRepository();
 
-const service =
-  new TodoService(
-    repository,
-  );
-
-const controller =
-  new TodoController(
-    service,
-  );
+import {
+  RedisTodoCacheInvalidator,
+} from "./cache/redis.todo.cache.invalidator.js";
 
 export const todoRouter =
   Router();
 
+const todoRepository =
+  new PostgresTodoRepository();
+
+const cacheInvalidator =
+  new RedisTodoCacheInvalidator();
+
+const createTodoService =
+  new CreateTodoService(
+    todoRepository,
+    cacheInvalidator,
+  );
+
+const createTodoController =
+  new CreateTodoController(
+    createTodoService,
+  );
+
+todoRouter.use(
+  requireInternalIdentity,
+);
+
 todoRouter.post(
   "/",
-  requireInternalIdentity,
   validateBody(
     createTodoSchema,
   ),
-  controller.create,
+  createTodoController.create,
 );
 
 todoRouter.get(

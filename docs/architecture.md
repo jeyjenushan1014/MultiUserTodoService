@@ -4567,3 +4567,110 @@ Invalid cache values are removed when possible, and PostgreSQL is used as the so
 | CR-5 | Redis failures fall back to PostgreSQL |
 | CR-6 | Cache hits, misses and failures are logged |
 | QR-3 | Cache behaviour is isolated through repository decorators |
+
+# Part 12 — Version-Based Cache Invalidation
+
+## Overview
+
+Every successful TODO mutation increments a shared Redis cache version for the affected owner.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant TodoService as TODO Service
+    participant PostgreSQL
+    participant Redis
+
+    Client->>TodoService: Create, update or delete
+    TodoService->>PostgreSQL: Execute owner-scoped mutation
+    PostgreSQL-->>TodoService: Mutation succeeded
+    TodoService->>Redis: INCR todo:version:{ownerId}
+    Redis-->>TodoService: New version
+    TodoService-->>Client: Successful response
+```
+
+## Versioned cache keys
+
+```text
+todo:{ownerId}:{version}:item:{todoId}
+todo:{ownerId}:{version}:list:{queryHash}
+```
+
+Version key:
+
+```text
+todo:version:{ownerId}
+```
+
+## Why versioning is used
+
+A mutation may affect many cached list combinations:
+
+- Different pages.
+- Different page sizes.
+- Different state filters.
+- Different sorting fields.
+- Different sorting directions.
+- Individual TODO cache entries.
+
+Deleting all matching keys would require Redis `SCAN` operations.
+
+Version incrementing invalidates every previous owner key using one constant-time operation:
+
+```redis
+INCR todo:version:{ownerId}
+```
+
+## Concurrency behaviour
+
+A read resolves its versioned cache key before querying PostgreSQL.
+
+If a write increments the owner version while the read is querying PostgreSQL, the reader stores its result under its original version.
+
+Future reads use the new version and cannot observe the old entry.
+
+## Multiple service instances
+
+The version is stored in shared Redis.
+
+All TODO Service instances observe the same owner version.
+
+No process-local invalidation `Map` is used.
+
+## Mutation decorators
+
+Create, update and delete operations are wrapped using the Decorator pattern.
+
+```text
+Controller
+    ↓
+Cache-invalidating operation
+    ↓
+Business operation
+    ↓
+Repository
+```
+
+Invalidation occurs only after the wrapped business operation succeeds.
+
+## Redis failure boundary
+
+The PostgreSQL mutation is the authoritative operation.
+
+If Redis invalidation fails after PostgreSQL commits:
+
+- The successful mutation remains successful.
+- The Redis failure is logged.
+- The API does not incorrectly return a failed mutation response.
+
+Part 13 introduces durable invalidation recovery for this failure scenario.
+
+## Requirements satisfied
+
+| Requirement | Implementation |
+|---|---|
+| CR-3 | Version keys and cached reads are owner-scoped |
+| CR-4 | Successful writes increment the owner cache version |
+| CR-5 | Redis invalidation errors do not lose successful database writes |
+| CR-6 | Invalidation success and failure are logged |
+| QR-3 | Invalidation is separated through an interface and decorators |

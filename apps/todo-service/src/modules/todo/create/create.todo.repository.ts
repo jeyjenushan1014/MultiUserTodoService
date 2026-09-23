@@ -1,20 +1,20 @@
 import {
   database,
-} from "../../config/database.js";
+} from "../../../config/database.js";
 
 import {
   mapTodoRow,
-} from "./todo.mapper.js";
+} from "../todo.mapper.js";
 
 import type {
   CreateTodoRepositoryResult,
   TodoRepository,
-} from "./todo.repository.interface.js";
+} from "./create.todo.repository.interface.js";
 
 import type {
   CreateTodoData,
   TodoDatabaseRow,
-} from "./todo.types.js";
+} from "../todo.types.js";
 
 interface PostgreSqlError {
   readonly code?: unknown;

@@ -23,12 +23,30 @@ import {
   PostgresDeleteTodoRepository,
 } from "./postgres.delete.todo.repository.js";
 
+import {
+  CacheInvalidatingDeleteTodoService,
+} from "../cache/cache.invalidating.delete.todo.service.js";
+
+import {
+  RedisTodoCacheInvalidator,
+} from "../cache/redis.todo.cache.invalidator.js";
+
+
 const repository =
   new PostgresDeleteTodoRepository();
 
-const service =
+const baseService =
   new DeleteTodoService(
     repository,
+  );
+
+const cacheInvalidator =
+  new RedisTodoCacheInvalidator();
+
+const service =
+  new CacheInvalidatingDeleteTodoService(
+    baseService,
+    cacheInvalidator,
   );
 
 export async function deleteTodoController(

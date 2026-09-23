@@ -25,12 +25,30 @@ import {
   UpdateTodoService,
 } from "./update.todo.service.js";
 
+import {
+  CacheInvalidatingUpdateTodoService,
+} from "../cache/cache.invalidating.update.todo.service.js";
+
+import {
+  RedisTodoCacheInvalidator,
+} from "../cache/redis.todo.cache.invalidator.js";
+
+
 const repository =
   new PostgresUpdateTodoRepository();
 
-const service =
+const baseService =
   new UpdateTodoService(
     repository,
+  );
+
+const cacheInvalidator =
+  new RedisTodoCacheInvalidator();
+
+const service =
+  new CacheInvalidatingUpdateTodoService(
+    baseService,
+    cacheInvalidator,
   );
 
 export async function updateTodoController(

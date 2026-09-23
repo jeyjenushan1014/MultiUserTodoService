@@ -4063,3 +4063,186 @@ The current supported request is:
 ```http
 GET /api/v1/todos?page=<integer>&pageSize=<integer>
 ```
+
+# Part 7 — TODO Filtering and Sorting
+
+## List TODOs with filtering and sorting
+
+```http
+GET /api/v1/todos
+```
+
+### Authentication
+
+```http
+Authorization: Bearer <access-token>
+```
+
+### Query parameters
+
+| Parameter | Type | Required | Default | Allowed values |
+|---|---|---:|---|---|
+| `page` | Integer | No | `1` | Minimum `1` |
+| `pageSize` | Integer | No | `20` | `1` to `100` |
+| `state` | String | No | All states | `pending`, `in_progress`, `completed`, `cancelled` |
+| `sortBy` | String | No | `createdAt` | `createdAt`, `dueDate` |
+| `sortOrder` | String | No | `desc` | `asc`, `desc` |
+
+Unknown query parameters are rejected.
+
+### Default request
+
+```http
+GET /api/v1/todos
+```
+
+The default behaviour is equivalent to:
+
+```http
+GET /api/v1/todos?page=1&pageSize=20&sortBy=createdAt&sortOrder=desc
+```
+
+### Filter pending TODOs
+
+```http
+GET /api/v1/todos?state=pending
+```
+
+### Filter completed TODOs
+
+```http
+GET /api/v1/todos?state=completed
+```
+
+### Oldest TODOs first
+
+```http
+GET /api/v1/todos?sortBy=createdAt&sortOrder=asc
+```
+
+### Newest TODOs first
+
+```http
+GET /api/v1/todos?sortBy=createdAt&sortOrder=desc
+```
+
+### Earliest due date first
+
+```http
+GET /api/v1/todos?sortBy=dueDate&sortOrder=asc
+```
+
+TODOs without a due date appear after TODOs with a due date.
+
+### Latest due date first
+
+```http
+GET /api/v1/todos?sortBy=dueDate&sortOrder=desc
+```
+
+TODOs without a due date appear after TODOs with a due date.
+
+### Complete request
+
+```http
+GET /api/v1/todos?page=2&pageSize=10&state=in_progress&sortBy=dueDate&sortOrder=asc
+Authorization: Bearer <access-token>
+```
+
+### Successful response
+
+```http
+200 OK
+```
+
+```json
+{
+  "items": [
+    {
+      "id": "9f134ed0-4503-4a23-a189-f065fe9fd838",
+      "ownerId": "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+      "title": "Complete API filtering",
+      "description": null,
+      "state": "in_progress",
+      "dueDate": "2026-09-25T10:00:00.000Z",
+      "createdAt": "2026-09-22T08:00:00.000Z",
+      "updatedAt": "2026-09-22T08:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 2,
+    "pageSize": 10,
+    "totalItems": 15,
+    "totalPages": 2
+  }
+}
+```
+
+`totalItems` and `totalPages` describe only the records matching the selected state.
+
+### Invalid state
+
+```http
+GET /api/v1/todos?state=deleted
+```
+
+Response:
+
+```http
+400 Bad Request
+```
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request query parameters are invalid",
+    "requestId": "42c06bb5-a32d-4da8-8050-ddc480972b20",
+    "details": [
+      {
+        "field": "state",
+        "message": "Invalid option"
+      }
+    ]
+  }
+}
+```
+
+### Invalid sort field
+
+```http
+GET /api/v1/todos?sortBy=title
+```
+
+Response:
+
+```http
+400 Bad Request
+```
+
+### Invalid sort order
+
+```http
+GET /api/v1/todos?sortOrder=descending
+```
+
+Response:
+
+```http
+400 Bad Request
+```
+
+### Sorting behaviour
+
+| `sortBy` | `sortOrder` | Result |
+|---|---|---|
+| `createdAt` | `asc` | Oldest TODOs first |
+| `createdAt` | `desc` | Newest TODOs first |
+| `dueDate` | `asc` | Earliest due dates first; null due dates last |
+| `dueDate` | `desc` | Latest due dates first; null due dates last |
+
+### Ownership behaviour
+
+Filtering and sorting never change ownership enforcement.
+
+The API always returns only TODOs belonging to the authenticated user.

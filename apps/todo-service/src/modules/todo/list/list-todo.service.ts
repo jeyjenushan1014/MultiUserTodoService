@@ -20,10 +20,25 @@ export class ListTodosService {
     const result =
       await this.repository.listTodos({
         ownerId,
+
         page:
           query.page,
+
         pageSize:
           query.pageSize,
+
+        ...(query.state === undefined
+          ? {}
+          : {
+              state:
+                query.state,
+            }),
+
+        sortBy:
+          query.sortBy,
+
+        sortOrder:
+          query.sortOrder,
       });
 
     const totalPages =

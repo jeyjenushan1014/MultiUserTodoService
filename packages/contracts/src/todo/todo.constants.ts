@@ -25,3 +25,10 @@ export const MAXIMUM_TODO_TITLE_LENGTH = 200;
 
 export const MAXIMUM_TODO_DESCRIPTION_LENGTH =
   5000;
+
+
+export const DEFAULT_TODO_SORT_FIELD =
+  "createdAt" as const;
+
+export const DEFAULT_SORT_ORDER =
+  "desc" as const;

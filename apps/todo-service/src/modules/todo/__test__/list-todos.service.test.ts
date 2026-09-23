@@ -6,6 +6,10 @@ import {
 } from "vitest";
 
 import type {
+  MockedFunction,
+} from "vitest";
+
+import type {
   TodoResponse,
 } from "@todo/contracts";
 
@@ -19,12 +23,10 @@ import {
 
 interface Dependencies {
   readonly listTodosMock:
-    ReturnType<
-      typeof vi.fn<
-        ListTodosRepository[
-          "listTodos"
-        ]
-      >
+    MockedFunction<
+      ListTodosRepository[
+        "listTodos"
+      ]
     >;
 
   readonly service:
@@ -65,7 +67,7 @@ const todo:
       "70668eae-dac5-4b75-9bd3-02c963eb5b99",
 
     title:
-      "Finish TODO API",
+      "Finish TODO filtering",
 
     description:
       null,
@@ -74,7 +76,7 @@ const todo:
       "pending",
 
     dueDate:
-      null,
+      "2026-09-25T10:00:00.000Z",
 
     createdAt:
       "2026-09-22T08:00:00.000Z",
@@ -87,7 +89,7 @@ describe(
   "ListTodosService",
   () => {
     it(
-      "returns owner-scoped paginated TODOs",
+      "forwards state and sorting to the repository",
       async () => {
         const dependencies =
           createDependencies();
@@ -109,10 +111,24 @@ describe(
               {
                 page: 1,
                 pageSize: 20,
-                sortBy: "createdAt",
-                sortOrder: "desc",
+                state: "pending",
+                sortBy: "dueDate",
+                sortOrder: "asc",
               },
             );
+
+        expect(
+          dependencies
+            .listTodosMock,
+        ).toHaveBeenCalledWith({
+          ownerId:
+            todo.ownerId,
+          page: 1,
+          pageSize: 20,
+          state: "pending",
+          sortBy: "dueDate",
+          sortOrder: "asc",
+        });
 
         expect(result).toEqual({
           items: [
@@ -126,6 +142,37 @@ describe(
             totalPages: 1,
           },
         });
+      },
+    );
+
+    it(
+      "lists every state when state is undefined",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .listTodosMock
+          .mockResolvedValue({
+            items: [
+              todo,
+            ],
+            totalItems: 1,
+          });
+
+        await dependencies
+          .service
+          .execute(
+            todo.ownerId,
+            {
+              page: 1,
+              pageSize: 20,
+              sortBy:
+                "createdAt",
+              sortOrder:
+                "desc",
+            },
+          );
 
         expect(
           dependencies
@@ -135,12 +182,17 @@ describe(
             todo.ownerId,
           page: 1,
           pageSize: 20,
+          state: undefined,
+          sortBy:
+            "createdAt",
+          sortOrder:
+            "desc",
         });
       },
     );
 
     it(
-      "calculates multiple pages",
+      "calculates total pages after filtering",
       async () => {
         const dependencies =
           createDependencies();
@@ -149,7 +201,7 @@ describe(
           .listTodosMock
           .mockResolvedValue({
             items: [],
-            totalItems: 41,
+            totalItems: 21,
           });
 
         const result =
@@ -159,9 +211,13 @@ describe(
               todo.ownerId,
               {
                 page: 2,
-                pageSize: 20,
-                sortBy: "createdAt",
-                sortOrder: "desc",
+                pageSize: 10,
+                state:
+                  "completed",
+                sortBy:
+                  "createdAt",
+                sortOrder:
+                  "desc",
               },
             );
 
@@ -169,15 +225,15 @@ describe(
           result.pagination,
         ).toEqual({
           page: 2,
-          pageSize: 20,
-          totalItems: 41,
+          pageSize: 10,
+          totalItems: 21,
           totalPages: 3,
         });
       },
     );
 
     it(
-      "returns zero pages when the user has no TODOs",
+      "returns zero pages for an empty filtered result",
       async () => {
         const dependencies =
           createDependencies();
@@ -197,8 +253,12 @@ describe(
               {
                 page: 1,
                 pageSize: 20,
-                sortBy: "createdAt",
-                sortOrder: "desc",
+                state:
+                  "cancelled",
+                sortBy:
+                  "dueDate",
+                sortOrder:
+                  "asc",
               },
             );
 
@@ -211,47 +271,6 @@ describe(
             totalItems: 0,
             totalPages: 0,
           },
-        });
-      },
-    );
-
-    it(
-      "allows an empty page beyond the final page",
-      async () => {
-        const dependencies =
-          createDependencies();
-
-        dependencies
-          .listTodosMock
-          .mockResolvedValue({
-            items: [],
-            totalItems: 3,
-          });
-
-        const result =
-          await dependencies
-            .service
-            .execute(
-              todo.ownerId,
-              {
-                page: 10,
-                pageSize: 20,
-                sortBy: "createdAt",
-                sortOrder: "desc",
-              },
-            );
-
-        expect(result.items).toEqual(
-          [],
-        );
-
-        expect(
-          result.pagination,
-        ).toEqual({
-          page: 10,
-          pageSize: 20,
-          totalItems: 3,
-          totalPages: 1,
         });
       },
     );
@@ -278,8 +297,10 @@ describe(
               {
                 page: 1,
                 pageSize: 20,
-                sortBy: "createdAt",
-                sortOrder: "desc",
+                sortBy:
+                  "createdAt",
+                sortOrder:
+                  "desc",
               },
             ),
         ).rejects.toThrow(

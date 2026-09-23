@@ -2,6 +2,11 @@ import type {
   PoolClient,
 } from "pg";
 
+import type {
+  SortOrder,
+  TodoSortField,
+} from "@todo/contracts";
+
 import {
   database,
 } from "../../../config/database.js";
@@ -30,6 +35,50 @@ import type {
 interface CountRow {
   readonly total_items:
     string;
+}
+
+type OrderKey =
+  `${TodoSortField}:${SortOrder}`;
+
+/*
+ * User input is never inserted directly into SQL.
+ *
+ * The validated sort field and direction select one
+ * complete SQL fragment from this application-owned
+ * allow list.
+ */
+const ORDER_BY_CLAUSES:
+  Readonly<
+    Record<OrderKey, string>
+  > = {
+    "createdAt:asc":
+      `created_at ASC,
+       id ASC`,
+
+    "createdAt:desc":
+      `created_at DESC,
+       id DESC`,
+
+    "dueDate:asc":
+      `due_date ASC NULLS LAST,
+       created_at DESC,
+       id DESC`,
+
+    "dueDate:desc":
+      `due_date DESC NULLS LAST,
+       created_at DESC,
+       id DESC`,
+  };
+
+function getOrderByClause(
+  sortBy: TodoSortField,
+  sortOrder: SortOrder,
+): string {
+  const key:
+    OrderKey =
+    `${sortBy}:${sortOrder}`;
+
+  return ORDER_BY_CLAUSES[key];
 }
 
 function parseTotalItems(
@@ -94,14 +143,44 @@ implements ListTodosRepository {
       ) *
       parameters.pageSize;
 
+    /*
+     * Only fixed application-owned SQL is used.
+     * The state value remains a PostgreSQL parameter.
+     */
+    const stateCondition =
+      parameters.state === undefined
+        ? ""
+        : "AND state = $2";
+
+    const filterValues:
+      (string | number)[] = [
+        parameters.ownerId,
+      ];
+
+    if (
+      parameters.state !==
+      undefined
+    ) {
+      filterValues.push(
+        parameters.state,
+      );
+    }
+
+    const limitParameterPosition =
+      filterValues.length + 1;
+
+    const offsetParameterPosition =
+      filterValues.length + 2;
+
+    const orderByClause =
+      getOrderByClause(
+        parameters.sortBy,
+        parameters.sortOrder,
+      );
+
     try {
-      /*
-       * The count and item queries use the same
-       * database snapshot. This prevents inconsistent
-       * pagination metadata during concurrent writes.
-       */
       await client.query(
-        `BEGIN
+        `BEGIN TRANSACTION
          ISOLATION LEVEL REPEATABLE READ
          READ ONLY`,
       );
@@ -115,11 +194,17 @@ implements ListTodosRepository {
             FROM todos
             WHERE owner_id = $1
               AND deleted_at IS NULL
+              ${stateCondition}
           `,
-          [
-            parameters.ownerId,
-          ],
+          filterValues,
         );
+
+      const listValues:
+        (string | number)[] = [
+          ...filterValues,
+          parameters.pageSize,
+          offset,
+        ];
 
       const todosResult =
         await client.query<
@@ -138,17 +223,15 @@ implements ListTodosRepository {
             FROM todos
             WHERE owner_id = $1
               AND deleted_at IS NULL
+              ${stateCondition}
             ORDER BY
-              created_at DESC,
-              id DESC
-            LIMIT $2
-            OFFSET $3
+              ${orderByClause}
+            LIMIT
+              $${limitParameterPosition}
+            OFFSET
+              $${offsetParameterPosition}
           `,
-          [
-            parameters.ownerId,
-            parameters.pageSize,
-            offset,
-          ],
+          listValues,
         );
 
       await client.query(

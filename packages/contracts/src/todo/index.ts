@@ -3,6 +3,8 @@ export {
   DEFAULT_TODO_PAGE_SIZE,
   MAXIMUM_TODO_DESCRIPTION_LENGTH,
   MAXIMUM_TODO_PAGE_SIZE,
+  DEFAULT_SORT_ORDER,
+  DEFAULT_TODO_SORT_FIELD,
   MAXIMUM_TODO_TITLE_LENGTH,
   SORT_ORDERS,
   TODO_SORT_FIELDS,
@@ -35,3 +37,6 @@ export type {
   UpdateTodoRequest,
   UpdateTodoResponse,
 } from "./update.todo.contract.js";
+
+
+

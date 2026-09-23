@@ -396,9 +396,26 @@ export async function listTodos(
     String(query.pageSize),
   );
 
+  if (query.state !== undefined) {
+    endpoint.searchParams.set(
+      "state",
+      query.state,
+    );
+  }
+
+  endpoint.searchParams.set(
+    "sortBy",
+    query.sortBy,
+  );
+
+  endpoint.searchParams.set(
+    "sortOrder",
+    query.sortOrder,
+  );
+
   const result =
     await sendTodoRequest<
-    ListTodosResponse
+      ListTodosResponse
     >({
       method: "GET",
       endpoint,

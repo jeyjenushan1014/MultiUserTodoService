@@ -5228,3 +5228,19 @@ HTTP/1.1 400 Bad Request
 ```
 
 The endpoint is not available directly through the public Gateway API.
+
+## TODO Sharing Foundation
+
+TODO-sharing endpoints are implemented in subsequent parts.
+
+The sharing model supports:
+
+- sharing an owned TODO with another registered user;
+- preventing self-sharing;
+- preventing duplicate active shares;
+- granting state-update permission;
+- listing shared TODOs;
+- withdrawing access;
+- sharing again after withdrawal.
+
+Recipient identity is represented by the stable Account Service user ID rather than a copied email address.

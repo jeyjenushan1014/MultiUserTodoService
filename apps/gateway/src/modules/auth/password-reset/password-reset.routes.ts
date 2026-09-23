@@ -15,12 +15,14 @@ import {
   confirmPasswordResetSchema,
   passwordResetRequestSchema,
 } from "./password-reset.validation.js";
+import { passwordResetRateLimit } from "../../../rate-limit/rate-limit.composition.js";
 
 export const passwordResetRouter =
   Router();
 
 passwordResetRouter.post(
   "/request",
+  passwordResetRateLimit,
   validateBody(
     passwordResetRequestSchema,
   ),

@@ -7,6 +7,11 @@ import {
 } from "./middleware/error-handler.middleware.js";
 
 import {
+  authenticationRateLimit,
+  generalApiRateLimit,
+} from "./rate-limit/rate-limit.composition.js";
+
+import {
   notFoundMiddleware,
 } from "./middleware/not-found.middleware.js";
 
@@ -87,8 +92,15 @@ app.use(
 );
 
 app.use(
+  "/api/v1",
+  generalApiRateLimit,
+);
+
+app.use(
   "/api/v1/auth",
+  authenticationRateLimit,
   registrationRouter,
+
 );
 
 app.use(

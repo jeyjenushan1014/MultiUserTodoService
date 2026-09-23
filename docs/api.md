@@ -5130,3 +5130,36 @@ An invalid or expired caller identity may return:
 ```
 
 Internal authentication headers must never be accepted from a public client as proof of authentication. The Gateway creates the trusted internal identity only after validating the public access token.
+
+## Rate Limiting
+
+Public API routes are protected by distributed Redis-backed rate limiting.
+
+A successful response may include:
+
+```http
+RateLimit-Limit: 100
+RateLimit-Remaining: 99
+RateLimit-Reset: 60
+```
+
+When a client exceeds a configured limit, the Gateway returns:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 42
+```
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many requests; try again later",
+    "requestId": "9d591bcc-859c-4e88-b95c-bf391ead793d"
+  }
+}
+```
+
+Authentication and password-reset endpoints use stricter policies than general API routes.
+
+Rate-limit counters are shared through Redis across Gateway instances.

@@ -17,6 +17,61 @@ const environmentSchema = z.object({
     .positive()
     .default(3000),
 
+  REDIS_URL:
+  z.string()
+    .min(1),
+
+RATE_LIMIT_KEY_PREFIX:
+  z.string()
+    .min(1)
+    .default(
+      "todo-platform:rate-limit",
+    ),
+
+GENERAL_RATE_LIMIT_MAX:
+  z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(100),
+
+GENERAL_RATE_LIMIT_WINDOW_SECONDS:
+  z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
+
+AUTH_RATE_LIMIT_MAX:
+  z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10),
+
+AUTH_RATE_LIMIT_WINDOW_SECONDS:
+  z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
+
+PASSWORD_RESET_RATE_LIMIT_MAX:
+  z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5),
+
+PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:
+  z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(900),
+
+  
+
   ACCOUNT_SERVICE_URL: z
     .url(),
 

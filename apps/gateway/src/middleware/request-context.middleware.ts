@@ -1,5 +1,9 @@
 /*
-It is mainly used to generate system generated id instead of send the client id
+The Gateway is the only public entry point.
+
+A public client is not allowed to choose the
+trusted request ID. The Gateway always creates
+a new system-generated UUID.
 */
 
 import {
@@ -15,39 +19,14 @@ import {
   runWithRequestContext,
 } from "@todo/common";
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function getValidRequestId(
-  requestIdHeader: string | undefined,
-): string {
-  if (
-    requestIdHeader !== undefined &&
-    UUID_PATTERN.test(
-      requestIdHeader,
-    )
-  ) {
-    return requestIdHeader;
-  }
-
-  return randomUUID();
-}
-
 export const requestContextMiddleware:
   RequestHandler = (
-    request,
+    _request,
     response,
     next,
   ): void => {
-    const headerValue =
-      request.get(
-        REQUEST_ID_HEADER,
-      );
-
     const requestId =
-      getValidRequestId(
-        headerValue,
-      );
+      randomUUID();
 
     response.setHeader(
       REQUEST_ID_HEADER,
@@ -57,7 +36,9 @@ export const requestContextMiddleware:
     runWithRequestContext(
       {
         requestId,
-        serviceName: "gateway",
+
+        serviceName:
+          "gateway",
       },
       next,
     );

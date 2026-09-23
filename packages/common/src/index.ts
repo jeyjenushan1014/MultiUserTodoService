@@ -20,10 +20,11 @@ export {
   getRequestContext,
   getRequestId,
   runWithRequestContext,
+  requireRequestId
 } from "./request-context/request-context.js";
 
 export type {
-  RequestContext,
+  RequestContext
 } from "./request-context/request-context.js";
 
 export {

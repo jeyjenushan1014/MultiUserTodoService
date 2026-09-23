@@ -13,18 +13,24 @@ import {
 
 export interface RequestContext {
   readonly requestId: string;
-  readonly serviceName: string;
+
+  readonly serviceName:
+    | "gateway"
+    | "account-service"
+    | "todo-service";
 }
 
 const requestContextStorage =
-  new AsyncLocalStorage<RequestContext>();
+  new AsyncLocalStorage<
+    RequestContext
+  >();
 
-export function runWithRequestContext<T>(
+export function runWithRequestContext<
+  TResult,
+>(
   context: RequestContext,
-  callback: () => T,
-): T {
-
-    //While executing this callback and asynchronous operations created from it, make this context available.
+  callback: () => TResult,
+): TResult {
   return requestContextStorage.run(
     context,
     callback,
@@ -33,10 +39,33 @@ export function runWithRequestContext<T>(
 
 export function getRequestContext():
   RequestContext | undefined {
-  return requestContextStorage.getStore();
+  return requestContextStorage
+    .getStore();
 }
 
 export function getRequestId():
   string | undefined {
-  return getRequestContext()?.requestId;
+  return getRequestContext()
+    ?.requestId;
+}
+
+export function requireRequestId():
+  string {
+  const requestId =
+    getRequestId();
+
+  if (requestId === undefined) {
+    throw new Error(
+      "Request context is unavailable",
+    );
+  }
+
+  return requestId;
+}
+
+export function getServiceName():
+  RequestContext["serviceName"] |
+  undefined {
+  return getRequestContext()
+    ?.serviceName;
 }

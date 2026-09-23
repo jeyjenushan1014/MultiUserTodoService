@@ -1,3 +1,11 @@
+/*
+The Gateway is the only public entry point.
+
+A public client is not allowed to choose the
+trusted request ID. The Gateway always creates
+a new system-generated UUID.
+*/
+
 import {
   randomUUID,
 } from "node:crypto";
@@ -11,44 +19,14 @@ import {
   runWithRequestContext,
 } from "@todo/common";
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function getRequestId(
-  suppliedRequestId:
-    string | undefined,
-): string {
-  if (
-    suppliedRequestId !== undefined &&
-    UUID_PATTERN.test(
-      suppliedRequestId,
-    )
-  ) {
-    return suppliedRequestId;
-  }
-
-  return randomUUID();
-}
-
 export const requestContextMiddleware:
   RequestHandler = (
-    request,
+    _request,
     response,
     next,
   ): void => {
     const requestId =
-      getRequestId(
-        (() => {
-          const header =
-            request.headers[
-              REQUEST_ID_HEADER
-            ];
-
-          return Array.isArray(header)
-            ? header[0]
-            : header;
-        })(),
-      );
+      randomUUID();
 
     response.setHeader(
       REQUEST_ID_HEADER,
@@ -58,8 +36,9 @@ export const requestContextMiddleware:
     runWithRequestContext(
       {
         requestId,
+
         serviceName:
-          "account-service",
+          "gateway",
       },
       next,
     );

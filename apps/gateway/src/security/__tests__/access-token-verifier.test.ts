@@ -13,17 +13,21 @@ import {
 } from "vitest";
 
 import {
+  env,
+} from "../../config/env.js";
+
+import {
   verifyAccessToken,
 } from "../access-token-verifier.js";
 
 const secret =
-  new TextEncoder()
-    .encode(
-      "test-jwt-secret-containing-more-than-32-characters",
-    );
+  new TextEncoder().encode(
+    env.JWT_SECRET,
+  );
 
 function createRequest(
-  authorization?: string,
+  authorization?:
+    string,
 ): Request {
   return {
     header: (
@@ -41,37 +45,51 @@ function createRequest(
   } as Request;
 }
 
+interface TokenOptions {
+  readonly issuer?:
+    string;
+
+  readonly audience?:
+    string;
+
+  readonly expiresIn?:
+    string;
+}
+
 async function createToken(
-  options?: {
-    readonly issuer?: string;
-    readonly audience?: string;
-    readonly expiresIn?:
-      string;
-  },
+  options?:
+    TokenOptions,
 ): Promise<string> {
   return new SignJWT({
-    sid: "session-id",
+    sid:
+      "session-id",
+
     email:
       "user@example.com",
   })
     .setProtectedHeader({
-      alg: "HS256",
+      alg:
+        "HS256",
     })
-    .setSubject("user-id")
+    .setSubject(
+      "user-id",
+    )
     .setIssuer(
       options?.issuer ??
-        "todo-account-service",
+        env.JWT_ISSUER,
     )
     .setAudience(
       options?.audience ??
-        "todo-platform",
+        env.JWT_AUDIENCE,
     )
     .setIssuedAt()
     .setExpirationTime(
       options?.expiresIn ??
         "15m",
     )
-    .sign(secret);
+    .sign(
+      secret,
+    );
 }
 
 describe(
@@ -91,9 +109,12 @@ describe(
           );
 
         expect(result).toEqual({
-          userId: "user-id",
+          userId:
+            "user-id",
+
           sessionId:
             "session-id",
+
           email:
             "user@example.com",
         });
@@ -108,8 +129,11 @@ describe(
             createRequest(),
           ),
         ).rejects.toMatchObject({
-          statusCode: 401,
-          code: "UNAUTHORIZED",
+          statusCode:
+            401,
+
+          code:
+            "UNAUTHORIZED",
         });
       },
     );
@@ -124,8 +148,11 @@ describe(
             ),
           ),
         ).rejects.toMatchObject({
-          statusCode: 401,
-          code: "UNAUTHORIZED",
+          statusCode:
+            401,
+
+          code:
+            "UNAUTHORIZED",
         });
       },
     );
@@ -146,8 +173,11 @@ describe(
             ),
           ),
         ).rejects.toMatchObject({
-          statusCode: 401,
-          code: "UNAUTHORIZED",
+          statusCode:
+            401,
+
+          code:
+            "UNAUTHORIZED",
         });
       },
     );
@@ -168,8 +198,11 @@ describe(
             ),
           ),
         ).rejects.toMatchObject({
-          statusCode: 401,
-          code: "UNAUTHORIZED",
+          statusCode:
+            401,
+
+          code:
+            "UNAUTHORIZED",
         });
       },
     );
@@ -179,7 +212,8 @@ describe(
       async () => {
         const token =
           await createToken({
-            expiresIn: "0s",
+            expiresIn:
+              "0s",
           });
 
         await expect(
@@ -189,8 +223,11 @@ describe(
             ),
           ),
         ).rejects.toMatchObject({
-          statusCode: 401,
-          code: "UNAUTHORIZED",
+          statusCode:
+            401,
+
+          code:
+            "UNAUTHORIZED",
         });
       },
     );

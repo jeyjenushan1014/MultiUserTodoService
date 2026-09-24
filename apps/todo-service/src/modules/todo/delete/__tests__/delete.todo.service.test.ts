@@ -60,6 +60,9 @@ const ownerId =
 const todoId =
   "9f134ed0-4503-4a23-a189-f065fe9fd838";
 
+const requestId =
+  "224d07f1-8812-429c-a0a6-092d83977ad5";
+
 describe(
   "DeleteTodoService",
   () => {
@@ -81,6 +84,7 @@ describe(
             .execute(
               ownerId,
               todoId,
+              requestId,
             ),
         ).resolves.toBeUndefined();
 
@@ -90,6 +94,7 @@ describe(
         ).toHaveBeenCalledWith(
           ownerId,
           todoId,
+          requestId,
         );
       },
     );
@@ -116,11 +121,15 @@ describe(
             .execute(
               ownerId,
               todoId,
+              requestId,
             ),
         ).rejects.toMatchObject({
-          statusCode: 404,
+          statusCode:
+            404,
+
           code:
             "TODO_NOT_FOUND",
+
           message:
             "TODO was not found",
         });
@@ -147,6 +156,7 @@ describe(
             .execute(
               ownerId,
               todoId,
+              requestId,
             ),
         ).rejects.toThrow(
           "Database unavailable",

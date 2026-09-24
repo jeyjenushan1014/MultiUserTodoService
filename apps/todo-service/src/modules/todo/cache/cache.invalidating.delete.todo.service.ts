@@ -6,6 +6,7 @@ export interface DeleteTodoOperation {
   execute(
     ownerId: string,
     todoId: string,
+    requestId: string,
   ): Promise<void>;
 }
 
@@ -15,20 +16,22 @@ implements DeleteTodoOperation {
     private readonly operation:
       DeleteTodoOperation,
 
-    private readonly invalidator:
+    private readonly cacheInvalidator:
       TodoCacheInvalidator,
   ) {}
 
   public async execute(
     ownerId: string,
     todoId: string,
+    requestId: string,
   ): Promise<void> {
     await this.operation.execute(
       ownerId,
       todoId,
+      requestId,
     );
 
-    await this.invalidator
+    await this.cacheInvalidator
       .invalidateOwner(
         ownerId,
       );

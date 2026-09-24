@@ -15,12 +15,14 @@ export class DeleteTodoService {
   public async execute(
     ownerId: string,
     todoId: string,
+    requestId: string,
   ): Promise<void> {
     const deleted =
       await this.repository
         .softDeleteOwnedTodo(
           ownerId,
           todoId,
+          requestId,
         );
 
     if (!deleted) {

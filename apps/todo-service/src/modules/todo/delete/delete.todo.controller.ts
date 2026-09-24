@@ -8,20 +8,16 @@ import type {
 } from "@todo/contracts";
 
 import {
+  getRequestId,
+} from "@todo/common";
+
+import {
   getInternalCallerIdentity,
 } from "../../../middleware/internal-service-auth.middleware.js";
 
 import {
   getValidatedParams,
 } from "../../../middleware/validate-params.middleware.js";
-
-import {
-  DeleteTodoService,
-} from "./delete.todo.service.js";
-
-import {
-  PostgresDeleteTodoRepository,
-} from "./postgres.delete.todo.repository.js";
 
 import {
   CacheInvalidatingDeleteTodoService,
@@ -31,6 +27,13 @@ import {
   RedisTodoCacheInvalidator,
 } from "../cache/redis.todo.cache.invalidator.js";
 
+import {
+  DeleteTodoService,
+} from "./delete.todo.service.js";
+
+import {
+  PostgresDeleteTodoRepository,
+} from "./postgres.delete.todo.repository.js";
 
 const repository =
   new PostgresDeleteTodoRepository();
@@ -61,13 +64,26 @@ export async function deleteTodoController(
     );
 
   const params =
-  getValidatedParams(
-    response,
-  ) as GetTodoParams;
+    getValidatedParams(
+      response,
+    ) as GetTodoParams;
+
+  const requestId =
+    getRequestId();
+
+  if (
+    requestId ===
+    undefined
+  ) {
+    throw new Error(
+      "Request context is unavailable",
+    );
+  }
 
   await service.execute(
     identity.userId,
     params.todoId,
+    requestId,
   );
 
   response

@@ -10,5 +10,5 @@
   "include": [
     "src/**/*.ts",
     "vitest.config.ts"
-  ],
+, "../todo-service/src/outbox/__tests__/todo-outbox.failure.test.ts"  ],
 }

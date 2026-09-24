@@ -34,3 +34,31 @@ Every integration event uses this structure:
   "occurredAt": "2026-09-23T10:00:00.000Z",
   "payload": {}
 }
+
+## TODO integration events
+
+The TODO Service uses versioned integration events to communicate completed TODO-domain changes to other services.
+
+Part 14 introduces the event contracts and transactional outbox persistence component. Runtime event creation and publishing are connected to TODO operations in Part 15.
+
+### Common event envelope
+
+Every TODO integration event uses this envelope:
+
+| Field | Type | Description |
+|---|---|---|
+| `eventId` | UUID | Globally unique event identifier |
+| `eventType` | string | Name of the event |
+| `eventVersion` | number | Version of the event contract |
+| `producer` | string | Service that produced the event |
+| `requestId` | UUID | Request that caused the event |
+| `occurredAt` | ISO-8601 datetime | Time the domain change occurred |
+| `payload` | object | Event-specific information |
+
+All current TODO events use:
+
+```json
+{
+  "eventVersion": 1,
+  "producer": "todo-service"
+}

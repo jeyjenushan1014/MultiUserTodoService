@@ -53,6 +53,8 @@ export type {
 
 export * from "./share/index.js"
 
+export * from './events/todo-event.contract.js'
+
 
 
 

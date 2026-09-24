@@ -1,93 +1,70 @@
 # Integration Event Catalogue
 
-## Status
+## 1. Transport and guarantees
 
-This catalogue documents the integration-event envelope and the events currently implemented or reserved by shared contracts.
+RabbitMQ topic exchange `todo.events` carries durable, persistent messages. Publishers use confirmations. Each consumer has a durable queue; failures are negatively acknowledged and routed through retry or dead-letter queues. A message that cannot be processed is preserved for inspection rather than silently discarded.
 
-An event must not be described as operational until its publisher, durable transport, consumer behaviour and failure handling have been verified.
+The publisher is decoupled from consumers: the domain request commits its database transaction and outbox row whether or not a consumer is running. Consumers are idempotent. History deduplicates by `event_id`; projection and notification consumers use durable queue/state semantics.
 
-## Transport
+## 2. Envelope
 
-RabbitMQ is used for asynchronous integration.
-
-The system uses:
-
-- Durable exchanges
-- Durable queues
-- Persistent messages
-- Publisher confirmations
-- Retry queues
-- Dead-letter queues
-- Manual consumer acknowledgement
-
-## Common Event Envelope
-
-Every integration event uses this structure:
-
-```json
-{
-  "eventId": "65dfe1ea-29a8-4ff9-a127-5419383e650f",
-  "eventType": "todo.shared",
-  "eventVersion": 1,
-  "producer": "todo-service",
-  "requestId": "a338e345-c591-4c98-9ea3-8394980609e1",
-  "occurredAt": "2026-09-23T10:00:00.000Z",
-  "payload": {}
-}
-
-## TODO integration events
-
-The TODO Service uses versioned integration events to communicate completed TODO-domain changes to other services.
-
-Part 14 introduces the event contracts and transactional outbox persistence component. Runtime event creation and publishing are connected to TODO operations in Part 15.
-
-### Common event envelope
-
-Every TODO integration event uses this envelope:
-
-| Field | Type | Description |
+| Field | Type | Meaning |
 |---|---|---|
-| `eventId` | UUID | Globally unique event identifier |
-| `eventType` | string | Name of the event |
-| `eventVersion` | number | Version of the event contract |
-| `producer` | string | Service that produced the event |
-| `requestId` | UUID | Request that caused the event |
-| `occurredAt` | ISO-8601 datetime | Time the domain change occurred |
-| `payload` | object | Event-specific information |
+| `eventId` | UUID | Globally unique event identity and deduplication key |
+| `eventType` | string | Stable event name |
+| `eventVersion` | positive integer | Payload schema version; current version is `1` |
+| `producer` | enum | `account-service`, `todo-service`, `activity-service`, or `notification-worker` |
+| `requestId` | UUID | Request that caused the domain change |
+| `occurredAt` | ISO-8601 datetime | Time of the committed domain change |
+| `payload` | object | Event-specific data |
 
-All current TODO events use:
+## 3. Account events
 
-```json
-{
-  "eventVersion": 1,
-  "producer": "todo-service"
-}
+### `account.registered` version 1
 
-### `todo.shared` — version 1
+Published by Account Service after a user row and outbox row commit. Consumed by Todo owner projection. Payload: `userId: UUID`, `email: string`. The consumer upserts `todo_owners`; duplicate delivery leaves the same projection state. Failure is retried and eventually sent to the owner-projection DLQ.
 
-Produced by: `todo-service`
+### `account.email-changed` version 1
 
-Created only when a new active TODO share is successfully persisted.
+Published after the account email changes and the outbox row commits. Consumed by Todo owner projection. Payload: `userId: UUID`, `email: string`. The consumer updates the local email projection. During propagation, TODO responses may briefly show the previous email, but authorization uses stable user IDs.
 
-The share row and outbox event are written in the same PostgreSQL transaction. Duplicate shares, missing TODOs, deleted TODOs, and cross-owner requests do not create this event.
+## 4. TODO events
 
-Payload:
+All are produced by Todo Service after the related TODO/share mutation and outbox insertion commit. All are consumed by Todo history worker.
 
-```json
-{
-  "shareId": "22222222-2222-4222-8222-222222222222",
-  "todoId": "11111111-1111-4111-8111-111111111111",
-  "ownerId": "33333333-3333-4333-8333-333333333333",
-  "recipientId": "44444444-4444-4444-8444-444444444444"
-}
+### `todo.created` version 1
 
+Payload: `todoId`, `ownerId`, `actorUserId` (UUIDs), and `title` (string). Published for a successful create. History records creation.
 
-#### Publication condition
+### `todo.completed` version 1
 
-`todo.completed` is created only when a TODO transitions from a state other than `completed` to `completed`.
+Payload: `todoId`, `ownerId`, and `actorUserId` (UUIDs). Published only when state changes into `completed`; updating an already completed TODO does not publish another completion event.
 
-Updating an already-completed TODO without leaving the completed state does not create another completion event.
+### `todo.shared` version 1
 
-The event is inserted into the TODO Service outbox in the same PostgreSQL transaction as the state update. If either the update or outbox insertion fails, both operations roll back.
+Payload: `todoId`, `ownerId`, `actorUserId`, `sharedWithUserId` (UUIDs), and `title` (string). Consumed by Account Service notification consumer, which sends the sharing email to the recipient email currently known by Account Service. History records the share.
 
-The `completedByUserId` field identifies the owner or active share recipient who completed the TODO.
+### `todo.share-withdrawn` version 1
+
+Payload: `todoId`, `ownerId`, `actorUserId`, and `sharedWithUserId` (UUIDs). History records withdrawal. Authorization checks the active share row immediately, so the event is not required for access revocation.
+
+### `todo.deleted` version 1
+
+Payload: `todoId`, `ownerId`, `actorUserId` (UUIDs), and `participantUserIds` (UUID array). The participant snapshot is included because the TODO no longer exists for a consumer to query. History records deletion for every participant-visible record.
+
+## 5. Consumer failure and duplication
+
+Consumers acknowledge only after their database or mail work succeeds. A duplicate event is safe because event IDs are unique and handlers use upsert or unique processing constraints. A failed history message goes to `todo.history.dlq`; notification failure goes to `todo.notifications.dlq`; owner projection failure goes to `todo.owner-projection.dlq` after bounded retries.
+
+## 6. Evolution rules
+
+Existing event versions are immutable. Additive fields may be introduced only when old consumers can ignore them. A breaking payload change creates a new event version and keeps consumers capable of handling the prior version during rollout. Event type names and field meanings remain consistent across contracts, code, logs, and this document.
+
+## 7. Email catalogue
+
+| Email | Trigger | Recipient and content |
+|---|---|---|
+| Password reset | Account Service creates a reset request | Current account email; contains a one-time reset credential/link, never a password or access token |
+| TODO shared | Account notification consumer processes `todo.shared` | Recipient's current account email at send time; identifies the shared TODO and owner, but grants no continued access |
+
+Mailpit is the local SMTP sink. It captures every message at `http://localhost:8025`; no message leaves the developer machine. Failed delivery is retried and then dead-lettered for inspection.

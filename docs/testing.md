@@ -1,91 +1,35 @@
-# Testing Strategy
+# Testing and Verification
 
-## Test levels
-
-| Test level | Purpose |
-|---|---|
-| Validation unit tests | Verify accepted and rejected request shapes |
-| Service unit tests | Verify business outcomes and error mapping |
-| Cache decorator tests | Verify hit, miss and fallback behaviour |
-| Cache-version tests | Verify durable version parsing |
-| End-to-end tests | Verify the complete deployed request path |
-| Manual failure tests | Verify dependency outage behaviour |
-
-## Normal test command
+## Automated commands
 
 ```bash
 npm run check
-```
-
-This command runs:
-
-- ESLint.
-- TypeScript build.
-- Unit tests.
-
-It does not require Docker infrastructure.
-
-## End-to-end command
-
-Start the Docker stack and run:
-
-```bash
 npm run test:e2e
 ```
 
-## Core E2E coverage
+`npm run check` runs lint, TypeScript builds, and unit tests without requiring manually started infrastructure. `npm run test:e2e` exercises the public Gateway path against the Docker stack.
 
-- Authentication enforcement.
-- Request-ID propagation.
-- TODO creation.
-- Input normalization.
-- Same-owner duplicate-title rejection.
-- Different-owner identical-title support.
-- Concurrent duplicate-title handling.
-- Owner-scoped listing.
-- Pagination metadata.
-- State filtering.
-- Creation-date sorting.
-- Owner-scoped get.
-- Uniform cross-owner not-found behaviour.
-- Partial update.
-- Cache freshness after update.
-- Cross-owner update protection.
-- Cross-owner delete protection.
-- Soft deletion.
-- Cache freshness after delete.
-- Repeated-delete behaviour.
-- Invalid query rejection.
-- Invalid UUID rejection.
+## Automated coverage
 
-## Failure-path coverage
+The Gateway E2E suite covers authentication enforcement, request IDs, registration/login, TODO create/list/get/update/delete, pagination, state filtering, sorting, idempotent creation, duplicate-title concurrency, cross-owner isolation, cache freshness, sharing, and invalid UUID/query input. Unit suites cover validation, error mapping, cache hit/miss/fallback, rate limits, token verification, sessions, outbox logic, and consumers.
 
-The following dependency failures are manually verified:
+The isolation rule is verified for get, update, and delete: an inaccessible TODO returns the same `404 TODO_NOT_FOUND` as a missing TODO.
 
-- Redis unavailable.
-- Redis recovery after mutation.
-- TODO PostgreSQL unavailable.
-- TODO Service unavailable.
-- Account Service unavailable.
-- RabbitMQ unavailable.
+## Failure tests
 
-## Isolation rule
+The distributed requirements also need container-level checks. Stop and restart each dependency while the stack is running and verify:
 
-All cross-owner Get, Update and Delete operations return:
+| Failure | Expected observation |
+|---|---|
+| Redis | TODO remains correct and available; reads fall back to PostgreSQL |
+| Todo PostgreSQL | Todo process stays alive, readiness becomes unhealthy, recovery occurs after PostgreSQL returns |
+| Account Service | Existing projected TODO reads continue; dependent calls return `503`/`504` |
+| History worker | TODO mutations continue; history catches up after restart |
+| RabbitMQ | Outbox rows remain pending and publish after RabbitMQ returns |
+| Mailpit | Triggering action succeeds; notification retries and later appears in Mailpit |
 
-```text
-404 TODO_NOT_FOUND
-```
+Event tests must include duplicate delivery, consumer failure, retry, and dead-letter behavior. Credential tests must include refresh-token reuse, expired reset tokens, and reset-token reuse. Downstream client tests must include both timeout and connection-unavailable cases.
 
-The API does not reveal whether another owner’s TODO exists.
+## Clean test state
 
-## Concurrency rule
-
-Concurrent same-owner requests using the same normalized active title produce:
-
-```text
-One successful creation
-One 409 TODO_TITLE_ALREADY_EXISTS
-```
-
-The PostgreSQL partial unique index provides the final concurrency guarantee.
+Unit tests use isolated fixtures and mocks. E2E runs use disposable database/cache/message-broker state or explicitly reset fixtures so one run cannot affect the next. No test should require a developer to start a process by hand beyond the documented Compose command.

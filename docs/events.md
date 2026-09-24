@@ -63,6 +63,24 @@ All current TODO events use:
   "producer": "todo-service"
 }
 
+### `todo.shared` — version 1
+
+Produced by: `todo-service`
+
+Created only when a new active TODO share is successfully persisted.
+
+The share row and outbox event are written in the same PostgreSQL transaction. Duplicate shares, missing TODOs, deleted TODOs, and cross-owner requests do not create this event.
+
+Payload:
+
+```json
+{
+  "shareId": "22222222-2222-4222-8222-222222222222",
+  "todoId": "11111111-1111-4111-8111-111111111111",
+  "ownerId": "33333333-3333-4333-8333-333333333333",
+  "recipientId": "44444444-4444-4444-8444-444444444444"
+}
+
 
 #### Publication condition
 

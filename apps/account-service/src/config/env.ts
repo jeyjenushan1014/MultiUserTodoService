@@ -205,7 +205,29 @@ OUTBOX_MAX_RETRY_DELAY_SECONDS:
         "silent",
       ])
       .default("info"),
-  });
+
+  MAIL_HOST: z
+  .string()
+  .min(1)
+  .default("mailpit"),
+
+MAIL_PORT: z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(65_535)
+  .default(1025),
+RABBITMQ_NOTIFICATION_DLQ_ROUTING_KEY:
+  z.string()
+    .min(1)
+    .default("notification.failed"),
+
+MAIL_FROM: z
+  .email()
+  .default("no-reply@todo.local"),
+
+  })
+
 
 export const env =
   environmentSchema.parse(

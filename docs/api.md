@@ -5291,3 +5291,19 @@ Possible errors:
 | 409 | `TODO_SELF_SHARE_NOT_ALLOWED` | Owner attempted to share with themselves |
 | 409 | `TODO_ALREADY_SHARED` | Active share already exists |
 | 429 | `RATE_LIMIT_EXCEEDED` | Gateway rate limit exceeded |
+
+
+## Get a TODO
+
+Returns a TODO when the authenticated caller is either:
+
+- the TODO owner; or
+- a recipient with an active share.
+
+The response contains the current email address of the owner and every active share recipient.
+
+### Request
+
+```http
+GET /api/v1/todos/{todoId}
+Authorization: Bearer <access-token>

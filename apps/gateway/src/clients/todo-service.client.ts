@@ -501,20 +501,15 @@ export async function listTodos(
 GET /internal/v1/todos/:todoId
 */
 export async function getTodoById(
-  todoId:
-    string,
-  identity:
-    CallerIdentity,
-  requestId:
-    string,
+  todoId: string,
+  identity: CallerIdentity,
+  requestId: string,
 ): Promise<GetTodoResponse> {
   const endpoint =
     new URL(
-      `/internal/v1/todos/${
-        encodeURIComponent(
-          todoId,
-        )
-      }`,
+      `/internal/v1/todos/${encodeURIComponent(
+        todoId,
+      )}`,
       env.TODO_SERVICE_URL,
     );
 
@@ -522,20 +517,13 @@ export async function getTodoById(
     await sendTodoRequest<
       GetTodoResponse
     >({
-      method:
-        "GET",
-
+      method: "GET",
       endpoint,
-
       identity,
-
       requestId,
     });
 
-  if (
-    result === undefined ||
-    !isRecord(result)
-  ) {
+  if (result === undefined) {
     throw new AppError(
       502,
       "INVALID_DOWNSTREAM_RESPONSE",

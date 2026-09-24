@@ -17,26 +17,26 @@ export class GetTodoService {
   ) {}
 
   public async execute(
-    ownerId: string,
+    callerId: string,
     todoId: string,
   ): Promise<GetTodoResponse> {
     const todo =
       await this.repository
-        .findOwnedTodoById(
-          ownerId,
+        .findAccessibleById({
+          callerId,
           todoId,
-        );
+        });
 
+    /*
+     * The response is intentionally identical for:
+     *
+     * 1. A missing TODO.
+     * 2. A TODO belonging to another user.
+     * 3. A TODO not shared with the caller.
+     *
+     * This prevents resource enumeration.
+     */
     if (todo === undefined) {
-      /*
-       * The same error is used when:
-       *
-       * 1. The TODO does not exist.
-       * 2. The TODO belongs to another owner.
-       * 3. The TODO was soft-deleted.
-       *
-       * This prevents resource-enumeration attacks.
-       */
       throw new AppError(
         404,
         "TODO_NOT_FOUND",

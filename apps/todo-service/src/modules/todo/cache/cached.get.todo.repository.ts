@@ -1,8 +1,9 @@
 import type {
-  TodoResponse,
+  GetTodoResponse,
 } from "@todo/contracts";
 
 import type {
+  FindAccessibleTodoParameters,
   GetTodoRepository,
 } from "../get/get.todo.repository.interface.js";
 
@@ -12,58 +13,38 @@ import type {
 
 export class CachedGetTodoRepository
 implements GetTodoRepository {
+  private readonly databaseRepository:
+    GetTodoRepository;
+
   public constructor(
-    private readonly repository:
+    databaseRepository:
       GetTodoRepository,
 
-    private readonly readCache:
+    readCache:
       TodoReadCache,
-  ) {}
-
-  public async findOwnedTodoById(
-    ownerId: string,
-    todoId: string,
-  ): Promise<
-    TodoResponse | undefined
-  > {
-    const lookup =
-      await this.readCache
-        .lookupItem(
-          ownerId,
-          todoId,
-        );
-
-    if (
-      lookup?.value !==
-      undefined
-    ) {
-      return lookup.value;
-    }
-
-    const todo =
-      await this.repository
-        .findOwnedTodoById(
-          ownerId,
-          todoId,
-        );
+  ) {
+    this.databaseRepository =
+      databaseRepository;
 
     /*
-     * Do not cache not-found results.
+     * Preserve the constructor used by the
+     * existing composition code.
      *
-     * This avoids negative-cache complications when a
-     * resource is created or restored.
+     * Single-item authorization cannot use Redis
+     * because a share can be withdrawn at any time.
      */
-    if (
-      todo !== undefined &&
-      lookup !== undefined
-    ) {
-      await this.readCache
-        .storeItem(
-          lookup.cacheKey,
-          todo,
-        );
-    }
+    void readCache;
+  }
 
-    return todo;
+  public async findAccessibleById(
+    parameters:
+      FindAccessibleTodoParameters,
+  ): Promise<
+    GetTodoResponse | undefined
+  > {
+    return this.databaseRepository
+      .findAccessibleById(
+        parameters,
+      );
   }
 }

@@ -1,12 +1,20 @@
 import type {
-  TodoResponse,
+  GetTodoResponse,
 } from "@todo/contracts";
 
+export interface FindAccessibleTodoParameters {
+  readonly todoId:
+    string;
+
+  readonly callerId:
+    string;
+}
+
 export interface GetTodoRepository {
-  findOwnedTodoById(
-    ownerId: string,
-    todoId: string,
+  findAccessibleById(
+    parameters:
+      FindAccessibleTodoParameters,
   ): Promise<
-    TodoResponse | undefined
+    GetTodoResponse | undefined
   >;
 }

@@ -1,4 +1,5 @@
 import {
+  beforeEach,
   describe,
   expect,
   it,
@@ -10,7 +11,7 @@ import type {
 } from "vitest";
 
 import type {
-  TodoResponse,
+  GetTodoResponse,
 } from "@todo/contracts";
 
 import type {
@@ -26,10 +27,10 @@ import type {
 } from "../todo.read.cache.interface.js";
 
 interface Dependencies {
-  readonly findOwnedTodoByIdMock:
+  readonly findAccessibleByIdMock:
     MockedFunction<
       GetTodoRepository[
-        "findOwnedTodoById"
+        "findAccessibleById"
       ]
     >;
 
@@ -53,10 +54,10 @@ interface Dependencies {
 
 function createDependencies():
   Dependencies {
-  const findOwnedTodoByIdMock =
+  const findAccessibleByIdMock =
     vi.fn<
       GetTodoRepository[
-        "findOwnedTodoById"
+        "findAccessibleById"
       ]
     >();
 
@@ -74,37 +75,70 @@ function createDependencies():
       ]
     >();
 
+  const lookupListMock =
+    vi.fn<
+      TodoReadCache[
+        "lookupList"
+      ]
+    >();
+
+  const storeListMock =
+    vi.fn<
+      TodoReadCache[
+        "storeList"
+      ]
+    >();
+
   const databaseRepository:
     GetTodoRepository = {
-      findOwnedTodoById:
-        findOwnedTodoByIdMock,
+      findAccessibleById:
+        (parameters) =>
+          findAccessibleByIdMock(
+            parameters,
+          ),
     };
 
   const readCache:
     TodoReadCache = {
       lookupItem:
-        lookupItemMock,
+        (
+          ownerId,
+          todoId,
+        ) =>
+          lookupItemMock(
+            ownerId,
+            todoId,
+          ),
 
       storeItem:
-        storeItemMock,
+        (
+          cacheKey,
+          todo,
+        ) =>
+          storeItemMock(
+            cacheKey,
+            todo,
+          ),
 
       lookupList:
-        vi.fn<
-          TodoReadCache[
-            "lookupList"
-          ]
-        >(),
+        (parameters) =>
+          lookupListMock(
+            parameters,
+          ),
 
       storeList:
-        vi.fn<
-          TodoReadCache[
-            "storeList"
-          ]
-        >(),
+        (
+          cacheKey,
+          result,
+        ) =>
+          storeListMock(
+            cacheKey,
+            result,
+          ),
     };
 
   return {
-    findOwnedTodoByIdMock,
+    findAccessibleByIdMock,
     lookupItemMock,
     storeItemMock,
 
@@ -119,18 +153,21 @@ function createDependencies():
 const ownerId =
   "70668eae-dac5-4b75-9bd3-02c963eb5b99";
 
+const recipientId =
+  "2dced07e-8468-4a4b-9d23-cd96c75fb962";
+
 const todoId =
   "9f134ed0-4503-4a23-a189-f065fe9fd838";
 
 const todo:
-  TodoResponse = {
+  GetTodoResponse = {
     id:
       todoId,
 
     ownerId,
 
     title:
-      "Cached TODO",
+      "Shared TODO",
 
     description:
       null,
@@ -146,76 +183,59 @@ const todo:
 
     updatedAt:
       "2026-09-23T08:00:00.000Z",
+
+    accessType:
+      "shared",
+
+    owner: {
+      id:
+        ownerId,
+
+      email:
+        "owner@example.com",
+    },
+
+    sharedWith: [
+      {
+        id:
+          recipientId,
+
+        email:
+          "recipient@example.com",
+      },
+    ],
   };
 
 describe(
   "CachedGetTodoRepository",
   () => {
-    it(
-      "returns a cache hit without calling PostgreSQL",
-      async () => {
-        const dependencies =
-          createDependencies();
-
-        dependencies
-          .lookupItemMock
-          .mockResolvedValue({
-            cacheKey:
-              "item-key",
-            value:
-              todo,
-          });
-
-        const result =
-          await dependencies
-            .repository
-            .findOwnedTodoById(
-              ownerId,
-              todoId,
-            );
-
-        expect(result).toEqual(
-          todo,
-        );
-
-        expect(
-          dependencies
-            .findOwnedTodoByIdMock,
-        ).not.toHaveBeenCalled();
-
-        expect(
-          dependencies
-            .storeItemMock,
-        ).not.toHaveBeenCalled();
+    beforeEach(
+      () => {
+        vi.clearAllMocks();
       },
     );
 
     it(
-      "loads PostgreSQL and stores a cache miss",
+      "reads an accessible TODO from PostgreSQL",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .lookupItemMock
-          .mockResolvedValue({
-            cacheKey:
-              "item-key",
-          });
-
-        dependencies
-          .findOwnedTodoByIdMock
-          .mockResolvedValue(
+          .findAccessibleByIdMock
+          .mockResolvedValueOnce(
             todo,
           );
 
         const result =
           await dependencies
             .repository
-            .findOwnedTodoById(
-              ownerId,
+            .findAccessibleById({
+              callerId:
+                recipientId,
+
               todoId,
-            );
+            });
 
         expect(result).toEqual(
           todo,
@@ -223,43 +243,41 @@ describe(
 
         expect(
           dependencies
-            .storeItemMock,
-        ).toHaveBeenCalledWith(
-          "item-key",
-          todo,
-        );
+            .findAccessibleByIdMock,
+        ).toHaveBeenCalledWith({
+          callerId:
+            recipientId,
+
+          todoId,
+        });
       },
     );
 
     it(
-      "uses PostgreSQL when Redis is unavailable",
+      "does not use Redis for an authorized item read",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .lookupItemMock
-          .mockResolvedValue(
-            undefined,
-          );
-
-        dependencies
-          .findOwnedTodoByIdMock
-          .mockResolvedValue(
+          .findAccessibleByIdMock
+          .mockResolvedValueOnce(
             todo,
           );
 
-        const result =
-          await dependencies
-            .repository
-            .findOwnedTodoById(
-              ownerId,
-              todoId,
-            );
+        await dependencies
+          .repository
+          .findAccessibleById({
+            callerId:
+              recipientId,
 
-        expect(result).toEqual(
-          todo,
-        );
+            todoId,
+          });
+
+        expect(
+          dependencies
+            .lookupItemMock,
+        ).not.toHaveBeenCalled();
 
         expect(
           dependencies
@@ -269,38 +287,91 @@ describe(
     );
 
     it(
-      "does not cache a missing TODO",
+      "returns undefined when PostgreSQL denies access",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .lookupItemMock
-          .mockResolvedValue({
-            cacheKey:
-              "item-key",
-          });
-
-        dependencies
-          .findOwnedTodoByIdMock
-          .mockResolvedValue(
+          .findAccessibleByIdMock
+          .mockResolvedValueOnce(
             undefined,
           );
 
         const result =
           await dependencies
             .repository
-            .findOwnedTodoById(
-              ownerId,
-              todoId,
-            );
+            .findAccessibleById({
+              callerId:
+                recipientId,
 
-        expect(result).toBeUndefined();
+              todoId,
+            });
+
+        expect(
+          result,
+        ).toBeUndefined();
+
+        expect(
+          dependencies
+            .lookupItemMock,
+        ).not.toHaveBeenCalled();
 
         expect(
           dependencies
             .storeItemMock,
         ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "checks PostgreSQL again after share access changes",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .findAccessibleByIdMock
+          .mockResolvedValueOnce(
+            todo,
+          )
+          .mockResolvedValueOnce(
+            undefined,
+          );
+
+        const parameters = {
+          callerId:
+            recipientId,
+
+          todoId,
+        };
+
+        const firstResult =
+          await dependencies
+            .repository
+            .findAccessibleById(
+              parameters,
+            );
+
+        const secondResult =
+          await dependencies
+            .repository
+            .findAccessibleById(
+              parameters,
+            );
+
+        expect(firstResult).toEqual(
+          todo,
+        );
+
+        expect(
+          secondResult,
+        ).toBeUndefined();
+
+        expect(
+          dependencies
+            .findAccessibleByIdMock,
+        ).toHaveBeenCalledTimes(2);
       },
     );
   },

@@ -18,7 +18,10 @@ export type {
 
 export type {
   GetTodoResponse,
-  GetTodoParams
+  GetTodoParams,
+  TodoDetails,
+  TodoAccountReference,
+  TodoAccessType
 } from "./get.todo.contract.js";
 
 export type {

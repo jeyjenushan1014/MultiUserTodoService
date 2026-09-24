@@ -4,50 +4,48 @@ import type {
 } from "@todo/contracts";
 
 import type {
+  UpdateTodoService,
+} from "../update/update.todo.service.js";
+
+import type {
   TodoCacheInvalidator,
 } from "./todo.cache.invalidator.interface.js";
 
-export interface UpdateTodoOperation {
-  execute(
-    ownerId: string,
-    todoId: string,
-    changes:
-      UpdateTodoRequest,
-  ): Promise<
-    UpdateTodoResponse
-  >;
-}
-
-export class CacheInvalidatingUpdateTodoService
-implements UpdateTodoOperation {
+export class CacheInvalidatingUpdateTodoService {
   public constructor(
-    private readonly operation:
-      UpdateTodoOperation,
+    private readonly service:
+      UpdateTodoService,
 
-    private readonly invalidator:
+    private readonly cacheInvalidator:
       TodoCacheInvalidator,
   ) {}
 
   public async execute(
     ownerId: string,
     todoId: string,
-    changes:
-      UpdateTodoRequest,
+    changes: UpdateTodoRequest,
   ): Promise<
     UpdateTodoResponse
   > {
-    const result =
-      await this.operation.execute(
+    const todo =
+      await this.service.execute(
         ownerId,
         todoId,
         changes,
       );
 
-    await this.invalidator
+    /*
+     * Use the actual resource owner.
+     *
+     * When a shared recipient updates the state,
+     * ownerId contains the recipient's caller ID,
+     * while todo.ownerId contains the real owner.
+     */
+    await this.cacheInvalidator
       .invalidateOwner(
-        ownerId,
+        todo.ownerId,
       );
 
-    return result;
+    return todo;
   }
 }

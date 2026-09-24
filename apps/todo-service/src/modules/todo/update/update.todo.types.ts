@@ -16,5 +16,9 @@ export type UpdateTodoRepositoryResult =
     }
   | {
       readonly status:
+        "forbidden";
+    }
+  | {
+      readonly status:
         "duplicate_title";
     };

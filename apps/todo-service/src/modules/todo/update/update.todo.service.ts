@@ -25,7 +25,7 @@ export class UpdateTodoService {
     UpdateTodoResponse
   > {
     /*
-     * Defence in depth for direct service calls that
+     * Defence in depth for service calls that
      * bypass HTTP validation.
      */
     if (
@@ -52,13 +52,24 @@ export class UpdateTodoService {
       "not_found"
     ) {
       /*
-       * Used for missing, cross-owner and deleted
-       * TODOs to prevent resource enumeration.
+       * Missing, unrelated and withdrawn-share
+       * cases intentionally use the same response.
        */
       throw new AppError(
         404,
         "TODO_NOT_FOUND",
         "TODO was not found",
+      );
+    }
+
+    if (
+      result.status ===
+      "forbidden"
+    ) {
+      throw new AppError(
+        403,
+        "SHARED_TODO_UPDATE_FORBIDDEN",
+        "A shared TODO recipient may update only the state",
       );
     }
 

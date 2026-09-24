@@ -19,6 +19,9 @@ export interface WithdrawTodoShareCommand {
 
   readonly recipientId:
     string;
+
+  readonly requestId:
+    string;
 }
 
 export class WithdrawTodoShareService {
@@ -45,6 +48,9 @@ export class WithdrawTodoShareService {
 
           recipientId:
             command.recipientId,
+
+          requestId:
+            command.requestId,
 
           withdrawnAt:
             new Date(),

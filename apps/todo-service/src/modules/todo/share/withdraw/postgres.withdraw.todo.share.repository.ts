@@ -1,6 +1,26 @@
+import type {
+  PoolClient,
+} from "pg";
+
 import {
   database,
 } from "../../../../config/database.js";
+
+import {
+  logger,
+} from "../../../../config/logger.js";
+
+import {
+  createTodoShareWithdrawnEvent,
+} from "../../../../events/todo-event.factory.js";
+
+import {
+  PostgresTodoOutboxWriter,
+} from "../../../../outbox/postgres.todo-outbox.writer.js";
+
+import type {
+  TodoOutboxWriter,
+} from "../../../../outbox/todo-outbox.writer.interface.js";
 
 import type {
   WithdrawTodoShareRepository,
@@ -17,12 +37,45 @@ interface TodoOwnerRow {
 }
 
 interface WithdrawnShareRow {
+  readonly id:
+    string;
+
+  readonly todo_id:
+    string;
+
   readonly owner_id:
     string;
+
+  readonly recipient_id:
+    string;
+}
+
+async function rollbackTransaction(
+  client: PoolClient,
+): Promise<void> {
+  try {
+    await client.query(
+      "ROLLBACK",
+    );
+  } catch (rollbackError) {
+    logger.error(
+      {
+        error:
+          rollbackError,
+      },
+      "TODO share withdrawal rollback failed",
+    );
+  }
 }
 
 export class PostgresWithdrawTodoShareRepository
 implements WithdrawTodoShareRepository {
+  public constructor(
+    private readonly outboxWriter:
+      TodoOutboxWriter =
+        new PostgresTodoOutboxWriter(),
+  ) {}
+
   public async withdraw(
     data:
       WithdrawTodoShareData,
@@ -40,9 +93,10 @@ implements WithdrawTodoShareRepository {
       /*
        * Lock the TODO row first.
        *
-       * Shared-recipient updates lock the same row,
-       * so update and withdrawal cannot change
-       * authorization concurrently.
+       * State updates performed by share recipients
+       * lock the same row. Therefore, state updates
+       * and share withdrawals cannot race while
+       * checking authorization.
        */
       const todoResult =
         await client.query<
@@ -71,8 +125,8 @@ implements WithdrawTodoShareRepository {
         todoResult.rows[0];
 
       /*
-       * Missing TODO and non-owner callers receive
-       * the same result.
+       * Missing, deleted and cross-owner TODOs all
+       * return the same result.
        */
       if (todo === undefined) {
         await client.query(
@@ -102,7 +156,10 @@ implements WithdrawTodoShareRepository {
                 IS NULL
 
             RETURNING
-              owner_id
+              id,
+              todo_id,
+              owner_id,
+              recipient_id
           `,
           [
             data.todoId,
@@ -115,6 +172,13 @@ implements WithdrawTodoShareRepository {
       const share =
         shareResult.rows[0];
 
+      /*
+       * This covers:
+       *
+       * - share does not exist;
+       * - share was already withdrawn;
+       * - recipient does not match.
+       */
       if (share === undefined) {
         await client.query(
           "ROLLBACK",
@@ -125,6 +189,34 @@ implements WithdrawTodoShareRepository {
             "not_found",
         };
       }
+
+      const event =
+        createTodoShareWithdrawnEvent(
+          {
+            shareId:
+              share.id,
+
+            todoId:
+              share.todo_id,
+
+            ownerId:
+              share.owner_id,
+
+            recipientId:
+              share.recipient_id,
+          },
+          data.requestId,
+        );
+
+      /*
+       * The share withdrawal and the outbox insert
+       * use the same PoolClient and transaction.
+       */
+      await this.outboxWriter
+        .append(
+          client,
+          event,
+        );
 
       await client.query(
         "COMMIT",
@@ -138,15 +230,9 @@ implements WithdrawTodoShareRepository {
           share.owner_id,
       };
     } catch (error) {
-      try {
-        await client.query(
-          "ROLLBACK",
-        );
-      } catch {
-        /*
-         * Preserve the original database error.
-         */
-      }
+      await rollbackTransaction(
+        client,
+      );
 
       throw error;
     } finally {

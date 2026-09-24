@@ -8,6 +8,9 @@ export interface WithdrawTodoShareData {
   readonly recipientId:
     string;
 
+  readonly requestId:
+    string;
+
   readonly withdrawnAt:
     Date;
 }

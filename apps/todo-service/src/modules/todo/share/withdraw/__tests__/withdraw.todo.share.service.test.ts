@@ -96,6 +96,9 @@ const recipientId =
 const todoId =
   "9f134ed0-4503-4a23-a189-f065fe9fd838";
 
+const requestId =
+  "224d07f1-8812-429c-a0a6-092d83977ad5";
+
 describe(
   "WithdrawTodoShareService",
   () => {
@@ -105,89 +108,101 @@ describe(
       },
     );
 
-it(
-  "withdraws an active share and invalidates the owner cache",
-  async () => {
-    const dependencies =
-      createDependencies();
+    it(
+      "withdraws an active share and invalidates the owner cache",
+      async () => {
+        const dependencies =
+          createDependencies();
 
-    dependencies
-      .withdrawMock
-      .mockResolvedValueOnce({
-        status:
-          "withdrawn",
+        dependencies
+          .withdrawMock
+          .mockResolvedValueOnce({
+            status:
+              "withdrawn",
 
-        ownerId,
-      });
+            ownerId,
+          });
 
-    dependencies
-      .invalidateOwnerMock
-      .mockResolvedValueOnce();
+        dependencies
+          .invalidateOwnerMock
+          .mockResolvedValueOnce();
 
-    await dependencies
-      .service
-      .execute({
-        ownerId,
-        recipientId,
-        todoId,
-      });
+        await dependencies
+          .service
+          .execute({
+            ownerId,
+            recipientId,
+            todoId,
+            requestId,
+          });
 
-    expect(
-      dependencies
-        .withdrawMock,
-    ).toHaveBeenCalledTimes(1);
+        expect(
+          dependencies
+            .withdrawMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        );
 
-    const firstCall =
-      dependencies
-        .withdrawMock
-        .mock
-        .calls[0];
+        const firstCall =
+          dependencies
+            .withdrawMock
+            .mock
+            .calls[0];
 
-    expect(
-      firstCall,
-    ).toBeDefined();
+        expect(
+          firstCall,
+        ).toBeDefined();
 
-    if (firstCall === undefined) {
-      throw new Error(
-        "Expected withdraw repository to be called",
-      );
-    }
+        if (
+          firstCall ===
+          undefined
+        ) {
+          throw new Error(
+            "Expected withdraw repository to be called",
+          );
+        }
 
-    const withdrawData =
-      firstCall[0];
+        const withdrawData =
+          firstCall[0];
 
-    expect(
-      withdrawData.ownerId,
-    ).toBe(ownerId);
+        expect(
+          withdrawData.ownerId,
+        ).toBe(ownerId);
 
-    expect(
-      withdrawData.recipientId,
-    ).toBe(recipientId);
+        expect(
+          withdrawData.recipientId,
+        ).toBe(recipientId);
 
-    expect(
-      withdrawData.todoId,
-    ).toBe(todoId);
+        expect(
+          withdrawData.todoId,
+        ).toBe(todoId);
 
-    expect(
-      withdrawData.withdrawnAt,
-    ).toBeInstanceOf(Date);
+        expect(
+          withdrawData.requestId,
+        ).toBe(requestId);
 
-    expect(
-      Number.isNaN(
-        withdrawData
-          .withdrawnAt
-          .getTime(),
-      ),
-    ).toBe(false);
+        expect(
+          withdrawData.withdrawnAt,
+        ).toBeInstanceOf(
+          Date,
+        );
 
-    expect(
-      dependencies
-        .invalidateOwnerMock,
-    ).toHaveBeenCalledWith(
-      ownerId,
+        expect(
+          Number.isNaN(
+            withdrawData
+              .withdrawnAt
+              .getTime(),
+          ),
+        ).toBe(false);
+
+        expect(
+          dependencies
+            .invalidateOwnerMock,
+        ).toHaveBeenCalledWith(
+          ownerId,
+        );
+      },
     );
-  },
-);
 
     it(
       "returns not found when the share does not exist",
@@ -209,6 +224,7 @@ it(
               ownerId,
               recipientId,
               todoId,
+              requestId,
             }),
         ).rejects.toMatchObject({
           statusCode:
@@ -252,6 +268,7 @@ it(
                 "ec263520-78e3-4271-bc48-e5fa994685c8",
 
               todoId,
+              requestId,
             }),
         ).rejects.toMatchObject({
           statusCode:
@@ -288,6 +305,7 @@ it(
               ownerId,
               recipientId,
               todoId,
+              requestId,
             }),
         ).rejects.toMatchObject({
           statusCode:
@@ -296,6 +314,11 @@ it(
           code:
             "TODO_SHARE_NOT_FOUND",
         });
+
+        expect(
+          dependencies
+            .invalidateOwnerMock,
+        ).not.toHaveBeenCalled();
       },
     );
   },

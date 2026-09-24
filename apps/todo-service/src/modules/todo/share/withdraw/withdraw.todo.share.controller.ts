@@ -8,6 +8,10 @@ import type {
 } from "@todo/contracts";
 
 import {
+  getRequestId,
+} from "@todo/common";
+
+import {
   getInternalCallerIdentity,
 } from "../../../../middleware/internal-service-auth.middleware.js";
 
@@ -51,10 +55,22 @@ export async function withdrawTodoShareController(
       response,
     );
 
-   const params =
-        getValidatedParams(
-          response,
-        ) as WithdrawTodoShareParams;
+  const params =
+    getValidatedParams(
+      response,
+    ) as WithdrawTodoShareParams;
+
+  const requestId =
+    getRequestId();
+
+  if (
+    requestId ===
+    undefined
+  ) {
+    throw new Error(
+      "Request context is unavailable",
+    );
+  }
 
   await service.execute({
     ownerId:
@@ -65,6 +81,8 @@ export async function withdrawTodoShareController(
 
     recipientId:
       params.recipientId,
+
+    requestId,
   });
 
   response

@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - main
+      - task-3-microservices
+
   pull_request:
     branches:
       - main
+      - task-3-microservices
+
   workflow_dispatch:
 
 permissions:
@@ -20,45 +24,109 @@ jobs:
   quality-check:
     name: Lint, Build, Test and Migrate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     services:
-      postgres:
+      account-postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: todo_user
-          POSTGRES_PASSWORD: ${{secrets.POSTGRES_PASSWORD}}
-          POSTGRES_DB: todo_db
+          POSTGRES_USER: account_user
+          POSTGRES_PASSWORD: ${{ secrets.ACCOUNT_POSTGRES_PASSWORD }}
+          POSTGRES_DB: account_db
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U todo_user -d todo_db"
-          --health-interval 10s
+          --health-cmd "pg_isready -U account_user -d account_db"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 20
+
+      todo-postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: todo_user
+          POSTGRES_PASSWORD: ${{ secrets.TODO_POSTGRES_PASSWORD }}
+          POSTGRES_DB: todo_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U todo_user -d todo_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
 
       redis:
         image: redis:8-alpine
+        env:
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
         ports:
           - 6379:6379
         options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd "redis-cli -a $REDIS_PASSWORD ping"
           --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
+          --health-timeout 5s
+          --health-retries 20
+
+      rabbitmq:
+        image: rabbitmq:4-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: todo_user
+          RABBITMQ_DEFAULT_PASS: ${{ secrets.RABBITMQ_PASSWORD }}
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
 
     env:
       NODE_ENV: test
       PORT: 3000
-      POSTGRES_USER: todo_user
-      POSTGRES_PASSWORD: ${{secrets.POSTGRES_PASSWORD}}
-      POSTGRES_DB: todo_db
-      POSTGRES_PORT: 5432
-      DATABASE_URL: postgres://todo_user:${{secrets.POSTGRES_PASSWORD}}@localhost:5432/todo_db
-      REDIS_URL: redis://localhost:6379
-      JWT_SECRET: ${{secrets.JWT_SECRET}}
-      JWT_EXPIRES_IN_SECONDS: 900
-      CACHE_TTL_SECONDS: 60
+
+      ACCOUNT_DATABASE_URL: postgres://account_user:${{ secrets.ACCOUNT_POSTGRES_PASSWORD }}@localhost:5432/account_db
+      TODO_DATABASE_URL: postgres://todo_user:${{ secrets.TODO_POSTGRES_PASSWORD }}@localhost:5433/todo_db
+
+      REDIS_URL: redis://:${{ secrets.REDIS_PASSWORD }}@localhost:6379
+      RABBITMQ_URL: amqp://todo_user:${{ secrets.RABBITMQ_PASSWORD }}@localhost:5672
+
+      ACCOUNT_SERVICE_URL: http://localhost:3001
+      TODO_SERVICE_URL: http://localhost:3002
+
+      RABBITMQ_EXCHANGE: todo.events
+      RABBITMQ_RETRY_EXCHANGE: todo.events.retry
+      RABBITMQ_DEAD_LETTER_EXCHANGE: todo.events.dlx
+
+      RABBITMQ_NOTIFICATION_QUEUE: todo.notifications
+      RABBITMQ_NOTIFICATION_DLQ: todo.notifications.dlq
+      RABBITMQ_NOTIFICATION_DLQ_ROUTING_KEY: notification.failed
+
+      TODO_OWNER_QUEUE: todo.owner-projection
+      TODO_OWNER_RETRY_QUEUE: todo.owner-projection.retry
+      TODO_OWNER_DEAD_LETTER_QUEUE: todo.owner-projection.dlq
+
+      TODO_HISTORY_QUEUE: todo.history
+      TODO_HISTORY_DLQ: todo.history.dlq
+
+      TODO_OUTBOX_WORKER_ID: ci-todo-outbox-worker
+      TODO_OUTBOX_BATCH_SIZE: 25
+      TODO_OUTBOX_POLL_INTERVAL_MS: 1000
+      TODO_OUTBOX_LOCK_TIMEOUT_MS: 30000
+
+      INTERNAL_SERVICE_SECRET: ${{ secrets.INTERNAL_SERVICE_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      JWT_ISSUER: todo-account-service
+      JWT_AUDIENCE: todo-platform
+
+      ACCESS_TOKEN_TTL_SECONDS: 900
+      REFRESH_TOKEN_TTL_SECONDS: 604800
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: 15
+
+      DATABASE_MAX_CONNECTIONS: 10
+      DATABASE_CONNECTION_TIMEOUT_MS: 5000
+      DATABASE_IDLE_TIMEOUT_MS: 30000
+      DATABASE_QUERY_TIMEOUT_MS: 2000
+
       LOG_LEVEL: silent
 
     steps:
@@ -74,74 +142,39 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Create CI environment file
-        shell: bash
-        run: |
-          cat > .env <<'EOF'
-          NODE_ENV=test
-          PORT=3000
-          POSTGRES_USER=todo_user
-          POSTGRES_PASSWORD=${{secrets.POSTGRES_PASSWORD}}
-          POSTGRES_DB=todo_db
-          POSTGRES_PORT=5432
-          DATABASE_URL=postgres://todo_user:${{secrets.POSTGRES_PASSWORD}}@localhost:5432/todo_db
-          REDIS_URL=redis://localhost:6379
-          JWT_SECRET=${{secrets.JWT_SECRET}}
-          JWT_EXPIRES_IN_SECONDS=900
-          CACHE_TTL_SECONDS=60
-          LOG_LEVEL=silent
-          EOF
+      - name: Run account migrations
+        env:
+          DATABASE_URL: postgres://account_user:${{ secrets.ACCOUNT_POSTGRES_PASSWORD }}@localhost:5432/account_db
+        run: npm run migrate -w @todo/account-service
 
-      - name: Run database migrations
-        run: npm run migrate
+      - name: Run TODO migrations
+        env:
+          DATABASE_URL: postgres://todo_user:${{ secrets.TODO_POSTGRES_PASSWORD }}@localhost:5433/todo_db
+        run: npm run migrate -w @todo/todo-service
 
-      - name: Verify migrations are repeatable
-        run: npm run migrate
+      - name: Verify account migrations are repeatable
+        env:
+          DATABASE_URL: postgres://account_user:${{ secrets.ACCOUNT_POSTGRES_PASSWORD }}@localhost:5432/account_db
+        run: npm run migrate -w @todo/account-service
 
-      - name: Run linting
+      - name: Verify TODO migrations are repeatable
+        env:
+          DATABASE_URL: postgres://todo_user:${{ secrets.TODO_POSTGRES_PASSWORD }}@localhost:5433/todo_db
+        run: npm run migrate -w @todo/todo-service
+
+      - name: Run lint
         run: npm run lint
 
-      - name: Build TypeScript
+      - name: Build all packages and services
         run: npm run build
 
-      - name: Run automated tests
+      - name: Run all tests
         run: npm test
 
-      - name: Start application
-        shell: bash
-        run: |
-          npm start > server.log 2>&1 &
-          echo $! > server.pid
-
-      - name: Verify health endpoint
-        shell: bash
-        run: |
-          for attempt in {1..20}; do
-            if curl --fail --silent http://localhost:3000/health > health-response.json; then
-              cat health-response.json
-              exit 0
-            fi
-
-            echo "Waiting for the API to start: attempt ${attempt}/20"
-            sleep 2
-          done
-
-          echo "Application failed to become healthy"
-          cat server.log
-          exit 1
-
-      - name: Show application logs after failure
-        if: failure()
-        shell: bash
-        run: |
-          if [ -f server.log ]; then
-            cat server.log
-          fi
-
   docker-build:
-    name: Build Docker Image
+    name: Build Docker Images
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs:
       - quality-check
 
@@ -152,12 +185,5 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: multi-user-todo-service:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Build Docker images
+        run: docker compose build --no-cache

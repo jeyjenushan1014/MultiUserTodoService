@@ -1,88 +1,536 @@
+name: multi-user-todo-platform
+
 services:
-  postgres:
+  account-postgres:
     image: postgres:17-alpine
+
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${ACCOUNT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ACCOUNT_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ACCOUNT_POSTGRES_DB}
+
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${ACCOUNT_POSTGRES_PORT:-5432}:5432"
+
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - account_postgres_data:/var/lib/postgresql/data
+
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
-      interval: 10s
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
+      start_period: 10s
+
+    restart: unless-stopped
+
+
+  todo-postgres:
+    image: postgres:17-alpine
+
+    environment:
+      POSTGRES_USER: ${TODO_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TODO_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${TODO_POSTGRES_DB}
+
+    volumes:
+      - todo_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+    restart: unless-stopped
+
 
   redis:
     image: redis:8-alpine
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --requirepass
+      - "${REDIS_PASSWORD}"
+
     ports:
-     - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+
     volumes:
-     - redis_data:/data
+      - redis_data:/data
+
     healthcheck:
-      test: 
-        - CMD-SHELL
-        - redis-cli ping
+      test:
+        - CMD
+        - redis-cli
+        - ping
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 20
+      start_period: 5s
 
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: builder
+    restart: unless-stopped
 
-    command: ["npm", "run", "migrate:docker"]
 
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-    restart: "no"
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
 
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN_SECONDS: ${JWT_EXPIRES_IN_SECONDS:-900}
-      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-60}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
 
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
 
-    depends_on:
-      postgres:
-        condition: service_healthy
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
 
-      redis:
-        condition: service_healthy
-
-      migrate:
-        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - rabbitmq-diagnostics
+        - -q
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
     restart: unless-stopped
 
 
 
+  todo-outbox-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+
+    command:
+      - node
+      - apps/todo-service/dist/src/outbox-worker.js
+
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${TODO_DATABASE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      TODO_EVENTS_EXCHANGE: ${TODO_EVENTS_EXCHANGE:-todo.events}
+      TODO_OUTBOX_WORKER_ID: ${TODO_OUTBOX_WORKER_ID:-todo-outbox-worker}
+      TODO_OUTBOX_BATCH_SIZE: ${TODO_OUTBOX_BATCH_SIZE:-25}
+      TODO_OUTBOX_POLL_INTERVAL_MS: ${TODO_OUTBOX_POLL_INTERVAL_MS:-1000}
+      TODO_OUTBOX_LOCK_TIMEOUT_MS: ${TODO_OUTBOX_LOCK_TIMEOUT_MS:-30000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+
+    healthcheck:
+      test:
+        - CMD
+        - /mailpit
+        - readyz
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+  account-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: account-migrations
+
+    environment:
+      DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+
+    depends_on:
+      account-postgres:
+        condition: service_healthy
+
+    restart: "no"    
+
+  todo-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-migrations-runtime
+
+    environment:
+      DATABASE_URL: >-
+        postgres://${TODO_POSTGRES_USER}:${TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${TODO_POSTGRES_DB}
+
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+
+    restart: "no"
+
+  account-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: account-service-runtime
+
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-15}
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      RABBITMQ_NOTIFICATION_DLQ: ${RABBITMQ_NOTIFICATION_DLQ:-todo.notifications.dlq}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-1000}
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@todo.local}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-60}
+      OUTBOX_MAX_RETRY_DELAY_SECONDS: ${OUTBOX_MAX_RETRY_DELAY_SECONDS:-300}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      INTERNAL_IDENTITY_MAX_AGE_SECONDS: ${INTERNAL_IDENTITY_MAX_AGE_SECONDS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
+      REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
+    expose:
+      - "3001"
+
+    depends_on:
+      account-migrations:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --tries=1
+        - --spider
+        - http://localhost:3001/health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    restart: unless-stopped
+
+
+  account-outbox-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: account-service-runtime
+
+    command:
+      - node
+      - apps/account-service/dist/worker/outbox-publisher.worker.js
+
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      RABBITMQ_NOTIFICATION_DLQ: ${RABBITMQ_NOTIFICATION_DLQ:-todo.notifications.dlq}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-1000}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-60}
+      OUTBOX_MAX_RETRY_DELAY_SECONDS: ${OUTBOX_MAX_RETRY_DELAY_SECONDS:-300}
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
+      REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
+
+    depends_on:
+      account-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
+  todo-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+
+    environment:
+      NODE_ENV: production
+      TODO_SERVICE_PORT: 3002
+      TODO_DATABASE_URL: >-
+        postgres://${TODO_POSTGRES_USER}:${TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${TODO_POSTGRES_DB}
+      REDIS_URL: >-
+        redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      RABBITMQ_URL: >-
+        amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REQUEST_BODY_LIMIT: ${REQUEST_BODY_LIMIT:-100kb}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      SHUTDOWN_TIMEOUT_MS: ${SHUTDOWN_TIMEOUT_MS:-10000}
+
+    expose:
+      - "3002"
+
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+      todo-migrations:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3002/health/live')
+          .then(response => {
+            if (!response.ok) process.exit(1);
+          })
+          .catch(() => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    restart: unless-stopped
+
+
+  todo-owner-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+
+    command:
+      - npm
+      - run
+      - start:owner-consumer
+      - -w
+      - "@todo/todo-service"
+
+    environment:
+      NODE_ENV: production
+      TODO_DATABASE_URL: >-
+        postgres://${TODO_POSTGRES_USER}:${TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${TODO_POSTGRES_DB}
+      REDIS_URL: >-
+        redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      RABBITMQ_URL: >-
+        amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_RETRY_EXCHANGE: ${RABBITMQ_RETRY_EXCHANGE:-todo.events.retry}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      TODO_OWNER_QUEUE: ${TODO_OWNER_QUEUE:-todo.owner-projection}
+      TODO_OWNER_RETRY_QUEUE: ${TODO_OWNER_RETRY_QUEUE:-todo.owner-projection.retry}
+      TODO_OWNER_DEAD_LETTER_QUEUE: ${TODO_OWNER_DEAD_LETTER_QUEUE:-todo.owner-projection.dlq}
+      TODO_OWNER_CONSUMER_PREFETCH: ${TODO_OWNER_CONSUMER_PREFETCH:-10}
+      TODO_OWNER_RETRY_DELAY_MS: ${TODO_OWNER_RETRY_DELAY_MS:-5000}
+      TODO_OWNER_MAX_RETRIES: ${TODO_OWNER_MAX_RETRIES:-5}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+      todo-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+  account-notification-consumer:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      target: account-service-runtime
+    command:
+      - npm
+      - run
+      - start:notification-consumer
+      - -w
+      - "@todo/account-service"
+    environment:
+      NODE_ENV: production
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      RABBITMQ_NOTIFICATION_DLQ_ROUTING_KEY: ${RABBITMQ_NOTIFICATION_DLQ_ROUTING_KEY:-notification.failed}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      RABBITMQ_NOTIFICATION_DLQ: ${RABBITMQ_NOTIFICATION_DLQ:-todo.notifications.dlq}
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@todo.local}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      INTERNAL_IDENTITY_MAX_AGE_SECONDS: ${INTERNAL_IDENTITY_MAX_AGE_SECONDS:-30}
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-15}
+      PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
+      REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      account-postgres:
+        condition: service_healthy
+      account-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    restart: unless-stopped
+
+  todo-history-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+
+    command:
+      - npm
+      - run
+      - start:history-worker
+      - -w
+      - "@todo/todo-service"
+
+    environment:
+      NODE_ENV: production
+      TODO_DATABASE_URL: postgres://${TODO_POSTGRES_USER}:${TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${TODO_POSTGRES_DB}
+
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+ 
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+
+      TODO_HISTORY_QUEUE: ${TODO_HISTORY_QUEUE:-todo.history}
+      TODO_HISTORY_DLQ: ${TODO_HISTORY_DLQ:-todo.history.dlq}
+
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+
+      todo-migrations:
+        condition: service_completed_successfully
+
+      rabbitmq:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gateway-runtime
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
+      ACCOUNT_SERVICE_URL: http://account-service:3001
+      TODO_SERVICE_URL: http://todo-service:3002
+      DOWNSTREAM_TIMEOUT_MS: ${DOWNSTREAM_TIMEOUT_MS:-5000}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      INTERNAL_IDENTITY_TTL_SECONDS: ${INTERNAL_IDENTITY_TTL_SECONDS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REDIS_URL: >-
+        redis://:${REDIS_PASSWORD}@redis:6379
+      RATE_LIMIT_KEY_PREFIX: ${RATE_LIMIT_KEY_PREFIX:-todo-platform:rate-limit}
+      GENERAL_RATE_LIMIT_MAX: ${GENERAL_RATE_LIMIT_MAX:-100}
+      GENERAL_RATE_LIMIT_WINDOW_SECONDS: ${GENERAL_RATE_LIMIT_WINDOW_SECONDS:-60}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      PASSWORD_RESET_RATE_LIMIT_MAX: ${PASSWORD_RESET_RATE_LIMIT_MAX:-5}
+      PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS: ${PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:-900}
+
+
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --tries=1
+        - --spider
+        - http://localhost:3000/health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+    depends_on:
+      account-service:
+        condition: service_healthy
+      todo-service:
+        condition: service_healthy
+
+    restart: unless-stopped
+
 
 volumes:
-  postgres_data:
+  account_postgres_data:
+  todo_postgres_data:
   redis_data:
-    
-  
+  rabbitmq_data:

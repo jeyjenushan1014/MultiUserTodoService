@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "src/**/*.ts",
+    "vitest.config.ts"
+, "../todo-service/src/outbox/__tests__/todo-outbox.failure.test.ts"  ],
+}

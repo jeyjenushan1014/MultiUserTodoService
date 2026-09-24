@@ -1,0 +1,29 @@
+{
+  "name": "@todo/todo-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/src/server.js",
+    "start:owner-consumer": "node dist/src/workers/owner-projection.worker.js",
+    "test": "vitest run --config vitest.config.ts",
+    "migrate": "node-pg-migrate up -m migrations --migrations-table pgmigrations",
+    "migrate:down": "node-pg-migrate down -m migrations --migrations-table pgmigrations",
+    "start:history-worker": "node dist/src/history/history-worker.js"
+  },
+  "dependencies": {
+    "@todo/common": "1.0.0",
+    "@todo/contracts": "1.0.0",
+    "amqplib": "^2.0.1",
+    "dotenv": "^18.0.2",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.0",
+    "pino": "^10.3.1",
+    "redis": "^6.2.1",
+    "zod": "^4.6.5"
+  }
+}

@@ -1,0 +1,47 @@
+# Don't copy of the local secrets docker image
+# Don't copy of the existing node_modules
+# reduce the size of docker image
+# reduce the host build output
+
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Existing build outputs
+dist
+**/dist
+
+# Test output
+coverage
+**/coverage
+
+# TypeScript build information
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Git
+.git
+.gitignore
+.github
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor files
+.vscode
+.idea
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp
+temp

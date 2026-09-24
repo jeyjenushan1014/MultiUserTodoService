@@ -11,7 +11,9 @@ export interface UpdateTodoRepository {
   updateOwnedTodo(
     ownerId: string,
     todoId: string,
-    changes: UpdateTodoRequest,
+    changes:
+      UpdateTodoRequest,
+    requestId: string,
   ): Promise<
     UpdateTodoRepositoryResult
   >;
@@ -20,6 +22,7 @@ export interface UpdateTodoRepository {
     callerId: string,
     todoId: string,
     state: TodoState,
+    requestId: string,
   ): Promise<
     UpdateTodoRepositoryResult
   >;

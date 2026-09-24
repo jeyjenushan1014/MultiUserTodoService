@@ -10,20 +10,17 @@ import type {
 } from "@todo/contracts";
 
 import {
+  AppError,
+  getRequestId,
+} from "@todo/common";
+
+import {
   getInternalCallerIdentity,
 } from "../../../middleware/internal-service-auth.middleware.js";
 
 import {
   getValidatedParams,
 } from "../../../middleware/validate-params.middleware.js";
-
-import {
-  PostgresUpdateTodoRepository,
-} from "./postgres.update.todo.repository.js";
-
-import {
-  UpdateTodoService,
-} from "./update.todo.service.js";
 
 import {
   CacheInvalidatingUpdateTodoService,
@@ -33,6 +30,13 @@ import {
   RedisTodoCacheInvalidator,
 } from "../cache/redis.todo.cache.invalidator.js";
 
+import {
+  PostgresUpdateTodoRepository,
+} from "./postgres.update.todo.repository.js";
+
+import {
+  UpdateTodoService,
+} from "./update.todo.service.js";
 
 const repository =
   new PostgresUpdateTodoRepository();
@@ -53,7 +57,8 @@ const service =
 
 export async function updateTodoController(
   request: Request,
-  response: Response<UpdateTodoResponse>,
+  response:
+    Response<UpdateTodoResponse>,
 ): Promise<void> {
   const identity =
     getInternalCallerIdentity(
@@ -61,18 +66,34 @@ export async function updateTodoController(
     );
 
   const params =
-  getValidatedParams(
-    response,
-  ) as GetTodoParams;
+    getValidatedParams(
+      response,
+    ) as GetTodoParams;
 
   const body =
-    request.body as UpdateTodoRequest;
+    request.body as
+      UpdateTodoRequest;
+
+  const requestId =
+    getRequestId();
+
+  if (
+    requestId ===
+    undefined
+  ) {
+    throw new AppError(
+      500,
+      "REQUEST_CONTEXT_MISSING",
+      "Request context is unavailable",
+    );
+  }
 
   const todo =
     await service.execute(
       identity.userId,
       params.todoId,
       body,
+      requestId,
     );
 
   response

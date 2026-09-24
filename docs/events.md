@@ -62,3 +62,14 @@ All current TODO events use:
   "eventVersion": 1,
   "producer": "todo-service"
 }
+
+
+#### Publication condition
+
+`todo.completed` is created only when a TODO transitions from a state other than `completed` to `completed`.
+
+Updating an already-completed TODO without leaving the completed state does not create another completion event.
+
+The event is inserted into the TODO Service outbox in the same PostgreSQL transaction as the state update. If either the update or outbox insertion fails, both operations roll back.
+
+The `completedByUserId` field identifies the owner or active share recipient who completed the TODO.

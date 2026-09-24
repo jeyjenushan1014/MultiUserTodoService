@@ -13,6 +13,7 @@ export interface UpdateTodoOperation {
     todoId: string,
     changes:
       UpdateTodoRequest,
+    requestId: string,
   ): Promise<
     UpdateTodoResponse
   >;
@@ -33,6 +34,7 @@ implements UpdateTodoOperation {
     todoId: string,
     changes:
       UpdateTodoRequest,
+    requestId: string,
   ): Promise<
     UpdateTodoResponse
   > {
@@ -41,16 +43,9 @@ implements UpdateTodoOperation {
         callerId,
         todoId,
         changes,
+        requestId,
       );
 
-    /*
-     * Use the owner ID returned by the successful
-     * update operation.
-     *
-     * This is important because callerId may belong
-     * to a share recipient performing a state-only
-     * update.
-     */
     await this.invalidator
       .invalidateOwner(
         result.ownerId,

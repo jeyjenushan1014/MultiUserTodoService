@@ -61,17 +61,22 @@ TestDependencies {
       ]
     >();
 
+  invalidateOwnerMock
+    .mockResolvedValue();
+
   const operation:
     UpdateTodoOperation = {
       execute: (
         callerId,
         todoId,
         changes,
+        requestId,
       ) =>
         executeMock(
           callerId,
           todoId,
           changes,
+          requestId,
         ),
     };
 
@@ -105,6 +110,9 @@ const recipientId =
 
 const todoId =
   "9f134ed0-4503-4a23-a189-f065fe9fd838";
+
+const requestId =
+  "224d07f1-8812-429c-a0a6-092d83977ad5";
 
 const updatedTodo:
   UpdateTodoResponse = {
@@ -147,10 +155,6 @@ describe(
             updatedTodo,
           );
 
-        dependencies
-          .invalidateOwnerMock
-          .mockResolvedValue();
-
         const changes:
           UpdateTodoRequest = {
             title:
@@ -164,6 +168,7 @@ describe(
               ownerId,
               todoId,
               changes,
+              requestId,
             );
 
         expect(result).toEqual(
@@ -184,10 +189,6 @@ describe(
             updatedTodo,
           );
 
-        dependencies
-          .invalidateOwnerMock
-          .mockResolvedValue();
-
         const changes:
           UpdateTodoRequest = {
             title:
@@ -203,6 +204,7 @@ describe(
             ownerId,
             todoId,
             changes,
+            requestId,
           );
 
         expect(
@@ -217,6 +219,7 @@ describe(
           ownerId,
           todoId,
           changes,
+          requestId,
         );
       },
     );
@@ -233,10 +236,6 @@ describe(
             updatedTodo,
           );
 
-        dependencies
-          .invalidateOwnerMock
-          .mockResolvedValue();
-
         await dependencies
           .service
           .execute(
@@ -246,6 +245,7 @@ describe(
               title:
                 "Updated TODO",
             },
+            requestId,
           );
 
         expect(
@@ -276,10 +276,6 @@ describe(
             updatedTodo,
           );
 
-        dependencies
-          .invalidateOwnerMock
-          .mockResolvedValue();
-
         await dependencies
           .service
           .execute(
@@ -289,13 +285,22 @@ describe(
               state:
                 "completed",
             },
+            requestId,
           );
 
-        /*
-         * The caller is the recipient, but the
-         * invalidated cache belongs to the actual
-         * TODO owner.
-         */
+        expect(
+          dependencies
+            .executeMock,
+        ).toHaveBeenCalledWith(
+          recipientId,
+          todoId,
+          {
+            state:
+              "completed",
+          },
+          requestId,
+        );
+
         expect(
           dependencies
             .invalidateOwnerMock,
@@ -338,6 +343,7 @@ describe(
                 title:
                   "Updated TODO",
               },
+              requestId,
             );
 
         await expect(
@@ -385,6 +391,7 @@ describe(
                 state:
                   "completed",
               },
+              requestId,
             );
 
         await expect(

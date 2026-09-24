@@ -57,32 +57,32 @@ TestDependencies {
       ]
     >();
 
-  /*
-   * Arrow functions avoid the ESLint
-   * unbound-method error.
-   */
   const repository:
     UpdateTodoRepository = {
       updateOwnedTodo: (
         ownerId,
         todoId,
         changes,
+        requestId,
       ) =>
         updateOwnedTodoMock(
           ownerId,
           todoId,
           changes,
+          requestId,
         ),
 
       updateAccessibleTodoState: (
         callerId,
         todoId,
         state,
+        requestId,
       ) =>
         updateAccessibleTodoStateMock(
           callerId,
           todoId,
           state,
+          requestId,
         ),
     };
 
@@ -102,6 +102,9 @@ const callerId =
 
 const todoId =
   "9f134ed0-4503-4a23-a189-f065fe9fd838";
+
+const requestId =
+  "224d07f1-8812-429c-a0a6-092d83977ad5";
 
 const updatedTodo:
   UpdateTodoResponse = {
@@ -145,6 +148,7 @@ describe(
               callerId,
               todoId,
               {},
+              requestId,
             );
 
         await expect(
@@ -201,6 +205,7 @@ describe(
               callerId,
               todoId,
               changes,
+              requestId,
             );
 
         expect(result).toEqual(
@@ -221,6 +226,7 @@ describe(
           callerId,
           todoId,
           "completed",
+          requestId,
         );
 
         expect(
@@ -259,6 +265,7 @@ describe(
               callerId,
               todoId,
               changes,
+              requestId,
             );
 
         expect(result).toEqual(
@@ -279,6 +286,7 @@ describe(
           callerId,
           todoId,
           changes,
+          requestId,
         );
 
         expect(
@@ -320,6 +328,7 @@ describe(
               callerId,
               todoId,
               changes,
+              requestId,
             );
 
         expect(result).toEqual(
@@ -333,6 +342,7 @@ describe(
           callerId,
           todoId,
           changes,
+          requestId,
         );
 
         expect(
@@ -364,6 +374,7 @@ describe(
                 state:
                   "completed",
               },
+              requestId,
             );
 
         await expect(
@@ -403,6 +414,7 @@ describe(
                 title:
                   "Forbidden update",
               },
+              requestId,
             );
 
         await expect(
@@ -442,6 +454,7 @@ describe(
                 title:
                   "Existing title",
               },
+              requestId,
             );
 
         await expect(
@@ -487,6 +500,7 @@ describe(
               callerId,
               todoId,
               changes,
+              requestId,
             ),
         ).resolves.toEqual(
           updatedTodo,
@@ -499,6 +513,7 @@ describe(
           callerId,
           todoId,
           changes,
+          requestId,
         );
       },
     );
@@ -531,6 +546,7 @@ describe(
               callerId,
               todoId,
               changes,
+              requestId,
             ),
         ).resolves.toEqual(
           updatedTodo,
@@ -543,6 +559,7 @@ describe(
           callerId,
           todoId,
           changes,
+          requestId,
         );
       },
     );

@@ -45,6 +45,7 @@ export class UpdateTodoService {
     todoId: string,
     changes:
       UpdateTodoRequest,
+    requestId: string,
   ): Promise<
     UpdateTodoResponse
   > {
@@ -59,14 +60,6 @@ export class UpdateTodoService {
       );
     }
 
-    /*
-     * State-only updates are accessible to:
-     * - the TODO owner
-     * - an active share recipient
-     *
-     * Changes to title, description or due date
-     * remain owner-only.
-     */
     const result =
       isStateOnlyUpdate(changes)
         ? await this.repository
@@ -74,12 +67,14 @@ export class UpdateTodoService {
               callerId,
               todoId,
               changes.state,
+              requestId,
             )
         : await this.repository
             .updateOwnedTodo(
               callerId,
               todoId,
               changes,
+              requestId,
             );
 
     switch (result.status) {
@@ -95,11 +90,6 @@ export class UpdateTodoService {
 
       case "not_found":
       case "forbidden":
-        /*
-         * Both cases return the same 404 response.
-         * This prevents another user from discovering
-         * whether the TODO exists.
-         */
         throw new AppError(
           404,
           "TODO_NOT_FOUND",

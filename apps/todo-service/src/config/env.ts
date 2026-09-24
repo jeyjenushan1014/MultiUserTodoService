@@ -84,6 +84,52 @@ CACHE_TTL_SECONDS: z.coerce
   .positive()
   .max(3600)
   .default(60),
+
+  TODO_EVENTS_EXCHANGE:
+  z
+    .string()
+    .trim()
+    .min(1)
+    .default(
+      "todo.events",
+    ),
+
+TODO_OUTBOX_WORKER_ID:
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(50)
+    .default(
+      "todo-outbox-worker",
+    ),
+
+TODO_OUTBOX_BATCH_SIZE:
+  z
+    .coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(25),
+
+TODO_OUTBOX_POLL_INTERVAL_MS:
+  z
+    .coerce
+    .number()
+    .int()
+    .min(50)
+    .max(60_000)
+    .default(1_000),
+
+TODO_OUTBOX_LOCK_TIMEOUT_MS:
+  z
+    .coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(600_000)
+    .default(30_000),
     
 
     RABBITMQ_DEAD_LETTER_EXCHANGE:

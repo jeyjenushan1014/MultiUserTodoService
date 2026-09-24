@@ -110,11 +110,33 @@ services:
 
 
 
-    
-    
+  todo-outbox-worker:
+    build:
+      context: .
+      dockerfile: apps/todo-service/Dockerfile
 
-    
-   
+    command:
+      - node
+      - apps/todo-service/dist/src/outbox-worker.js
+
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${TODO_DATABASE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      TODO_EVENTS_EXCHANGE: ${TODO_EVENTS_EXCHANGE:-todo.events}
+      TODO_OUTBOX_WORKER_ID: ${TODO_OUTBOX_WORKER_ID:-todo-outbox-worker}
+      TODO_OUTBOX_BATCH_SIZE: ${TODO_OUTBOX_BATCH_SIZE:-25}
+      TODO_OUTBOX_POLL_INTERVAL_MS: ${TODO_OUTBOX_POLL_INTERVAL_MS:-1000}
+      TODO_OUTBOX_LOCK_TIMEOUT_MS: ${TODO_OUTBOX_LOCK_TIMEOUT_MS:-30000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   
 
   mailpit:

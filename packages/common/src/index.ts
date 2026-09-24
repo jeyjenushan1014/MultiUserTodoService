@@ -35,6 +35,13 @@ export {
 } from "./security/identity-signature.js";
 
 export {
+  IDEMPOTENCY_KEY_HEADER,
+  MAXIMUM_IDEMPOTENCY_KEY_LENGTH,
+  MINIMUM_IDEMPOTENCY_KEY_LENGTH,
+  normalizeIdempotencyKey,
+} from "./http/idempotency-key.js";
+
+export {
   createOpaqueToken,
   hashOpaqueToken,
 } from "./security/opaque-token.js";

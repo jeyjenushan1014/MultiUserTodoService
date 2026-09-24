@@ -9,7 +9,7 @@ import {
 } from "../account-event.schema.js";
 
 function createValidEvent():
-Record<string, unknown> {
+  Record<string, unknown> {
   return {
     eventId:
       "5403d006-532f-4d5f-8200-9893fe84e00d",
@@ -17,13 +17,8 @@ Record<string, unknown> {
     eventType:
       "account.registered",
 
-    eventVersion: 1,
-
-    aggregateType:
-      "account",
-
-    aggregateId:
-      "3bf53c86-0932-43d0-85ed-bd536c694677",
+    eventVersion:
+      1,
 
     occurredAt:
       "2026-09-22T10:00:00.000Z",
@@ -50,17 +45,23 @@ describe(
     it(
       "accepts a valid account event",
       () => {
-        expect(
+        const result =
           accountRegisteredEventSchema
             .parse(
               createValidEvent(),
-            ),
-        ).toMatchObject({
+            );
+
+        expect(result).toMatchObject({
           eventType:
             "account.registered",
 
-          aggregateId:
-            "3bf53c86-0932-43d0-85ed-bd536c694677",
+          payload: {
+            userId:
+              "3bf53c86-0932-43d0-85ed-bd536c694677",
+
+            email:
+              "user@example.com",
+          },
         });
       },
     );
@@ -74,28 +75,13 @@ describe(
         event.eventType =
           "account.deleted";
 
-        expect(() =>
+        const result =
           accountRegisteredEventSchema
-            .parse(event),
-        ).toThrow();
-      },
-    );
+            .safeParse(event);
 
-    it(
-      "rejects a mismatched aggregate ID",
-      () => {
-        const event =
-          createValidEvent();
-
-        event.aggregateId =
-          "906d8bf4-6a14-40cb-a380-60909c0741db";
-
-        expect(() =>
-          accountRegisteredEventSchema
-            .parse(event),
-        ).toThrow(
-          "Event aggregateId must match payload.userId",
-        );
+        expect(
+          result.success,
+        ).toBe(false);
       },
     );
 
@@ -108,10 +94,59 @@ describe(
         event.producer =
           "unknown-service";
 
-        expect(() =>
+        const result =
           accountRegisteredEventSchema
-            .parse(event),
-        ).toThrow();
+            .safeParse(event);
+
+        expect(
+          result.success,
+        ).toBe(false);
+      },
+    );
+
+    it(
+      "rejects an invalid payload email",
+      () => {
+        const event =
+          createValidEvent();
+
+        event.payload = {
+          userId:
+            "3bf53c86-0932-43d0-85ed-bd536c694677",
+
+          email:
+            "invalid-email",
+        };
+
+        const result =
+          accountRegisteredEventSchema
+            .safeParse(event);
+
+        expect(
+          result.success,
+        ).toBe(false);
+      },
+    );
+
+    it(
+      "rejects outbox-only metadata",
+      () => {
+        const event =
+          createValidEvent();
+
+        event.aggregateType =
+          "account";
+
+        event.aggregateId =
+          "3bf53c86-0932-43d0-85ed-bd536c694677";
+
+        const result =
+          accountRegisteredEventSchema
+            .safeParse(event);
+
+        expect(
+          result.success,
+        ).toBe(false);
       },
     );
   },

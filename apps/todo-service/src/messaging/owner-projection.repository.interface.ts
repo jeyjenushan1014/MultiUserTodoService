@@ -1,14 +1,21 @@
 export interface ApplyOwnerProjectionData {
-  readonly eventId: string;
+  readonly eventId:
+    string;
 
   readonly eventType:
     "account.registered";
 
-  readonly userId: string;
+  readonly userId:
+    string;
 
-  readonly occurredAt: Date;
+  readonly email:
+    string;
 
-  readonly consumerName: string;
+  readonly occurredAt:
+    Date;
+
+  readonly consumerName:
+    string;
 }
 
 export type ApplyOwnerProjectionResult =
@@ -17,6 +24,9 @@ export type ApplyOwnerProjectionResult =
 
 export interface OwnerProjectionRepository {
   applyAccountRegistered(
-    data: ApplyOwnerProjectionData,
-  ): Promise<ApplyOwnerProjectionResult>;
+    data:
+      ApplyOwnerProjectionData,
+  ): Promise<
+    ApplyOwnerProjectionResult
+  >;
 }

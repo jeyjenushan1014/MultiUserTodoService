@@ -343,6 +343,9 @@ async function request(
 
     readonly requestId?:
       string;
+
+    readonly idempotencyKey?:
+      string;
   } = {},
 ): Promise<ApiResult> {
   const requestId =
@@ -379,6 +382,16 @@ async function request(
     headers.set(
       "content-type",
       "application/json",
+    );
+  }
+
+  if (
+    options.idempotencyKey !==
+    undefined
+  ) {
+    headers.set(
+      "idempotency-key",
+      options.idempotencyKey,
     );
   }
 
@@ -509,6 +522,8 @@ async function createTodo(
     readonly dueDate?:
       string | null;
   },
+  idempotencyKey:
+    string = crypto.randomUUID(),
 ): Promise<ApiResult> {
   return request(
     "/api/v1/todos",
@@ -518,6 +533,8 @@ async function createTodo(
 
       accessToken:
         user.accessToken,
+
+      idempotencyKey,
 
       body,
     },
@@ -546,6 +563,13 @@ async function createTodoAfterProjection(
   let lastResponseBody:
     unknown;
 
+  /*
+   * Every retry belongs to the same logical create
+   * operation and must therefore use the same key.
+   */
+  const idempotencyKey =
+    crypto.randomUUID();
+
   for (
     let attempt = 1;
     attempt <= maximumAttempts;
@@ -557,6 +581,7 @@ async function createTodoAfterProjection(
         {
           title,
         },
+        idempotencyKey,
       );
 
     lastStatus =
@@ -656,7 +681,7 @@ describe.skipIf(
     );
 
     it(
-      "propagates the request ID",
+      "replaces a caller-supplied request ID",
       async () => {
         const requestId =
           createRequestId();
@@ -678,7 +703,13 @@ describe.skipIf(
 
         expect(
           result.requestId,
-        ).toBe(requestId);
+        ).not.toBe(requestId);
+
+        expect(
+          result.requestId,
+        ).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
+        );
       },
     );
 
@@ -773,6 +804,195 @@ describe.skipIf(
           userASecondTodo.state,
         ).toBe(
           "pending",
+        );
+      },
+    );
+
+    it(
+      "rejects TODO creation without an idempotency key",
+      async () => {
+        const result =
+          await request(
+            "/api/v1/todos",
+            {
+              method:
+                "POST",
+
+              accessToken:
+                userA.accessToken,
+
+              body: {
+                title:
+                  `Missing key ${crypto.randomUUID()}`,
+              },
+            },
+          );
+
+        expect(result.status).toBe(
+          400,
+        );
+
+        expect(
+          getErrorCode(
+            result.body,
+          ),
+        ).toBe(
+          "INVALID_IDEMPOTENCY_KEY",
+        );
+      },
+    );
+
+    it(
+      "returns the original TODO when the same create request is retried",
+      async () => {
+        const idempotencyKey =
+          crypto.randomUUID();
+
+        const body = {
+          title:
+            `Idempotent ${crypto.randomUUID()}`,
+
+          description:
+            "Created once",
+        };
+
+        const firstResult =
+          await createTodo(
+            userA,
+            body,
+            idempotencyKey,
+          );
+
+        const secondResult =
+          await createTodo(
+            userA,
+            body,
+            idempotencyKey,
+          );
+
+        expect(firstResult.status).toBe(
+          201,
+        );
+
+        expect(secondResult.status).toBe(
+          201,
+        );
+
+        const firstTodo =
+          parseTodo(
+            firstResult.body,
+          );
+
+        const secondTodo =
+          parseTodo(
+            secondResult.body,
+          );
+
+        expect(secondTodo).toEqual(
+          firstTodo,
+        );
+      },
+    );
+
+    it(
+      "allows only one TODO for concurrent requests using the same idempotency key",
+      async () => {
+        const idempotencyKey =
+          crypto.randomUUID();
+
+        const body = {
+          title:
+            `Concurrent idempotent ${crypto.randomUUID()}`,
+        };
+
+        const results =
+          await Promise.all([
+            createTodo(
+              userA,
+              body,
+              idempotencyKey,
+            ),
+
+            createTodo(
+              userA,
+              body,
+              idempotencyKey,
+            ),
+          ]);
+
+        expect(
+          results.map(
+            (result) =>
+              result.status,
+          ),
+        ).toEqual([
+          201,
+          201,
+        ]);
+
+        const firstResult =
+          results[0];
+
+        const secondResult =
+          results[1];
+
+        expect(firstResult).toBeDefined();
+        expect(secondResult).toBeDefined();
+
+
+
+        expect(
+          parseTodo(
+            secondResult.body,
+          ).id,
+        ).toBe(
+          parseTodo(
+            firstResult.body,
+          ).id,
+        );
+      },
+    );
+
+    it(
+      "rejects an idempotency key reused with a different request",
+      async () => {
+        const idempotencyKey =
+          crypto.randomUUID();
+
+        const firstResult =
+          await createTodo(
+            userA,
+            {
+              title:
+                `First idempotent ${crypto.randomUUID()}`,
+            },
+            idempotencyKey,
+          );
+
+        expect(firstResult.status).toBe(
+          201,
+        );
+
+        const secondResult =
+          await createTodo(
+            userA,
+            {
+              title:
+                `Different idempotent ${crypto.randomUUID()}`,
+            },
+            idempotencyKey,
+          );
+
+        expect(secondResult.status).toBe(
+          409,
+        );
+
+        expect(
+          getErrorCode(
+            secondResult.body,
+          ),
+        ).toBe(
+          "IDEMPOTENCY_KEY_REUSED",
         );
       },
     );
@@ -1424,4 +1644,4 @@ describe.skipIf(
       },
     );
   },
-);
+)

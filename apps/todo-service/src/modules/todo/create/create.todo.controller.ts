@@ -10,6 +10,12 @@ import type {
 } from "@todo/contracts";
 
 import {
+  AppError,
+  IDEMPOTENCY_KEY_HEADER,
+  normalizeIdempotencyKey,
+} from "@todo/common";
+
+import {
   getInternalCallerIdentity,
 } from "../../../middleware/internal-service-auth.middleware.js";
 
@@ -26,6 +32,30 @@ type CreateTodoHttpResponse =
     CreateTodoResponse,
     InternalIdentityLocals
   >;
+
+function requireIdempotencyKey(
+  request: Request,
+): string {
+  const idempotencyKey =
+    normalizeIdempotencyKey(
+      request.get(
+        IDEMPOTENCY_KEY_HEADER,
+      ),
+    );
+
+  if (
+    idempotencyKey ===
+    undefined
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_IDEMPOTENCY_KEY",
+      "A valid Idempotency-Key header is required",
+    );
+  }
+
+  return idempotencyKey;
+}
 
 export class CreateTodoController {
   public constructor(
@@ -49,16 +79,28 @@ export class CreateTodoController {
           response,
         );
 
+      const idempotencyKey =
+        requireIdempotencyKey(
+          request,
+        );
+
       const result =
         await this.service
           .execute({
             ownerId:
               identity.userId,
 
+            idempotencyKey,
+
             request:
               request.body,
           });
 
+      /*
+       * Returning 201 for both the original request
+       * and a replay keeps the public operation
+       * deterministic.
+       */
       response
         .status(201)
         .json(result);

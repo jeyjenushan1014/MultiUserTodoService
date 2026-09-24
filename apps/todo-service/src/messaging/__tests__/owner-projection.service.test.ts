@@ -6,6 +6,10 @@ import {
 } from "vitest";
 
 import type {
+  MockedFunction,
+} from "vitest";
+
+import type {
   AccountRegisteredEvent,
 } from "../account-event.schema.js";
 
@@ -17,14 +21,12 @@ import {
   OwnerProjectionService,
 } from "../owner-projection.service.js";
 
-interface Dependencies {
+interface TestDependencies {
   readonly applyAccountRegisteredMock:
-    ReturnType<
-      typeof vi.fn<
-        OwnerProjectionRepository[
-          "applyAccountRegistered"
-        ]
-      >
+    MockedFunction<
+      OwnerProjectionRepository[
+        "applyAccountRegistered"
+      ]
     >;
 
   readonly service:
@@ -32,7 +34,7 @@ interface Dependencies {
 }
 
 function createDependencies():
-Dependencies {
+  TestDependencies {
   const applyAccountRegisteredMock =
     vi.fn<
       OwnerProjectionRepository[
@@ -57,34 +59,32 @@ Dependencies {
 }
 
 function createEvent():
-AccountRegisteredEvent {
+  AccountRegisteredEvent {
   return {
     eventId:
-      "5403d006-532f-4d5f-8200-9893fe84e00d",
+      "39eb964c-991a-47bc-a012-e9db6eb86c10",
 
     eventType:
       "account.registered",
 
-    eventVersion: 1,
-
-    aggregateType:
-      "account",
-
-    aggregateId:
-      "3bf53c86-0932-43d0-85ed-bd536c694677",
-
-    occurredAt:
-      "2026-09-22T10:00:00.000Z",
-
-    requestId:
-      "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
+    eventVersion:
+      1,
 
     producer:
       "account-service",
 
+    requestId:
+      "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+
+    occurredAt:
+      "2026-09-24T04:00:00.000Z",
+
     payload: {
       userId:
-        "3bf53c86-0932-43d0-85ed-bd536c694677",
+        "9f134ed0-4503-4a23-a189-f065fe9fd838",
+
+      email:
+        "owner@example.com",
     },
   };
 }
@@ -93,43 +93,55 @@ describe(
   "OwnerProjectionService",
   () => {
     it(
-      "applies a new owner projection",
+      "applies an account registered event",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
           .applyAccountRegisteredMock
-          .mockResolvedValue(
+          .mockResolvedValueOnce(
             "applied",
           );
 
-        await expect(
-          dependencies
+        const event =
+          createEvent();
+
+        const result =
+          await dependencies
             .service
             .handleAccountRegistered(
-              createEvent(),
-            ),
-        ).resolves.toBe(
+              event,
+            );
+
+        expect(result).toBe(
           "applied",
         );
 
         expect(
           dependencies
             .applyAccountRegisteredMock,
+        ).toHaveBeenCalledTimes(1);
+
+        expect(
+          dependencies
+            .applyAccountRegisteredMock,
         ).toHaveBeenCalledWith({
           eventId:
-            "5403d006-532f-4d5f-8200-9893fe84e00d",
+            event.eventId,
 
           eventType:
-            "account.registered",
+            event.eventType,
 
           userId:
-            "3bf53c86-0932-43d0-85ed-bd536c694677",
+            event.payload.userId,
+
+          email:
+            event.payload.email,
 
           occurredAt:
             new Date(
-              "2026-09-22T10:00:00.000Z",
+              event.occurredAt,
             ),
 
           consumerName:
@@ -139,40 +151,46 @@ describe(
     );
 
     it(
-      "returns duplicate for an already processed event",
+      "returns duplicate when the event was already processed",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
           .applyAccountRegisteredMock
-          .mockResolvedValue(
+          .mockResolvedValueOnce(
             "duplicate",
           );
 
-        await expect(
-          dependencies
+        const result =
+          await dependencies
             .service
             .handleAccountRegistered(
               createEvent(),
-            ),
-        ).resolves.toBe(
+            );
+
+        expect(result).toBe(
           "duplicate",
         );
+
+        expect(
+          dependencies
+            .applyAccountRegisteredMock,
+        ).toHaveBeenCalledTimes(1);
       },
     );
 
     it(
-      "propagates database failures for retry",
+      "propagates repository errors",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
           .applyAccountRegisteredMock
-          .mockRejectedValue(
+          .mockRejectedValueOnce(
             new Error(
-              "database unavailable",
+              "Database unavailable",
             ),
           );
 
@@ -183,7 +201,7 @@ describe(
               createEvent(),
             ),
         ).rejects.toThrow(
-          "database unavailable",
+          "Database unavailable",
         );
       },
     );

@@ -13,7 +13,6 @@ import type {
   GetTodoRepository,
 } from "./get.todo.repository.interface.js";
 
-
 interface AccessibleTodoRow {
   readonly id:
     string;
@@ -114,14 +113,17 @@ function mapAccessibleTodo(
       row.state,
 
     dueDate:
-      row.due_date?.toISOString() ??
+      row.due_date
+        ?.toISOString() ??
       null,
 
     createdAt:
-      row.created_at.toISOString(),
+      row.created_at
+        .toISOString(),
 
     updatedAt:
-      row.updated_at.toISOString(),
+      row.updated_at
+        .toISOString(),
 
     accessType:
       row.access_type,
@@ -177,7 +179,7 @@ implements GetTodoRepository {
               jsonb_agg(
                 DISTINCT jsonb_build_object(
                   'id',
-                  recipient_projection.user_id,
+                  recipient_projection.id,
                   'email',
                   recipient_projection.email
                 )
@@ -192,7 +194,7 @@ implements GetTodoRepository {
 
           INNER JOIN todo_owners
             AS owner_projection
-            ON owner_projection.user_id =
+            ON owner_projection.id =
               todo.owner_id
 
           LEFT JOIN todo_shares
@@ -204,10 +206,12 @@ implements GetTodoRepository {
 
           LEFT JOIN todo_owners
             AS recipient_projection
-            ON recipient_projection.user_id =
+            ON recipient_projection.id =
               active_share.recipient_id
 
-          WHERE todo.id = $1
+                    WHERE todo.id = $1
+            AND todo.deleted_at
+              IS NULL
             AND (
               todo.owner_id = $2
 
@@ -246,6 +250,8 @@ implements GetTodoRepository {
 
     return row === undefined
       ? undefined
-      : mapAccessibleTodo(row);
+      : mapAccessibleTodo(
+          row,
+        );
   }
 }

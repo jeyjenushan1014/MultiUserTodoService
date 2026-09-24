@@ -16,47 +16,29 @@ export const accountRegisteredEventSchema =
       eventVersion:
         z.literal(1),
 
-      aggregateType:
-        z.literal(
-          "account",
-        ),
-
-      aggregateId:
-        z.uuid(),
-
-      occurredAt:
-        z.iso.datetime(),
-
-      requestId:
-        z.uuid(),
-
       producer:
         z.literal(
           "account-service",
         ),
+
+      requestId:
+        z.uuid(),
+
+      occurredAt:
+        z.iso.datetime(),
 
       payload:
         z
           .object({
             userId:
               z.uuid(),
-          })
-          .loose(),
-    })
-    .strict()
-    .refine(
-      (event) =>
-        event.aggregateId ===
-        event.payload.userId,
-      {
-        message:
-          "Event aggregateId must match payload.userId",
 
-        path: [
-          "aggregateId",
-        ],
-      },
-    );
+            email:
+              z.email(),
+          })
+          .strict(),
+    })
+    .strict();
 
 export type AccountRegisteredEvent =
   z.infer<

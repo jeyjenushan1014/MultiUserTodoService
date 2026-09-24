@@ -35,6 +35,9 @@ export class OwnerProjectionService {
           userId:
             event.payload.userId,
 
+          email:
+            event.payload.email,
+
           occurredAt:
             new Date(
               event.occurredAt,

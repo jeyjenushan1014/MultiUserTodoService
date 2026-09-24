@@ -32,14 +32,6 @@ interface CountRow {
     string;
 }
 
-interface SharedAccountRow {
-  readonly id:
-    string;
-
-  readonly email:
-    string;
-}
-
 interface ListTodoRow {
   readonly id:
     string;
@@ -402,7 +394,7 @@ implements ListTodosRepository {
                   SELECT jsonb_agg(
                     jsonb_build_object(
                       'id',
-                      recipient_projection.user_id,
+                      recipient_projection.id,
                       'email',
                       recipient_projection.email
                     )
@@ -412,7 +404,7 @@ implements ListTodosRepository {
                   FROM todo_shares visible_share
                   INNER JOIN todo_owners
                     recipient_projection
-                    ON recipient_projection.user_id =
+                    ON recipient_projection.id =
                       visible_share.recipient_id
                   WHERE visible_share.todo_id =
                     t.id
@@ -431,7 +423,7 @@ implements ListTodosRepository {
 
             INNER JOIN todo_owners
               owner_projection
-              ON owner_projection.user_id =
+              ON owner_projection.id =
                 t.owner_id
 
             WHERE t.deleted_at IS NULL

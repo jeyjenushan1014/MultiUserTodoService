@@ -6,6 +6,18 @@ import type {
   CreateTodoData,
 } from "../todo.types.js";
 
+export interface IdempotentCreateTodoData
+extends CreateTodoData {
+  readonly idempotencyKey:
+    string;
+
+  readonly requestHash:
+    string;
+
+  readonly idempotencyExpiresAt:
+    Date;
+}
+
 export type CreateTodoRepositoryResult =
   | {
       readonly outcome:
@@ -13,6 +25,17 @@ export type CreateTodoRepositoryResult =
 
       readonly todo:
         TodoResponse;
+    }
+  | {
+      readonly outcome:
+        "replayed";
+
+      readonly todo:
+        TodoResponse;
+    }
+  | {
+      readonly outcome:
+        "idempotency-key-reused";
     }
   | {
       readonly outcome:
@@ -25,6 +48,9 @@ export type CreateTodoRepositoryResult =
 
 export interface TodoRepository {
   create(
-    data: CreateTodoData,
-  ): Promise<CreateTodoRepositoryResult>;
+    data:
+      IdempotentCreateTodoData,
+  ): Promise<
+    CreateTodoRepositoryResult
+  >;
 }

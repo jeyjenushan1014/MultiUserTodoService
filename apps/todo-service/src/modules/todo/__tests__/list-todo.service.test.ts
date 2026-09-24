@@ -7,17 +7,36 @@ import {
 
 import type {
   ListTodosRepository,
-} from "../list-todos.repository.interface.js";
+} from "../list/list-todos.repository.interface.js";
 
 import {
   ListTodosService,
-} from "../list-todo.service.js";
+} from "../list/list-todo.service.js";
 
-function createRepository():
-ListTodosRepository {
-  return {
+function createRepository(): {
+  repository: ListTodosRepository;
+  listTodosMock: ReturnType<
+    typeof vi.fn<
+      ListTodosRepository["listTodos"]
+    >
+  >;
+} {
+  const listTodosMock =
+    vi.fn<
+      ListTodosRepository[
+        "listTodos"
+      ]
+    >();
+
+  const repository:
+  ListTodosRepository = {
     listTodos:
-      vi.fn(),
+      listTodosMock,
+  };
+
+  return {
+    repository,
+    listTodosMock,
   };
 }
 
@@ -27,18 +46,20 @@ describe(
     it(
       "passes the authenticated caller and access filter to the repository",
       async () => {
-        const repository =
+        const {
+          repository,
+          listTodosMock,
+        } =
           createRepository();
 
-        vi.mocked(
-          repository.listTodos,
-        ).mockResolvedValue({
-          items:
-            [],
+        listTodosMock
+          .mockResolvedValue({
+            items:
+              [],
 
-          totalItems:
-            0,
-        });
+            totalItems:
+              0,
+          });
 
         const service =
           new ListTodosService(
@@ -86,7 +107,7 @@ describe(
         });
 
         expect(
-          repository.listTodos,
+          listTodosMock,
         ).toHaveBeenCalledWith({
           ownerId:
             "70668eae-dac5-4b75-9bd3-02c963eb5b99",
@@ -112,18 +133,20 @@ describe(
     it(
       "calculates pagination metadata",
       async () => {
-        const repository =
+        const {
+          repository,
+          listTodosMock,
+        } =
           createRepository();
 
-        vi.mocked(
-          repository.listTodos,
-        ).mockResolvedValue({
-          items:
-            [],
+        listTodosMock
+          .mockResolvedValue({
+            items:
+              [],
 
-          totalItems:
-            21,
-        });
+            totalItems:
+              21,
+          });
 
         const service =
           new ListTodosService(
@@ -171,7 +194,7 @@ describe(
         });
 
         expect(
-          repository.listTodos,
+          listTodosMock,
         ).toHaveBeenCalledWith({
           ownerId:
             "70668eae-dac5-4b75-9bd3-02c963eb5b99",

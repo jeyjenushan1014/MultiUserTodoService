@@ -205,6 +205,11 @@ interface TodoRequestOptions {
 
   readonly body?:
     unknown;
+
+  readonly additionalHeaders?:
+    Readonly<
+      Record<string, string>
+    >;
 }
 
 /*
@@ -224,6 +229,11 @@ function createRequestHeaders(
 ): Record<string, string> {
   const headers:
     Record<string, string> = {
+      ...(
+        options.additionalHeaders ??
+        {}
+      ),
+
       "x-request-id":
         options.requestId,
 
@@ -236,7 +246,10 @@ function createRequestHeaders(
       ),
     };
 
-  if (options.body !== undefined) {
+  if (
+    options.body !==
+    undefined
+  ) {
     headers["content-type"] =
       "application/json";
   }
@@ -381,6 +394,8 @@ export async function createTodo(
     CallerIdentity,
   requestId:
     string,
+  idempotencyKey:
+    string,
 ): Promise<CreateTodoResponse> {
   const endpoint =
     new URL(
@@ -396,10 +411,13 @@ export async function createTodo(
         "POST",
 
       endpoint,
-
       identity,
-
       requestId,
+
+      additionalHeaders: {
+        "idempotency-key":
+          idempotencyKey,
+      },
 
       body:
         request,

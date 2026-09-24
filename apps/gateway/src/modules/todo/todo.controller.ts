@@ -10,7 +10,10 @@ import type {
 } from "@todo/contracts";
 
 import {
+  AppError,
   getRequestId,
+  IDEMPOTENCY_KEY_HEADER,
+  normalizeIdempotencyKey,
 } from "@todo/common";
 
 import {
@@ -21,6 +24,30 @@ import {
   getCallerIdentity,
 } from "../../middleware/authenticate.middleware.js";
 
+function requireIdempotencyKey(
+  request: Request,
+): string {
+  const idempotencyKey =
+    normalizeIdempotencyKey(
+      request.get(
+        IDEMPOTENCY_KEY_HEADER,
+      ),
+    );
+
+  if (
+    idempotencyKey ===
+    undefined
+  ) {
+    throw new AppError(
+      400,
+      "INVALID_IDEMPOTENCY_KEY",
+      "A valid Idempotency-Key header is required",
+    );
+  }
+
+  return idempotencyKey;
+}
+
 export async function createTodoController(
   request: Request<
     Record<string, never>,
@@ -29,7 +56,8 @@ export async function createTodoController(
   >,
   response:
     Response<CreateTodoResponse>,
-  next: NextFunction,
+  next:
+    NextFunction,
 ): Promise<void> {
   try {
     const identity =
@@ -38,14 +66,28 @@ export async function createTodoController(
       );
 
     const requestId =
-      getRequestId() ??
-      "unavailable";
+      getRequestId();
+
+    if (
+      requestId ===
+      undefined
+    ) {
+      throw new Error(
+        "Request context is unavailable",
+      );
+    }
+
+    const idempotencyKey =
+      requireIdempotencyKey(
+        request,
+      );
 
     const result =
       await createTodo(
         request.body,
         identity,
         requestId,
+        idempotencyKey,
       );
 
     response

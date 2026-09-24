@@ -1,10 +1,12 @@
 import {
+  createHash,
   randomUUID,
 } from "node:crypto";
 
 import type {
   CreateTodoRequest,
   CreateTodoResponse,
+  TodoState
 } from "@todo/contracts";
 
 import {
@@ -19,8 +21,15 @@ import type {
   TodoRepository,
 } from "./create.todo.repository.interface.js";
 
+const IDEMPOTENCY_RECORD_TTL_MILLISECONDS =
+  24 * 60 * 60 * 1_000;
+
 export interface CreateTodoCommand {
-  readonly ownerId: string;
+  readonly ownerId:
+    string;
+
+  readonly idempotencyKey:
+    string;
 
   readonly request:
     CreateTodoRequest;
@@ -65,6 +74,76 @@ function parseDueDate(
   );
 }
 
+interface NormalizedCreateTodo {
+  readonly title:
+    string;
+
+  readonly description:
+    string | null;
+
+  readonly state:
+    TodoState;
+
+  readonly dueDate:
+    Date | null;
+}
+
+function normalizeRequest(
+  request:
+    CreateTodoRequest,
+): NormalizedCreateTodo {
+  return {
+    title:
+      request.title.trim(),
+
+    description:
+      normalizeDescription(
+        request.description,
+      ),
+
+    state:
+      request.state ??
+      "pending",
+
+    dueDate:
+      parseDueDate(
+        request.dueDate,
+      ),
+  };
+}
+
+function createRequestHash(
+  request:
+    NormalizedCreateTodo,
+): string {
+  const canonicalRequest = {
+    title:
+      request.title,
+
+    description:
+      request.description,
+
+    state:
+      request.state,
+
+    dueDate:
+      request.dueDate
+        ?.toISOString() ??
+      null,
+  };
+
+  return createHash(
+    "sha256",
+  )
+    .update(
+      JSON.stringify(
+        canonicalRequest,
+      ),
+      "utf8",
+    )
+    .digest("hex");
+}
+
 export class CreateTodoService {
   public constructor(
     private readonly repository:
@@ -80,6 +159,14 @@ export class CreateTodoService {
   ): Promise<
     CreateTodoResponse
   > {
+    const normalizedRequest =
+      normalizeRequest(
+        command.request,
+      );
+
+    const occurredAt =
+      new Date();
+
     const result =
       await this.repository
         .create({
@@ -89,30 +176,34 @@ export class CreateTodoService {
           ownerId:
             command.ownerId,
 
+          idempotencyKey:
+            command.idempotencyKey,
+
+          requestHash:
+            createRequestHash(
+              normalizedRequest,
+            ),
+
+          idempotencyExpiresAt:
+            new Date(
+              occurredAt.getTime() +
+                IDEMPOTENCY_RECORD_TTL_MILLISECONDS,
+            ),
+
           title:
-            command.request
-              .title
-              .trim(),
+            normalizedRequest.title,
 
           description:
-            normalizeDescription(
-              command.request
-                .description,
-            ),
+            normalizedRequest
+              .description,
 
           state:
-            command.request
-              .state ??
-            "pending",
+            normalizedRequest.state,
 
           dueDate:
-            parseDueDate(
-              command.request
-                .dueDate,
-            ),
+            normalizedRequest.dueDate,
 
-          occurredAt:
-            new Date(),
+          occurredAt,
         });
 
     if (
@@ -137,18 +228,30 @@ export class CreateTodoService {
       );
     }
 
-    /*
-     * At this point the PostgreSQL creation has
-     * succeeded.
-     *
-     * Incrementing the owner's Redis cache version
-     * makes every previous list and item cache entry
-     * unreachable.
-     */
-    await this.cacheInvalidator
-      .invalidateOwner(
-        command.ownerId,
+    if (
+      result.outcome ===
+      "idempotency-key-reused"
+    ) {
+      throw new AppError(
+        409,
+        "IDEMPOTENCY_KEY_REUSED",
+        "The idempotency key was already used with a different request",
       );
+    }
+
+    /*
+     * A replay did not modify the TODO database,
+     * so it must not create another cache version.
+     */
+    if (
+      result.outcome ===
+      "created"
+    ) {
+      await this.cacheInvalidator
+        .invalidateOwner(
+          command.ownerId,
+        );
+    }
 
     return result.todo;
   }

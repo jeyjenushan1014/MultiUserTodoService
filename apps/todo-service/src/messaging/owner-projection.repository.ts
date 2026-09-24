@@ -104,6 +104,7 @@ implements OwnerProjectionRepository {
       `
         INSERT INTO todo_owners (
           id,
+          email,
           account_created_at,
           created_at,
           deactivated_at
@@ -111,21 +112,26 @@ implements OwnerProjectionRepository {
         VALUES (
           $1,
           $2,
+          $3,
           CURRENT_TIMESTAMP,
           NULL
         )
         ON CONFLICT (id)
         DO UPDATE
         SET
+          email =
+            EXCLUDED.email,
           account_created_at =
             LEAST(
               todo_owners.account_created_at,
               EXCLUDED.account_created_at
             ),
-          deactivated_at = NULL
+          deactivated_at =
+            NULL
       `,
       [
         data.userId,
+        data.email,
         data.occurredAt,
       ],
     );

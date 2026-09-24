@@ -17,20 +17,66 @@ import type {
   TodoReadCache,
 } from "../todo.read.cache.interface.js";
 
-function createReadCache():
-TodoReadCache {
-  return {
+function createReadCache(): {
+  readCache: TodoReadCache;
+  lookupListMock: ReturnType<
+    typeof vi.fn<
+      TodoReadCache["lookupList"]
+    >
+  >;
+  storeListMock: ReturnType<
+    typeof vi.fn<
+      TodoReadCache["storeList"]
+    >
+  >;
+} {
+  const lookupItemMock =
+    vi.fn<
+      TodoReadCache[
+        "lookupItem"
+      ]
+    >();
+
+  const storeItemMock =
+    vi.fn<
+      TodoReadCache[
+        "storeItem"
+      ]
+    >();
+
+  const lookupListMock =
+    vi.fn<
+      TodoReadCache[
+        "lookupList"
+      ]
+    >();
+
+  const storeListMock =
+    vi.fn<
+      TodoReadCache[
+        "storeList"
+      ]
+    >();
+
+  const readCache:
+  TodoReadCache = {
     lookupItem:
-      vi.fn(),
+      lookupItemMock,
 
     storeItem:
-      vi.fn(),
+      storeItemMock,
 
     lookupList:
-      vi.fn(),
+      lookupListMock,
 
     storeList:
-      vi.fn(),
+      storeListMock,
+  };
+
+  return {
+    readCache,
+    lookupListMock,
+    storeListMock,
   };
 }
 
@@ -57,12 +103,16 @@ describe(
           });
 
         const databaseRepository:
-          ListTodosRepository = {
-            listTodos:
-              listTodosMock,
-          };
+        ListTodosRepository = {
+          listTodos:
+            listTodosMock,
+        };
 
-        const readCache =
+        const {
+          readCache,
+          lookupListMock,
+          storeListMock,
+        } =
           createReadCache();
 
         const repository =
@@ -111,11 +161,11 @@ describe(
         );
 
         expect(
-          readCache.lookupList,
+          lookupListMock,
         ).not.toHaveBeenCalled();
 
         expect(
-          readCache.storeList,
+          storeListMock,
         ).not.toHaveBeenCalled();
       },
     );

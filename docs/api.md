@@ -5337,3 +5337,16 @@ Returns TODOs owned by or shared with the authenticated user.
 
 ```http
 GET /api/v1/todos
+
+### Idempotency
+
+`POST /api/v1/todos` requires an `Idempotency-Key` header.
+
+The key must:
+
+- Contain between 8 and 128 characters.
+- Contain only letters, numbers, `.`, `_`, `:`, or `-`.
+- Be reused only when retrying the same request body.
+
+```http
+Idempotency-Key: 47cf562e-5ba5-4ed8-b454-b23732719de8

@@ -6,9 +6,19 @@ import {
   authenticate,
 } from "../../middleware/authenticate.middleware.js";
 
+
+
 import {
   shareTodoController,
 } from "./share/share-todo.controller.js";
+
+import {
+  withdrawTodoShareController,
+} from "./share/withdraw/withdraw.todo.share.controller.js";
+
+import {
+  withdrawTodoShareParamsSchema,
+} from "./share/withdraw/withdraw.todo.share.validation.js";
 
 import {
   shareTodoBodySchema,
@@ -102,6 +112,14 @@ todoRouter.post(
     shareTodoBodySchema,
   ),
   shareTodoController,
+);
+
+todoRouter.delete(
+  "/:todoId/shares/:recipientId",
+  validateParams(
+    withdrawTodoShareParamsSchema,
+  ),
+  withdrawTodoShareController,
 );
 
 todoRouter.get(

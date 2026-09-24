@@ -590,37 +590,51 @@ implements TodoReadCache {
       };
     }
 
-    const ownershipIsValid =
-      parsed.data.items.every(
-        (todo) =>
+const accessibilityIsValid =
+  parsed.data.items.every(
+    (todo) => {
+      if (
+        todo.accessType ===
+        "owner"
+      ) {
+        return (
           todo.ownerId ===
-          parameters.ownerId,
-      );
+          parameters.ownerId
+        );
+      }
 
-    if (!ownershipIsValid) {
-      logger.warn(
-        {
-          cacheOperation:
-            "validate-ownership",
+      return todo.sharedWith
+        .some(
+          (account) =>
+            account.id ===
+            parameters.ownerId,
+        );
+    },
+  );
 
-          cacheResource:
-            "todo-list",
+if (!accessibilityIsValid) {
+  logger.warn(
+    {
+      cacheOperation:
+        "validate-access",
 
-          cacheHit:
-            false,
-        },
-        "TODO list cache ownership mismatch; using PostgreSQL",
-      );
+      cacheResource:
+        "todo-list",
 
-      await deleteInvalidValue(
-        cacheKey,
-      );
+      cacheHit:
+        false,
+    },
+    "TODO list cache access mismatch; using PostgreSQL",
+  );
 
-      return {
-        cacheKey,
-      };
-    }
+  await deleteInvalidValue(
+    cacheKey,
+  );
 
+  return {
+    cacheKey,
+  };
+}
     return {
       cacheKey,
 

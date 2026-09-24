@@ -18,28 +18,33 @@ export class ListTodosService {
     query: ListTodosQuery,
   ): Promise<ListTodosResponse> {
     const result =
-      await this.repository.listTodos({
-        ownerId,
+      await this.repository
+        .listTodos({
+          ownerId,
 
-        page:
-          query.page,
+          page:
+            query.page,
 
-        pageSize:
-          query.pageSize,
+          pageSize:
+            query.pageSize,
 
-        ...(query.state === undefined
-          ? {}
-          : {
-              state:
-                query.state,
-            }),
+          ...(query.state ===
+          undefined
+            ? {}
+            : {
+                state:
+                  query.state,
+              }),
 
-        sortBy:
-          query.sortBy,
+          access:
+            query.access,
 
-        sortOrder:
-          query.sortOrder,
-      });
+          sortBy:
+            query.sortBy,
+
+          sortOrder:
+            query.sortOrder,
+        });
 
     const totalPages =
       result.totalItems === 0

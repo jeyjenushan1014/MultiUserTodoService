@@ -5307,3 +5307,33 @@ The response contains the current email address of the owner and every active sh
 ```http
 GET /api/v1/todos/{todoId}
 Authorization: Bearer <access-token>
+
+
+## Update a TODO
+
+```http
+PATCH /api/v1/todos/{todoId}
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+
+
+
+## Withdraw a TODO share
+
+Only the TODO owner may withdraw an active share.
+
+### Request
+
+```http
+DELETE /api/v1/todos/{todoId}/shares/{recipientId}
+Authorization: Bearer <owner-access-token>
+
+## List TODOs
+
+Returns TODOs owned by or shared with the authenticated user.
+
+### Endpoint
+
+```http
+GET /api/v1/todos

@@ -1,17 +1,17 @@
-
 import {
   z,
 } from "zod";
 
 import {
+  DEFAULT_SORT_ORDER,
   DEFAULT_TODO_PAGE,
   DEFAULT_TODO_PAGE_SIZE,
- MAXIMUM_TODO_PAGE_SIZE,
- TODO_STATES,
- SORT_ORDERS,
- DEFAULT_TODO_SORT_FIELD,
- DEFAULT_SORT_ORDER,
- TODO_SORT_FIELDS
+  DEFAULT_TODO_SORT_FIELD,
+  MAXIMUM_TODO_PAGE_SIZE,
+  SORT_ORDERS,
+  TODO_LIST_ACCESS_TYPES,
+  TODO_SORT_FIELDS,
+  TODO_STATES,
 } from "@todo/contracts";
 
 export const listTodosQuerySchema =
@@ -35,11 +35,18 @@ export const listTodosQuerySchema =
         .default(
           DEFAULT_TODO_PAGE_SIZE,
         ),
-           state: z
+
+      state: z
         .enum(
           TODO_STATES,
         )
         .optional(),
+
+      access: z
+        .enum(
+          TODO_LIST_ACCESS_TYPES,
+        )
+        .default("all"),
 
       sortBy: z
         .enum(
@@ -63,5 +70,3 @@ export type ValidatedListTodosQuery =
   z.infer<
     typeof listTodosQuerySchema
   >;
-
-

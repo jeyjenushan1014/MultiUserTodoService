@@ -423,12 +423,9 @@ export async function createTodo(
 GET /internal/v1/todos
 */
 export async function listTodos(
-  query:
-    ListTodosQuery,
-  identity:
-    CallerIdentity,
-  requestId:
-    string,
+  query: ListTodosQuery,
+  identity: CallerIdentity,
+  requestId: string,
 ): Promise<ListTodosResponse> {
   const endpoint =
     new URL(
@@ -438,26 +435,28 @@ export async function listTodos(
 
   endpoint.searchParams.set(
     "page",
-    String(
-      query.page,
-    ),
+    String(query.page),
   );
 
   endpoint.searchParams.set(
     "pageSize",
-    String(
-      query.pageSize,
-    ),
+    String(query.pageSize),
   );
 
   if (
-    query.state !== undefined
+    query.state !==
+    undefined
   ) {
     endpoint.searchParams.set(
       "state",
       query.state,
     );
   }
+
+  endpoint.searchParams.set(
+    "access",
+    query.access,
+  );
 
   endpoint.searchParams.set(
     "sortBy",
@@ -477,16 +476,11 @@ export async function listTodos(
         "GET",
 
       endpoint,
-
       identity,
-
       requestId,
     });
 
-  if (
-    result === undefined ||
-    !isRecord(result)
-  ) {
+  if (result === undefined) {
     throw new AppError(
       502,
       "INVALID_DOWNSTREAM_RESPONSE",
@@ -674,4 +668,32 @@ export async function shareTodo(
   }
 
   return result;
+}
+
+export async function withdrawTodoShare(
+  todoId: string,
+  recipientId: string,
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<void> {
+  const endpoint =
+    new URL(
+      `/internal/v1/todos/${encodeURIComponent(
+        todoId,
+      )}/shares/${encodeURIComponent(
+        recipientId,
+      )}`,
+      env.TODO_SERVICE_URL,
+    );
+
+  await sendTodoRequest<
+    undefined
+  >({
+    method:
+      "DELETE",
+
+    endpoint,
+    identity,
+    requestId,
+  });
 }

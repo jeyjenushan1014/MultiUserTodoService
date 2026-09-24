@@ -16,6 +16,15 @@ export type {
   CreateTodoResponse,
 } from "./create.todo.contract.js";
 
+export {
+  TODO_LIST_ACCESS_TYPES,
+} from "./list.todos.contract.js";
+
+export type {
+  TodoListAccessType,
+} from "./list.todos.contract.js";
+
+
 export type {
   GetTodoResponse,
   GetTodoParams,

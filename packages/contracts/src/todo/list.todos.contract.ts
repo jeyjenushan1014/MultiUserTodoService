@@ -1,18 +1,38 @@
 import type {
   PaginationMetadata,
+} from "./todo.types.js";
+
+import type {
+  TodoDetails,
+} from "./get.todo.contract.js";
+
+import type {
   SortOrder,
-  TodoResponse,
   TodoSortField,
   TodoState,
 } from "./todo.types.js";
 
-export interface ListTodosQuery {
-  readonly page: number;
+export const TODO_LIST_ACCESS_TYPES = [
+  "owned",
+  "shared",
+  "all",
+] as const;
 
-  readonly pageSize: number;
+export type TodoListAccessType =
+  typeof TODO_LIST_ACCESS_TYPES[number];
+
+export interface ListTodosQuery {
+  readonly page:
+    number;
+
+  readonly pageSize:
+    number;
 
   readonly state?:
     TodoState;
+
+  readonly access:
+    TodoListAccessType;
 
   readonly sortBy:
     TodoSortField;
@@ -23,7 +43,7 @@ export interface ListTodosQuery {
 
 export interface ListTodosResponse {
   readonly items:
-    readonly TodoResponse[];
+    readonly TodoDetails[];
 
   readonly pagination:
     PaginationMetadata;

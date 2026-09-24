@@ -4,6 +4,9 @@ import type {
 
 import type {
   SortOrder,
+  TodoAccountReference,
+  TodoDetails,
+  TodoListAccessType,
   TodoSortField,
 } from "@todo/contracts";
 
@@ -14,14 +17,6 @@ import {
 import {
   logger,
 } from "../../../config/logger.js";
-
-import {
-  mapTodoRow,
-} from "../todo.mapper.js";
-
-import type {
-  TodoDatabaseRow,
-} from "../todo.types.js";
 
 import type {
   ListTodosRepository,
@@ -37,37 +32,73 @@ interface CountRow {
     string;
 }
 
+interface SharedAccountRow {
+  readonly id:
+    string;
+
+  readonly email:
+    string;
+}
+
+interface ListTodoRow {
+  readonly id:
+    string;
+
+  readonly owner_id:
+    string;
+
+  readonly owner_email:
+    string;
+
+  readonly title:
+    string;
+
+  readonly description:
+    string | null;
+
+  readonly state:
+    TodoDetails["state"];
+
+  readonly due_date:
+    Date | null;
+
+  readonly created_at:
+    Date;
+
+  readonly updated_at:
+    Date;
+
+  readonly access_type:
+    TodoDetails["accessType"];
+
+  readonly shared_with:
+    unknown;
+}
+
 type OrderKey =
   `${TodoSortField}:${SortOrder}`;
 
-/*
- * User input is never inserted directly into SQL.
- *
- * The validated sort field and direction select one
- * complete SQL fragment from this application-owned
- * allow list.
- */
 const ORDER_BY_CLAUSES:
   Readonly<
     Record<OrderKey, string>
   > = {
     "createdAt:asc":
-      `created_at ASC,
-       id ASC`,
+      `t.created_at ASC,
+       t.id ASC`,
 
     "createdAt:desc":
-      `created_at DESC,
-       id DESC`,
+      `t.created_at DESC,
+       t.id DESC`,
 
     "dueDate:asc":
-      `due_date ASC NULLS LAST,
-       created_at DESC,
-       id DESC`,
+      `t.due_date ASC NULLS LAST,
+       t.created_at DESC,
+       t.id DESC`,
 
     "dueDate:desc":
-      `due_date DESC NULLS LAST,
-       created_at DESC,
-       id DESC`,
+      `t.due_date DESC NULLS LAST,
+       t.created_at DESC,
+       t.id DESC`,
   };
 
 function getOrderByClause(
@@ -81,8 +112,44 @@ function getOrderByClause(
   return ORDER_BY_CLAUSES[key];
 }
 
+function getAccessCondition(
+  access:
+    TodoListAccessType,
+): string {
+  switch (access) {
+    case "owned":
+      return "t.owner_id = $1";
+
+    case "shared":
+      return `
+        EXISTS (
+          SELECT 1
+          FROM todo_shares access_share
+          WHERE access_share.todo_id = t.id
+            AND access_share.recipient_id = $1
+            AND access_share.withdrawn_at IS NULL
+        )
+      `;
+
+    case "all":
+      return `
+        (
+          t.owner_id = $1
+          OR EXISTS (
+            SELECT 1
+            FROM todo_shares access_share
+            WHERE access_share.todo_id = t.id
+              AND access_share.recipient_id = $1
+              AND access_share.withdrawn_at IS NULL
+          )
+        )
+      `;
+  }
+}
+
 function parseTotalItems(
-  row: CountRow | undefined,
+  row:
+    CountRow | undefined,
 ): number {
   if (row === undefined) {
     return 0;
@@ -106,6 +173,105 @@ function parseTotalItems(
   }
 
   return totalItems;
+}
+
+function isRecord(
+  value: unknown,
+): value is Record<
+  string,
+  unknown
+> {
+  return (
+    typeof value ===
+      "object" &&
+    value !== null
+  );
+}
+
+function parseSharedAccounts(
+  value: unknown,
+): readonly TodoAccountReference[] {
+  if (!Array.isArray(value)) {
+    throw new Error(
+      "PostgreSQL returned invalid shared account information",
+    );
+  }
+
+  return value.map(
+    (
+      account,
+    ): TodoAccountReference => {
+      if (
+        !isRecord(account) ||
+        typeof account.id !==
+          "string" ||
+        typeof account.email !==
+          "string"
+      ) {
+        throw new Error(
+          "PostgreSQL returned invalid shared account information",
+        );
+      }
+
+      return {
+        id:
+          account.id,
+
+        email:
+          account.email,
+      };
+    },
+  );
+}
+
+function mapListTodoRow(
+  row: ListTodoRow,
+): TodoDetails {
+  return {
+    id:
+      row.id,
+
+    ownerId:
+      row.owner_id,
+
+    title:
+      row.title,
+
+    description:
+      row.description,
+
+    state:
+      row.state,
+
+    dueDate:
+      row.due_date
+        ?.toISOString() ??
+      null,
+
+    createdAt:
+      row.created_at
+        .toISOString(),
+
+    updatedAt:
+      row.updated_at
+        .toISOString(),
+
+    accessType:
+      row.access_type,
+
+    owner: {
+      id:
+        row.owner_id,
+
+      email:
+        row.owner_email,
+    },
+
+    sharedWith:
+      parseSharedAccounts(
+        row.shared_with,
+      ),
+  };
 }
 
 async function rollbackTransaction(
@@ -143,14 +309,16 @@ implements ListTodosRepository {
       ) *
       parameters.pageSize;
 
-    /*
-     * Only fixed application-owned SQL is used.
-     * The state value remains a PostgreSQL parameter.
-     */
+    const accessCondition =
+      getAccessCondition(
+        parameters.access,
+      );
+
     const stateCondition =
-      parameters.state === undefined
+      parameters.state ===
+      undefined
         ? ""
-        : "AND state = $2";
+        : "AND t.state = $2";
 
     const filterValues:
       (string | number)[] = [
@@ -191,9 +359,9 @@ implements ListTodosRepository {
             SELECT
               COUNT(*)::text
                 AS total_items
-            FROM todos
-            WHERE owner_id = $1
-              AND deleted_at IS NULL
+            FROM todos t
+            WHERE t.deleted_at IS NULL
+              AND ${accessCondition}
               ${stateCondition}
           `,
           filterValues,
@@ -208,26 +376,74 @@ implements ListTodosRepository {
 
       const todosResult =
         await client.query<
-          TodoDatabaseRow
+          ListTodoRow
         >(
           `
             SELECT
-              id,
-              owner_id,
-              title,
-              description,
-              state,
-              due_date,
-              created_at,
-              updated_at
-            FROM todos
-            WHERE owner_id = $1
-              AND deleted_at IS NULL
+              t.id,
+              t.owner_id,
+              owner_projection.email
+                AS owner_email,
+              t.title,
+              t.description,
+              t.state,
+              t.due_date,
+              t.created_at,
+              t.updated_at,
+
+              CASE
+                WHEN t.owner_id = $1
+                  THEN 'owner'
+                ELSE 'shared'
+              END AS access_type,
+
+              COALESCE(
+                (
+                  SELECT jsonb_agg(
+                    jsonb_build_object(
+                      'id',
+                      recipient_projection.user_id,
+                      'email',
+                      recipient_projection.email
+                    )
+                    ORDER BY
+                      recipient_projection.email ASC
+                  )
+                  FROM todo_shares visible_share
+                  INNER JOIN todo_owners
+                    recipient_projection
+                    ON recipient_projection.user_id =
+                      visible_share.recipient_id
+                  WHERE visible_share.todo_id =
+                    t.id
+                    AND visible_share.withdrawn_at
+                      IS NULL
+                    AND (
+                      t.owner_id = $1
+                      OR visible_share.recipient_id =
+                        $1
+                    )
+                ),
+                '[]'::jsonb
+              ) AS shared_with
+
+            FROM todos t
+
+            INNER JOIN todo_owners
+              owner_projection
+              ON owner_projection.user_id =
+                t.owner_id
+
+            WHERE t.deleted_at IS NULL
+              AND ${accessCondition}
               ${stateCondition}
+
             ORDER BY
               ${orderByClause}
+
             LIMIT
               $${limitParameterPosition}
+
             OFFSET
               $${offsetParameterPosition}
           `,
@@ -241,7 +457,7 @@ implements ListTodosRepository {
       return {
         items:
           todosResult.rows.map(
-            mapTodoRow,
+            mapListTodoRow,
           ),
 
         totalItems:

@@ -19,7 +19,17 @@ implements ListTodosRepository {
 
     private readonly readCache:
       TodoReadCache,
-  ) {}
+  ) {
+    /*
+     * Preserve the existing constructor contract.
+     *
+     * Shared access can be withdrawn independently
+     * of the caller's cache version. Therefore list
+     * reads currently use PostgreSQL as the source
+     * of truth.
+     */
+    void this.readCache;
+  }
 
   public async listTodos(
     parameters:
@@ -27,33 +37,9 @@ implements ListTodosRepository {
   ): Promise<
     ListTodosRepositoryResult
   > {
-    const lookup =
-      await this.readCache
-        .lookupList(
-          parameters,
-        );
-
-    if (
-      lookup?.value !==
-      undefined
-    ) {
-      return lookup.value;
-    }
-
-    const result =
-      await this.repository
-        .listTodos(
-          parameters,
-        );
-
-    if (lookup !== undefined) {
-      await this.readCache
-        .storeList(
-          lookup.cacheKey,
-          result,
-        );
-    }
-
-    return result;
+    return this.repository
+      .listTodos(
+        parameters,
+      );
   }
 }

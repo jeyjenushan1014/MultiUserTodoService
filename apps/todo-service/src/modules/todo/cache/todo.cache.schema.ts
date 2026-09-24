@@ -46,11 +46,40 @@ export const cachedTodoSchema =
     })
     .strict();
 
+const cachedAccountReferenceSchema =
+  z
+    .object({
+      id:
+        z.uuid(),
+
+      email:
+        z.email(),
+    })
+    .strict();
+
+const cachedTodoDetailsSchema =
+  cachedTodoSchema
+    .extend({
+      accessType: z.enum([
+        "owner",
+        "shared",
+      ]),
+
+      owner:
+        cachedAccountReferenceSchema,
+
+      sharedWith:
+        z.array(
+          cachedAccountReferenceSchema,
+        ),
+    })
+    .strict();
+
 export const cachedListResultSchema =
   z
     .object({
       items: z.array(
-        cachedTodoSchema,
+        cachedTodoDetailsSchema,
       ),
 
       totalItems: z

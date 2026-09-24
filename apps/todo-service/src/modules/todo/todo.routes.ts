@@ -55,6 +55,14 @@ import {
 } from "./get/get.todo.controller.js";
 
 import {
+  withdrawTodoShareController,
+} from "./share/withdraw/withdraw.todo.share.controller.js";
+
+import {
+  withdrawTodoShareParamsSchema,
+} from "./share/withdraw/withdraw.todo.share.validation.js";
+
+import {
   getTodoParamsSchema,
 } from "./get/get.todo.validation.js";
 
@@ -124,6 +132,14 @@ todoRouter.post(
     createTodoShareBodySchema,
   ),
   shareTodoController,
+);
+
+todoRouter.delete(
+  "/:todoId/shares/:recipientId",
+  validateParams(
+    withdrawTodoShareParamsSchema,
+  ),
+  withdrawTodoShareController,
 );
 
 todoRouter.get(

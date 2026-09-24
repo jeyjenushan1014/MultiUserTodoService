@@ -11,6 +11,7 @@ import type {
 
 import {
   AppError,
+  getRequestId,
   IDEMPOTENCY_KEY_HEADER,
   normalizeIdempotencyKey,
 } from "@todo/common";
@@ -57,6 +58,25 @@ function requireIdempotencyKey(
   return idempotencyKey;
 }
 
+function requireCurrentRequestId():
+string {
+  const requestId =
+    getRequestId();
+
+  if (
+    requestId ===
+    undefined
+  ) {
+    throw new AppError(
+      500,
+      "REQUEST_CONTEXT_MISSING",
+      "Request context is unavailable",
+    );
+  }
+
+  return requestId;
+}
+
 export class CreateTodoController {
   public constructor(
     private readonly service:
@@ -84,6 +104,9 @@ export class CreateTodoController {
           request,
         );
 
+      const requestId =
+        requireCurrentRequestId();
+
       const result =
         await this.service
           .execute({
@@ -92,14 +115,16 @@ export class CreateTodoController {
 
             idempotencyKey,
 
+            requestId,
+
             request:
               request.body,
           });
 
       /*
        * Returning 201 for both the original request
-       * and a replay keeps the public operation
-       * deterministic.
+       * and an idempotent replay keeps the public
+       * operation deterministic.
        */
       response
         .status(201)

@@ -16,6 +16,9 @@ extends CreateTodoData {
 
   readonly idempotencyExpiresAt:
     Date;
+
+  readonly requestId:
+    string;
 }
 
 export type CreateTodoRepositoryResult =

@@ -11,6 +11,18 @@ import {
 } from "../../../config/logger.js";
 
 import {
+  createTodoCreatedEvent,
+} from "../../../events/todo-event.factory.js";
+
+import {
+  PostgresTodoOutboxWriter,
+} from "../../../outbox/postgres.todo-outbox.writer.js";
+
+import type {
+  TodoOutboxWriter,
+} from "../../../outbox/todo-outbox.writer.interface.js";
+
+import {
   mapTodoRow,
 } from "../todo.mapper.js";
 
@@ -100,6 +112,12 @@ async function rollbackTransaction(
 
 export class PostgresTodoRepository
 implements TodoRepository {
+  public constructor(
+    private readonly outboxWriter:
+      TodoOutboxWriter =
+        new PostgresTodoOutboxWriter(),
+  ) {}
+
   public async create(
     data:
       IdempotentCreateTodoData,
@@ -115,8 +133,8 @@ implements TodoRepository {
       );
 
       /*
-       * This prevents expired idempotency records
-       * from accumulating indefinitely.
+       * Remove expired idempotency records so they
+       * do not accumulate indefinitely.
        */
       await client.query(
         `
@@ -179,11 +197,6 @@ implements TodoRepository {
         undefined;
 
       if (!recordWasInserted) {
-        /*
-         * INSERT ON CONFLICT waits for a concurrent
-         * transaction using the same key. This SELECT
-         * therefore observes the committed record.
-         */
         const existingRecordResult =
           await client.query<
             IdempotencyRecordRow
@@ -234,10 +247,7 @@ implements TodoRepository {
 
         /*
          * Do not filter deleted_at here.
-         *
-         * An idempotent replay returns the result of
-         * the original operation, even if another
-         * operation later soft-deleted the TODO.
+         * A replay returns the original result.
          */
         const existingTodoResult =
           await client.query<
@@ -265,7 +275,8 @@ implements TodoRepository {
           );
 
         const existingTodo =
-          existingTodoResult.rows[0];
+          existingTodoResult
+            .rows[0];
 
         if (
           existingTodo ===
@@ -280,6 +291,10 @@ implements TodoRepository {
           "COMMIT",
         );
 
+        /*
+         * An idempotent replay must not append a
+         * second todo.created event.
+         */
         return {
           outcome:
             "replayed",
@@ -356,6 +371,31 @@ implements TodoRepository {
             "owner-unavailable",
         };
       }
+
+      const event =
+        createTodoCreatedEvent(
+          {
+            todoId:
+              createdTodo.id,
+
+            ownerId:
+              createdTodo.owner_id,
+
+            title:
+              createdTodo.title,
+          },
+          data.requestId,
+        );
+
+      /*
+       * The TODO, idempotency record and event are
+       * stored using the same PostgreSQL transaction.
+       */
+      await this.outboxWriter
+        .append(
+          client,
+          event,
+        );
 
       await client.query(
         "COMMIT",

@@ -27,6 +27,9 @@ const ownerId =
 const idempotencyKey =
   "create-todo-request-001";
 
+const requestId =
+  "224d07f1-8812-429c-a0a6-092d83977ad5";
+
 const todo:
   TodoResponse = {
     id:
@@ -57,7 +60,9 @@ interface Dependencies {
   readonly createMock:
     ReturnType<
       typeof vi.fn<
-        TodoRepository["create"]
+        TodoRepository[
+          "create"
+        ]
       >
     >;
 
@@ -78,7 +83,9 @@ function createDependencies():
 Dependencies {
   const createMock =
     vi.fn<
-      TodoRepository["create"]
+      TodoRepository[
+        "create"
+      ]
     >();
 
   const invalidateOwnerMock =
@@ -133,6 +140,7 @@ describe(
             .execute({
               ownerId,
               idempotencyKey,
+              requestId,
 
               request: {
                 title:
@@ -187,6 +195,12 @@ describe(
         );
 
         expect(
+          createData.requestId,
+        ).toBe(
+          requestId,
+        );
+
+        expect(
           createData.title,
         ).toBe(
           "Prepare report",
@@ -194,6 +208,16 @@ describe(
 
         expect(
           createData.description,
+        ).toBeNull();
+
+        expect(
+          createData.state,
+        ).toBe(
+          "pending",
+        );
+
+        expect(
+          createData.dueDate,
         ).toBeNull();
 
         expect(
@@ -232,6 +256,7 @@ describe(
             .execute({
               ownerId,
               idempotencyKey,
+              requestId,
 
               request: {
                 title:
@@ -242,6 +267,11 @@ describe(
         expect(result).toEqual(
           todo,
         );
+
+        expect(
+          dependencies
+            .createMock,
+        ).toHaveBeenCalledOnce();
 
         expect(
           dependencies
@@ -268,6 +298,7 @@ describe(
             .execute({
               ownerId,
               idempotencyKey,
+              requestId,
 
               request: {
                 title:
@@ -280,6 +311,9 @@ describe(
 
           code:
             "IDEMPOTENCY_KEY_REUSED",
+
+          message:
+            "The idempotency key was already used with a different request",
         });
 
         expect(
@@ -307,6 +341,7 @@ describe(
             .execute({
               ownerId,
               idempotencyKey,
+              requestId,
 
               request: {
                 title:
@@ -319,7 +354,15 @@ describe(
 
           code:
             "TODO_TITLE_ALREADY_EXISTS",
+
+          message:
+            "An active TODO with this title already exists",
         });
+
+        expect(
+          dependencies
+            .invalidateOwnerMock,
+        ).not.toHaveBeenCalled();
       },
     );
 
@@ -341,6 +384,7 @@ describe(
             .execute({
               ownerId,
               idempotencyKey,
+              requestId,
 
               request: {
                 title:
@@ -353,7 +397,15 @@ describe(
 
           code:
             "OWNER_PROJECTION_NOT_READY",
+
+          message:
+            "The account is not yet ready for TODO operations",
         });
+
+        expect(
+          dependencies
+            .invalidateOwnerMock,
+        ).not.toHaveBeenCalled();
       },
     );
   },

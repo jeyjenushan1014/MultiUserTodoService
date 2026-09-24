@@ -6,7 +6,7 @@ import {
 import type {
   CreateTodoRequest,
   CreateTodoResponse,
-  TodoState
+  TodoState,
 } from "@todo/contracts";
 
 import {
@@ -29,6 +29,9 @@ export interface CreateTodoCommand {
     string;
 
   readonly idempotencyKey:
+    string;
+
+  readonly requestId:
     string;
 
   readonly request:
@@ -179,6 +182,9 @@ export class CreateTodoService {
           idempotencyKey:
             command.idempotencyKey,
 
+          requestId:
+            command.requestId,
+
           requestHash:
             createRequestHash(
               normalizedRequest,
@@ -240,8 +246,9 @@ export class CreateTodoService {
     }
 
     /*
-     * A replay did not modify the TODO database,
-     * so it must not create another cache version.
+     * A replay did not create another TODO or
+     * another outbox event, so it must not create
+     * another cache version.
      */
     if (
       result.outcome ===

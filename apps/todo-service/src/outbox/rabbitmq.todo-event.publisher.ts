@@ -42,14 +42,7 @@ implements TodoEventPublisher {
         event.payload,
       );
 
-    if (
-      serializedEvent ===
-      undefined
-    ) {
-      throw new Error(
-        "TODO outbox payload cannot be serialized",
-      );
-    }
+
 
     /*
      * The outbox payload already contains the

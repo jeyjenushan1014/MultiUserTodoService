@@ -68,8 +68,7 @@ const currentTime =
 
 function createEvent(
   eventId: string,
-  publishAttempts:
-    number = 1,
+  publishAttempts = 1,
 ): TodoOutboxEvent {
   return {
     id:

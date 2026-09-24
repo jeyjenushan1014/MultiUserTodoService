@@ -10,7 +10,8 @@
     "start:owner-consumer": "node dist/src/workers/owner-projection.worker.js",
     "test": "vitest run --config vitest.config.ts",
     "migrate": "node-pg-migrate up -m migrations --migrations-table pgmigrations",
-    "migrate:down": "node-pg-migrate down -m migrations --migrations-table pgmigrations"
+    "migrate:down": "node-pg-migrate down -m migrations --migrations-table pgmigrations",
+    "start:history-worker": "node dist/history/history-worker.js"
   },
   "dependencies": {
     "@todo/common": "1.0.0",

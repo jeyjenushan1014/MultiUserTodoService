@@ -130,6 +130,17 @@ TODO_OUTBOX_LOCK_TIMEOUT_MS:
     .min(1_000)
     .max(600_000)
     .default(30_000),
+TODO_HISTORY_QUEUE:
+  z
+    .string()
+    .min(1)
+    .default("todo.history"),
+
+TODO_HISTORY_DLQ:
+  z
+    .string()
+    .min(1)
+    .default("todo.history.dlq"),
     
 
     RABBITMQ_DEAD_LETTER_EXCHANGE:

@@ -432,6 +432,47 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  todo-history-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+
+    command:
+      - npm
+      - run
+      - start:history-worker
+      - -w
+      - "@todo/todo-service"
+
+    environment:
+      NODE_ENV: production
+      TODO_DATABASE_URL: postgres://${TODO_POSTGRES_USER}:${TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${TODO_POSTGRES_DB}
+
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+ 
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+
+      TODO_HISTORY_QUEUE: ${TODO_HISTORY_QUEUE:-todo.history}
+      TODO_HISTORY_DLQ: ${TODO_HISTORY_DLQ:-todo.history.dlq}
+
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+
+      todo-migrations:
+        condition: service_completed_successfully
+
+      rabbitmq:
+        condition: service_healthy
+
+    restart: unless-stopped
 
   gateway:
     build:

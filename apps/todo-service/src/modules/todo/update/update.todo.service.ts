@@ -1,4 +1,5 @@
 import type {
+  TodoState,
   UpdateTodoRequest,
   UpdateTodoResponse,
 } from "@todo/contracts";
@@ -11,6 +12,28 @@ import type {
   UpdateTodoRepository,
 } from "./update.todo.repository.interface.js";
 
+interface StateOnlyUpdate
+extends UpdateTodoRequest {
+  readonly state:
+    TodoState;
+}
+
+function isStateOnlyUpdate(
+  changes:
+    UpdateTodoRequest,
+): changes is StateOnlyUpdate {
+  return (
+    changes.state !==
+      undefined &&
+    changes.title ===
+      undefined &&
+    changes.description ===
+      undefined &&
+    changes.dueDate ===
+      undefined
+  );
+}
+
 export class UpdateTodoService {
   public constructor(
     private readonly repository:
@@ -18,16 +41,13 @@ export class UpdateTodoService {
   ) {}
 
   public async execute(
-    ownerId: string,
+    callerId: string,
     todoId: string,
-    changes: UpdateTodoRequest,
+    changes:
+      UpdateTodoRequest,
   ): Promise<
     UpdateTodoResponse
   > {
-    /*
-     * Defence in depth for service calls that
-     * bypass HTTP validation.
-     */
     if (
       Object.keys(changes)
         .length === 0
@@ -39,51 +59,52 @@ export class UpdateTodoService {
       );
     }
 
+    /*
+     * State-only updates are accessible to:
+     * - the TODO owner
+     * - an active share recipient
+     *
+     * Changes to title, description or due date
+     * remain owner-only.
+     */
     const result =
-      await this.repository
-        .updateOwnedTodo(
-          ownerId,
-          todoId,
-          changes,
+      isStateOnlyUpdate(changes)
+        ? await this.repository
+            .updateAccessibleTodoState(
+              callerId,
+              todoId,
+              changes.state,
+            )
+        : await this.repository
+            .updateOwnedTodo(
+              callerId,
+              todoId,
+              changes,
+            );
+
+    switch (result.status) {
+      case "updated":
+        return result.todo;
+
+      case "duplicate_title":
+        throw new AppError(
+          409,
+          "TODO_TITLE_ALREADY_EXISTS",
+          "An active TODO with this title already exists",
         );
 
-    if (
-      result.status ===
-      "not_found"
-    ) {
-      /*
-       * Missing, unrelated and withdrawn-share
-       * cases intentionally use the same response.
-       */
-      throw new AppError(
-        404,
-        "TODO_NOT_FOUND",
-        "TODO was not found",
-      );
+      case "not_found":
+      case "forbidden":
+        /*
+         * Both cases return the same 404 response.
+         * This prevents another user from discovering
+         * whether the TODO exists.
+         */
+        throw new AppError(
+          404,
+          "TODO_NOT_FOUND",
+          "TODO was not found",
+        );
     }
-
-    if (
-      result.status ===
-      "forbidden"
-    ) {
-      throw new AppError(
-        403,
-        "SHARED_TODO_UPDATE_FORBIDDEN",
-        "A shared TODO recipient may update only the state",
-      );
-    }
-
-    if (
-      result.status ===
-      "duplicate_title"
-    ) {
-      throw new AppError(
-        409,
-        "TODO_TITLE_ALREADY_EXISTS",
-        "An active TODO with this title already exists",
-      );
-    }
-
-    return result.todo;
   }
 }

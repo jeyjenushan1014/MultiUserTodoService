@@ -5350,3 +5350,40 @@ The key must:
 
 ```http
 Idempotency-Key: 47cf562e-5ba5-4ed8-b454-b23732719de8
+
+## Update a TODO
+
+Updates an existing TODO.
+
+### Endpoint
+
+```http
+PATCH /api/v1/todos/:todoId
+
+
+## 2. Add a Part 13 implementation note
+
+Add this to your implementation/progress document:
+
+```md
+## Part 13 — Shared-recipient state updates
+
+Status: Completed
+
+### Implemented
+
+- Added state-only update permission for active TODO share recipients.
+- Kept title, description and due-date updates owner-only.
+- Treated combined state and owner-field changes as owner-only updates.
+- Added atomic repository authorization for state updates.
+- Prevented withdrawn share recipients from updating TODO state.
+- Returned identical `TODO_NOT_FOUND` responses for missing and inaccessible TODOs.
+- Updated the cache invalidation decorator to invalidate the actual owner's cache.
+- Added unit tests for:
+  - owner updates;
+  - recipient state-only updates;
+  - owner-only field protection;
+  - missing and forbidden TODOs;
+  - duplicate titles;
+  - correct owner cache invalidation;
+  - update and cache failure handling.

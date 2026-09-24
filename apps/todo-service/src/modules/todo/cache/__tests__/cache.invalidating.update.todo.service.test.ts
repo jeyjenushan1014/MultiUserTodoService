@@ -1,5 +1,4 @@
 import {
-  beforeEach,
   describe,
   expect,
   it,
@@ -11,30 +10,27 @@ import type {
 } from "vitest";
 
 import type {
-  TodoResponse,
+  UpdateTodoRequest,
+  UpdateTodoResponse,
 } from "@todo/contracts";
-
-import type {
-  UpdateTodoRepository,
-} from "../../update/update.todo.repository.interface.js";
-
-import {
-  UpdateTodoService,
-} from "../../update/update.todo.service.js";
 
 import {
   CacheInvalidatingUpdateTodoService,
 } from "../cache.invalidating.update.todo.service.js";
 
 import type {
+  UpdateTodoOperation,
+} from "../cache.invalidating.update.todo.service.js";
+
+import type {
   TodoCacheInvalidator,
 } from "../todo.cache.invalidator.interface.js";
 
-interface Dependencies {
-  readonly updateOwnedTodoMock:
+interface TestDependencies {
+  readonly executeMock:
     MockedFunction<
-      UpdateTodoRepository[
-        "updateOwnedTodo"
+      UpdateTodoOperation[
+        "execute"
       ]
     >;
 
@@ -50,11 +46,11 @@ interface Dependencies {
 }
 
 function createDependencies():
-  Dependencies {
-  const updateOwnedTodoMock =
+TestDependencies {
+  const executeMock =
     vi.fn<
-      UpdateTodoRepository[
-        "updateOwnedTodo"
+      UpdateTodoOperation[
+        "execute"
       ]
     >();
 
@@ -65,43 +61,38 @@ function createDependencies():
       ]
     >();
 
-  const repository:
-    UpdateTodoRepository = {
-      updateOwnedTodo:
-        (
-          ownerId,
+  const operation:
+    UpdateTodoOperation = {
+      execute: (
+        callerId,
+        todoId,
+        changes,
+      ) =>
+        executeMock(
+          callerId,
           todoId,
           changes,
-        ) =>
-          updateOwnedTodoMock(
-            ownerId,
-            todoId,
-            changes,
-          ),
+        ),
     };
 
-  const cacheInvalidator:
+  const invalidator:
     TodoCacheInvalidator = {
-      invalidateOwner:
-        (ownerId) =>
-          invalidateOwnerMock(
-            ownerId,
-          ),
+      invalidateOwner: (
+        ownerId,
+      ) =>
+        invalidateOwnerMock(
+          ownerId,
+        ),
     };
-
-  const baseService =
-    new UpdateTodoService(
-      repository,
-    );
 
   return {
-    updateOwnedTodoMock,
+    executeMock,
     invalidateOwnerMock,
 
     service:
       new CacheInvalidatingUpdateTodoService(
-        baseService,
-        cacheInvalidator,
+        operation,
+        invalidator,
       ),
   };
 }
@@ -110,29 +101,29 @@ const ownerId =
   "70668eae-dac5-4b75-9bd3-02c963eb5b99";
 
 const recipientId =
-  "2dced07e-8468-4a4b-9d23-cd96c75fb962";
+  "1bc664af-ceff-4ea2-82d1-a44fbb5cb773";
 
 const todoId =
   "9f134ed0-4503-4a23-a189-f065fe9fd838";
 
 const updatedTodo:
-  TodoResponse = {
+  UpdateTodoResponse = {
     id:
       todoId,
 
     ownerId,
 
     title:
-      "Shared task",
+      "Updated TODO",
 
     description:
-      null,
+      "Updated description",
 
     state:
       "completed",
 
     dueDate:
-      null,
+      "2026-10-01T10:00:00.000Z",
 
     createdAt:
       "2026-09-24T08:00:00.000Z",
@@ -144,31 +135,27 @@ const updatedTodo:
 describe(
   "CacheInvalidatingUpdateTodoService",
   () => {
-    beforeEach(
-      () => {
-        vi.clearAllMocks();
-      },
-    );
-
     it(
-      "invalidates the owner cache after an owner update",
+      "returns the updated TODO",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "updated",
-
-            todo:
-              updatedTodo,
-          });
+          .executeMock
+          .mockResolvedValue(
+            updatedTodo,
+          );
 
         dependencies
           .invalidateOwnerMock
-          .mockResolvedValueOnce();
+          .mockResolvedValue();
+
+        const changes:
+          UpdateTodoRequest = {
+            title:
+              "Updated TODO",
+          };
 
         const result =
           await dependencies
@@ -176,14 +163,96 @@ describe(
             .execute(
               ownerId,
               todoId,
-              {
-                title:
-                  "Shared task",
-              },
+              changes,
             );
 
         expect(result).toEqual(
           updatedTodo,
+        );
+      },
+    );
+
+    it(
+      "forwards all arguments to the update operation",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .executeMock
+          .mockResolvedValue(
+            updatedTodo,
+          );
+
+        dependencies
+          .invalidateOwnerMock
+          .mockResolvedValue();
+
+        const changes:
+          UpdateTodoRequest = {
+            title:
+              "Updated TODO",
+
+            description:
+              "Updated description",
+          };
+
+        await dependencies
+          .service
+          .execute(
+            ownerId,
+            todoId,
+            changes,
+          );
+
+        expect(
+          dependencies.executeMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        );
+
+        expect(
+          dependencies.executeMock,
+        ).toHaveBeenCalledWith(
+          ownerId,
+          todoId,
+          changes,
+        );
+      },
+    );
+
+    it(
+      "invalidates the owner after a successful owner update",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .executeMock
+          .mockResolvedValue(
+            updatedTodo,
+          );
+
+        dependencies
+          .invalidateOwnerMock
+          .mockResolvedValue();
+
+        await dependencies
+          .service
+          .execute(
+            ownerId,
+            todoId,
+            {
+              title:
+                "Updated TODO",
+            },
+          );
+
+        expect(
+          dependencies
+            .invalidateOwnerMock,
+        ).toHaveBeenCalledTimes(
+          1,
         );
 
         expect(
@@ -192,11 +261,6 @@ describe(
         ).toHaveBeenCalledWith(
           ownerId,
         );
-
-        expect(
-          dependencies
-            .invalidateOwnerMock,
-        ).toHaveBeenCalledTimes(1);
       },
     );
 
@@ -207,38 +271,30 @@ describe(
           createDependencies();
 
         dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "updated",
-
-            todo:
-              updatedTodo,
-          });
+          .executeMock
+          .mockResolvedValue(
+            updatedTodo,
+          );
 
         dependencies
           .invalidateOwnerMock
-          .mockResolvedValueOnce();
+          .mockResolvedValue();
 
-        const result =
-          await dependencies
-            .service
-            .execute(
-              recipientId,
-              todoId,
-              {
-                state:
-                  "completed",
-              },
-            );
-
-        expect(result).toEqual(
-          updatedTodo,
-        );
+        await dependencies
+          .service
+          .execute(
+            recipientId,
+            todoId,
+            {
+              state:
+                "completed",
+            },
+          );
 
         /*
-         * The recipient made the request, but the
-         * TODO owner's cache must be invalidated.
+         * The caller is the recipient, but the
+         * invalidated cache belongs to the actual
+         * TODO owner.
          */
         expect(
           dependencies
@@ -257,114 +313,38 @@ describe(
     );
 
     it(
-      "does not invalidate cache when access is denied",
+      "does not invalidate when the update operation fails",
       async () => {
         const dependencies =
           createDependencies();
 
-        dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "not_found",
-          });
-
-        await expect(
-          dependencies
-            .service
-            .execute(
-              recipientId,
-              todoId,
-              {
-                state:
-                  "completed",
-              },
-            ),
-        ).rejects.toMatchObject({
-          statusCode:
-            404,
-
-          code:
-            "TODO_NOT_FOUND",
-        });
-
-        expect(
-          dependencies
-            .invalidateOwnerMock,
-        ).not.toHaveBeenCalled();
-      },
-    );
-
-    it(
-      "does not invalidate cache for a forbidden shared update",
-      async () => {
-        const dependencies =
-          createDependencies();
+        const updateError =
+          new Error(
+            "Update failed",
+          );
 
         dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "forbidden",
-          });
+          .executeMock
+          .mockRejectedValue(
+            updateError,
+          );
 
-        await expect(
-          dependencies
-            .service
-            .execute(
-              recipientId,
-              todoId,
-              {
-                title:
-                  "Unauthorized rename",
-              },
-            ),
-        ).rejects.toMatchObject({
-          statusCode:
-            403,
-
-          code:
-            "SHARED_TODO_UPDATE_FORBIDDEN",
-        });
-
-        expect(
-          dependencies
-            .invalidateOwnerMock,
-        ).not.toHaveBeenCalled();
-      },
-    );
-
-    it(
-      "does not invalidate cache for a duplicate title",
-      async () => {
-        const dependencies =
-          createDependencies();
-
-        dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "duplicate_title",
-          });
-
-        await expect(
-          dependencies
-            .service
+        const operation =
+          dependencies.service
             .execute(
               ownerId,
               todoId,
               {
                 title:
-                  "Existing active title",
+                  "Updated TODO",
               },
-            ),
-        ).rejects.toMatchObject({
-          statusCode:
-            409,
+            );
 
-          code:
-            "TODO_TITLE_ALREADY_EXISTS",
-        });
+        await expect(
+          operation,
+        ).rejects.toBe(
+          updateError,
+        );
 
         expect(
           dependencies
@@ -374,46 +354,43 @@ describe(
     );
 
     it(
-      "passes the original update arguments to the base service",
+      "propagates a cache invalidation failure",
       async () => {
         const dependencies =
           createDependencies();
 
-        dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "updated",
+        const cacheError =
+          new Error(
+            "Cache invalidation failed",
+          );
 
-            todo:
-              updatedTodo,
-          });
+        dependencies
+          .executeMock
+          .mockResolvedValue(
+            updatedTodo,
+          );
 
         dependencies
           .invalidateOwnerMock
-          .mockResolvedValueOnce();
-
-        await dependencies
-          .service
-          .execute(
-            recipientId,
-            todoId,
-            {
-              state:
-                "completed",
-            },
+          .mockRejectedValue(
+            cacheError,
           );
 
-        expect(
-          dependencies
-            .updateOwnedTodoMock,
-        ).toHaveBeenCalledWith(
-          recipientId,
-          todoId,
-          {
-            state:
-              "completed",
-          },
+        const operation =
+          dependencies.service
+            .execute(
+              ownerId,
+              todoId,
+              {
+                state:
+                  "completed",
+              },
+            );
+
+        await expect(
+          operation,
+        ).rejects.toBe(
+          cacheError,
         );
       },
     );

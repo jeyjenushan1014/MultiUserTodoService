@@ -1,4 +1,5 @@
 import type {
+  TodoState,
   UpdateTodoRequest,
 } from "@todo/contracts";
 
@@ -11,6 +12,14 @@ export interface UpdateTodoRepository {
     ownerId: string,
     todoId: string,
     changes: UpdateTodoRequest,
+  ): Promise<
+    UpdateTodoRepositoryResult
+  >;
+
+  updateAccessibleTodoState(
+    callerId: string,
+    todoId: string,
+    state: TodoState,
   ): Promise<
     UpdateTodoRepositoryResult
   >;

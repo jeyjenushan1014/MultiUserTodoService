@@ -1,5 +1,4 @@
 import {
-  beforeEach,
   describe,
   expect,
   it,
@@ -11,7 +10,8 @@ import type {
 } from "vitest";
 
 import type {
-  TodoResponse,
+  UpdateTodoRequest,
+  UpdateTodoResponse,
 } from "@todo/contracts";
 
 import type {
@@ -22,7 +22,7 @@ import {
   UpdateTodoService,
 } from "../update.todo.service.js";
 
-interface Dependencies {
+interface TestDependencies {
   readonly updateOwnedTodoMock:
     MockedFunction<
       UpdateTodoRepository[
@@ -30,12 +30,19 @@ interface Dependencies {
       ]
     >;
 
-  readonly repository:
-    UpdateTodoRepository;
+  readonly updateAccessibleTodoStateMock:
+    MockedFunction<
+      UpdateTodoRepository[
+        "updateAccessibleTodoState"
+      ]
+    >;
+
+  readonly service:
+    UpdateTodoService;
 }
 
 function createDependencies():
-  Dependencies {
+TestDependencies {
   const updateOwnedTodoMock =
     vi.fn<
       UpdateTodoRepository[
@@ -43,54 +50,78 @@ function createDependencies():
       ]
     >();
 
+  const updateAccessibleTodoStateMock =
+    vi.fn<
+      UpdateTodoRepository[
+        "updateAccessibleTodoState"
+      ]
+    >();
+
+  /*
+   * Arrow functions avoid the ESLint
+   * unbound-method error.
+   */
   const repository:
     UpdateTodoRepository = {
-      updateOwnedTodo:
-        (
+      updateOwnedTodo: (
+        ownerId,
+        todoId,
+        changes,
+      ) =>
+        updateOwnedTodoMock(
           ownerId,
           todoId,
           changes,
-        ) =>
-          updateOwnedTodoMock(
-            ownerId,
-            todoId,
-            changes,
-          ),
+        ),
+
+      updateAccessibleTodoState: (
+        callerId,
+        todoId,
+        state,
+      ) =>
+        updateAccessibleTodoStateMock(
+          callerId,
+          todoId,
+          state,
+        ),
     };
 
   return {
     updateOwnedTodoMock,
-    repository,
+    updateAccessibleTodoStateMock,
+
+    service:
+      new UpdateTodoService(
+        repository,
+      ),
   };
 }
 
-const ownerId =
+const callerId =
   "70668eae-dac5-4b75-9bd3-02c963eb5b99";
-
-const recipientId =
-  "2dced07e-8468-4a4b-9d23-cd96c75fb962";
 
 const todoId =
   "9f134ed0-4503-4a23-a189-f065fe9fd838";
 
 const updatedTodo:
-  TodoResponse = {
+  UpdateTodoResponse = {
     id:
       todoId,
 
-    ownerId,
+    ownerId:
+      callerId,
 
     title:
-      "Shared task",
+      "Updated TODO",
 
     description:
-      null,
+      "Updated description",
 
     state:
       "completed",
 
     dueDate:
-      null,
+      "2026-10-01T10:00:00.000Z",
 
     createdAt:
       "2026-09-24T08:00:00.000Z",
@@ -102,127 +133,22 @@ const updatedTodo:
 describe(
   "UpdateTodoService",
   () => {
-    beforeEach(
-      () => {
-        vi.clearAllMocks();
-      },
-    );
-
-    it(
-      "returns an updated TODO",
-      async () => {
-        const dependencies =
-          createDependencies();
-
-        dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "updated",
-
-            todo:
-              updatedTodo,
-          });
-
-        const service =
-          new UpdateTodoService(
-            dependencies.repository,
-          );
-
-        const result =
-          await service.execute(
-            ownerId,
-            todoId,
-            {
-              state:
-                "completed",
-            },
-          );
-
-        expect(result).toEqual(
-          updatedTodo,
-        );
-
-        expect(
-          dependencies
-            .updateOwnedTodoMock,
-        ).toHaveBeenCalledWith(
-          ownerId,
-          todoId,
-          {
-            state:
-              "completed",
-          },
-        );
-      },
-    );
-
-    it(
-      "allows a shared recipient state update",
-      async () => {
-        const dependencies =
-          createDependencies();
-
-        dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "updated",
-
-            todo:
-              updatedTodo,
-          });
-
-        const service =
-          new UpdateTodoService(
-            dependencies.repository,
-          );
-
-        const result =
-          await service.execute(
-            recipientId,
-            todoId,
-            {
-              state:
-                "completed",
-            },
-          );
-
-        expect(result).toEqual(
-          updatedTodo,
-        );
-
-        expect(
-          dependencies
-            .updateOwnedTodoMock,
-        ).toHaveBeenCalledWith(
-          recipientId,
-          todoId,
-          {
-            state:
-              "completed",
-          },
-        );
-      },
-    );
-
     it(
       "rejects an empty update",
       async () => {
         const dependencies =
           createDependencies();
 
-        const service =
-          new UpdateTodoService(
-            dependencies.repository,
-          );
+        const operation =
+          dependencies.service
+            .execute(
+              callerId,
+              todoId,
+              {},
+            );
 
         await expect(
-          service.execute(
-            ownerId,
-            todoId,
-            {},
-          ),
+          operation,
         ).rejects.toMatchObject({
           statusCode:
             400,
@@ -238,36 +164,210 @@ describe(
           dependencies
             .updateOwnedTodoMock,
         ).not.toHaveBeenCalled();
+
+        expect(
+          dependencies
+            .updateAccessibleTodoStateMock,
+        ).not.toHaveBeenCalled();
       },
     );
 
     it(
-      "returns not found for a missing or inaccessible TODO",
+      "uses accessible state update for a state-only request",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .updateAccessibleTodoStateMock
+          .mockResolvedValue({
+            status:
+              "updated",
+
+            todo:
+              updatedTodo,
+          });
+
+        const changes:
+          UpdateTodoRequest = {
+            state:
+              "completed",
+          };
+
+        const result =
+          await dependencies
+            .service
+            .execute(
+              callerId,
+              todoId,
+              changes,
+            );
+
+        expect(result).toEqual(
+          updatedTodo,
+        );
+
+        expect(
+          dependencies
+            .updateAccessibleTodoStateMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        );
+
+        expect(
+          dependencies
+            .updateAccessibleTodoStateMock,
+        ).toHaveBeenCalledWith(
+          callerId,
+          todoId,
+          "completed",
+        );
+
+        expect(
+          dependencies
+            .updateOwnedTodoMock,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "uses owner-only update when changing the title",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
           .updateOwnedTodoMock
-          .mockResolvedValueOnce({
+          .mockResolvedValue({
+            status:
+              "updated",
+
+            todo:
+              updatedTodo,
+          });
+
+        const changes:
+          UpdateTodoRequest = {
+            title:
+              "Updated TODO",
+          };
+
+        const result =
+          await dependencies
+            .service
+            .execute(
+              callerId,
+              todoId,
+              changes,
+            );
+
+        expect(result).toEqual(
+          updatedTodo,
+        );
+
+        expect(
+          dependencies
+            .updateOwnedTodoMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        );
+
+        expect(
+          dependencies
+            .updateOwnedTodoMock,
+        ).toHaveBeenCalledWith(
+          callerId,
+          todoId,
+          changes,
+        );
+
+        expect(
+          dependencies
+            .updateAccessibleTodoStateMock,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "uses owner-only update when state and another field are changed",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .updateOwnedTodoMock
+          .mockResolvedValue({
+            status:
+              "updated",
+
+            todo:
+              updatedTodo,
+          });
+
+        const changes:
+          UpdateTodoRequest = {
+            title:
+              "Updated TODO",
+
+            state:
+              "completed",
+          };
+
+        const result =
+          await dependencies
+            .service
+            .execute(
+              callerId,
+              todoId,
+              changes,
+            );
+
+        expect(result).toEqual(
+          updatedTodo,
+        );
+
+        expect(
+          dependencies
+            .updateOwnedTodoMock,
+        ).toHaveBeenCalledWith(
+          callerId,
+          todoId,
+          changes,
+        );
+
+        expect(
+          dependencies
+            .updateAccessibleTodoStateMock,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "returns TODO not found when the repository returns not_found",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .updateAccessibleTodoStateMock
+          .mockResolvedValue({
             status:
               "not_found",
           });
 
-        const service =
-          new UpdateTodoService(
-            dependencies.repository,
-          );
+        const operation =
+          dependencies.service
+            .execute(
+              callerId,
+              todoId,
+              {
+                state:
+                  "completed",
+              },
+            );
 
         await expect(
-          service.execute(
-            recipientId,
-            todoId,
-            {
-              state:
-                "completed",
-            },
-          ),
+          operation,
         ).rejects.toMatchObject({
           statusCode:
             404,
@@ -282,112 +382,70 @@ describe(
     );
 
     it(
-      "rejects a shared recipient changing the title",
+      "returns TODO not found when access is forbidden",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
           .updateOwnedTodoMock
-          .mockResolvedValueOnce({
+          .mockResolvedValue({
             status:
               "forbidden",
           });
 
-        const service =
-          new UpdateTodoService(
-            dependencies.repository,
-          );
+        const operation =
+          dependencies.service
+            .execute(
+              callerId,
+              todoId,
+              {
+                title:
+                  "Forbidden update",
+              },
+            );
 
         await expect(
-          service.execute(
-            recipientId,
-            todoId,
-            {
-              title:
-                "Unauthorized rename",
-            },
-          ),
+          operation,
         ).rejects.toMatchObject({
           statusCode:
-            403,
+            404,
 
           code:
-            "SHARED_TODO_UPDATE_FORBIDDEN",
+            "TODO_NOT_FOUND",
 
           message:
-            "A shared TODO recipient may update only the state",
+            "TODO was not found",
         });
       },
     );
 
     it(
-      "rejects a shared recipient changing multiple fields",
+      "rejects a duplicate active title",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
           .updateOwnedTodoMock
-          .mockResolvedValueOnce({
-            status:
-              "forbidden",
-          });
-
-        const service =
-          new UpdateTodoService(
-            dependencies.repository,
-          );
-
-        await expect(
-          service.execute(
-            recipientId,
-            todoId,
-            {
-              state:
-                "completed",
-
-              description:
-                "Unauthorized description change",
-            },
-          ),
-        ).rejects.toMatchObject({
-          statusCode:
-            403,
-
-          code:
-            "SHARED_TODO_UPDATE_FORBIDDEN",
-        });
-      },
-    );
-
-    it(
-      "returns conflict for a duplicate active title",
-      async () => {
-        const dependencies =
-          createDependencies();
-
-        dependencies
-          .updateOwnedTodoMock
-          .mockResolvedValueOnce({
+          .mockResolvedValue({
             status:
               "duplicate_title",
           });
 
-        const service =
-          new UpdateTodoService(
-            dependencies.repository,
-          );
+        const operation =
+          dependencies.service
+            .execute(
+              callerId,
+              todoId,
+              {
+                title:
+                  "Existing title",
+              },
+            );
 
         await expect(
-          service.execute(
-            ownerId,
-            todoId,
-            {
-              title:
-                "Existing active title",
-            },
-          ),
+          operation,
         ).rejects.toMatchObject({
           statusCode:
             409,
@@ -398,6 +456,94 @@ describe(
           message:
             "An active TODO with this title already exists",
         });
+      },
+    );
+
+    it(
+      "uses owner-only update when changing the description",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .updateOwnedTodoMock
+          .mockResolvedValue({
+            status:
+              "updated",
+
+            todo:
+              updatedTodo,
+          });
+
+        const changes:
+          UpdateTodoRequest = {
+            description:
+              "Updated description",
+          };
+
+        await expect(
+          dependencies.service
+            .execute(
+              callerId,
+              todoId,
+              changes,
+            ),
+        ).resolves.toEqual(
+          updatedTodo,
+        );
+
+        expect(
+          dependencies
+            .updateOwnedTodoMock,
+        ).toHaveBeenCalledWith(
+          callerId,
+          todoId,
+          changes,
+        );
+      },
+    );
+
+    it(
+      "uses owner-only update when changing the due date",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .updateOwnedTodoMock
+          .mockResolvedValue({
+            status:
+              "updated",
+
+            todo:
+              updatedTodo,
+          });
+
+        const changes:
+          UpdateTodoRequest = {
+            dueDate:
+              "2026-10-01T10:00:00.000Z",
+          };
+
+        await expect(
+          dependencies.service
+            .execute(
+              callerId,
+              todoId,
+              changes,
+            ),
+        ).resolves.toEqual(
+          updatedTodo,
+        );
+
+        expect(
+          dependencies
+            .updateOwnedTodoMock,
+        ).toHaveBeenCalledWith(
+          callerId,
+          todoId,
+          changes,
+        );
       },
     );
   },

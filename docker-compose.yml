@@ -113,7 +113,8 @@ services:
   todo-outbox-worker:
     build:
       context: .
-      dockerfile: apps/todo-service/Dockerfile
+      dockerfile: Dockerfile
+      target: todo-service-runtime
 
     command:
       - node

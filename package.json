@@ -19,10 +19,11 @@
     "check": "npm run lint && npm run build && npm test",
     "migrate:account": "npm run migrate -w @todo/account-service",
     "clean": "node scripts/clean.mjs",
-     "migrate:todo": "npm run migrate -w @todo/todo-service",
+    "migrate:todo": "npm run migrate -w @todo/todo-service",
     "migrate:todo:down": "npm run migrate:down -w @todo/todo-service",
-     "test:e2e": "npm run test:e2e -w @todo/gateway",
-     "start:outbox-worker": "node dist/src/workers/outbox-worker.js"
+    "test:e2e": "npm run test:e2e -w @todo/gateway",
+    "start:outbox-worker": "node dist/src/workers/outbox-worker.js"
+     
 
   },
   "engines": {

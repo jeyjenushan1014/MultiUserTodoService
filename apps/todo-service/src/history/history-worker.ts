@@ -59,8 +59,8 @@ async function run(): Promise<void> {
           env.RABBITMQ_URL,
         );
 
-      const channel =
-        await connection.createChannel();
+        const channel =
+          await connection.createConfirmChannel();
 
       activeConnection =
         connection;

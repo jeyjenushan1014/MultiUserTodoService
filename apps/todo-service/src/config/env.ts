@@ -142,6 +142,28 @@ TODO_HISTORY_DLQ:
     .min(1)
     .default("todo.history.dlq"),
     
+    TODO_HISTORY_RETRY_QUEUE:
+      z
+        .string()
+        .min(1)
+        .default("todo.history.retry"),
+    
+    TODO_HISTORY_RETRY_DELAY_MS:
+      z.coerce
+        .number()
+        .int()
+        .min(1000)
+        .max(300_000)
+        .default(5000),
+    
+    TODO_HISTORY_MAX_RETRIES:
+      z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(20)
+        .default(5),
+    
 
     RABBITMQ_DEAD_LETTER_EXCHANGE:
       z

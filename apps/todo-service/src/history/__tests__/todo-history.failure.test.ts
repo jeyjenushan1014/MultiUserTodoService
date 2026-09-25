@@ -6,7 +6,7 @@ import {
 } from "vitest";
 
 import type {
-  Channel,
+  ConfirmChannel,
   ConsumeMessage,
 } from "amqplib";
 
@@ -71,6 +71,9 @@ interface ConsumerDependencies {
   readonly nackMock:
     ReturnType<typeof vi.fn>;
 
+  readonly publishMock:
+    ReturnType<typeof vi.fn>;
+
   readonly appendMock:
     ReturnType<typeof vi.fn>;
 }
@@ -82,6 +85,10 @@ ConsumerDependencies {
 
   const nackMock =
     vi.fn();
+
+  const publishMock =
+    vi.fn()
+      .mockReturnValue(true);
 
   const consumeMock =
     vi.fn();
@@ -112,7 +119,14 @@ ConsumerDependencies {
       bindQueue:
         vi.fn()
           .mockResolvedValue(undefined),
-    } as unknown as Channel;
+
+      publish:
+        publishMock,
+
+      waitForConfirms:
+        vi.fn()
+          .mockResolvedValue(undefined),
+    } as unknown as ConfirmChannel;
 
   const repository:
     TodoHistoryRepository = {
@@ -134,6 +148,7 @@ ConsumerDependencies {
     consumeMock,
     ackMock,
     nackMock,
+    publishMock,
     appendMock,
   };
 }
@@ -219,15 +234,66 @@ describe(
         ).not.toHaveBeenCalled();
 
         expect(
+          dependencies.ackMock,
+        ).toHaveBeenCalledOnce();
+
+        expect(
           dependencies.nackMock,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "retries a transient repository failure",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies.appendMock
+          .mockRejectedValueOnce(
+            new Error("database unavailable"),
+          );
+
+        await dependencies.consumer
+          .start();
+
+        const callback =
+          dependencies.consumeMock
+            .mock.calls[0]?.[1] as
+            (
+              message:
+                ConsumeMessage | null,
+            ) => void;
+
+        callback(
+          createMessage(validEvent),
+        );
+
+        await new Promise<void>(
+          (resolve) => {
+            setImmediate(resolve);
+          },
+        );
+
+        expect(
+          dependencies.publishMock,
         ).toHaveBeenCalledWith(
-          expect.anything(),
-          false,
-          false,
+          "todo.events.retry",
+          "todo.created",
+          expect.any(Buffer),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              "x-todo-history-retry-count": 1,
+            }),
+          }),
         );
 
         expect(
           dependencies.ackMock,
+        ).toHaveBeenCalledOnce();
+
+        expect(
+          dependencies.nackMock,
         ).not.toHaveBeenCalled();
       },
     );

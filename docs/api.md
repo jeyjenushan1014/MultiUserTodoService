@@ -41,6 +41,19 @@ Access tokens are short-lived JWTs. Refresh tokens are opaque, rotated, stored o
 
 `details` is present for validation errors and omitted otherwise. Error messages never contain stack traces, SQL, credentials, passwords, reset tokens, or access tokens. Common status meanings are `400` invalid input, `401` missing or invalid authentication, `403` authenticated but not permitted, `404` missing or invisible resource, `409` business conflict, `413` body too large, `429` rate limit exceeded, `502` malformed downstream response, `503` downstream unavailable, `504` downstream timeout, and `500` unexpected failure.
 
+### Shared response fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | UUID string | Stable identifier for an account, TODO, share, history record, or event. |
+| `userId` / `ownerId` / `recipientId` | UUID string | Account identifier. These are opaque identifiers and must not be inferred from email addresses. |
+| `email` | string | Normalized account email address. |
+| `createdAt` / `updatedAt` / `sharedAt` / `occurredAt` | ISO-8601 datetime string | Timestamp with an explicit UTC offset. |
+| `description` / `dueDate` | string or `null` | Optional TODO values; omitted input does not change an existing value, while explicit `null` clears it where allowed. |
+| `state` | enum string | One of `pending`, `in_progress`, `completed`, or `cancelled`. |
+
+Successful account responses use `{ "data": ... }`. Successful TODO list responses use `{ "items": [...], "pagination": ... }`; successful history responses use `{ "items": [...] }`. `204` responses have no body.
+
 ## 4. Rate limits
 
 Redis-backed limits are shared across Gateway instances. Defaults are 100 requests per 60 seconds for the general API, 10 per 60 seconds for authentication, and 5 per 900 seconds for password-reset requests. A rejected request returns `429`, `RATE_LIMIT_EXCEEDED`, and `Retry-After` when available. General API rate limiting fails open during a Redis outage so ordinary TODO reads and writes remain available. Authentication and password-reset rate limiting fail closed with `503 RATE_LIMIT_UNAVAILABLE` because disabling those protections would create a brute-force risk.
@@ -66,6 +79,8 @@ Returns `400 VALIDATION_ERROR` or `409 EMAIL_ALREADY_REGISTERED`. The password i
 ### `POST /api/v1/auth/login`
 
 Authenticates a user and starts a session. Request is `{ "email": "alice@example.com", "password": "Correct Horse Battery!1" }`. Response `200` contains `accessToken`, `refreshToken`, and expiry metadata. Token values are opaque and are never logged. An unknown email and wrong password produce the same `401 INVALID_CREDENTIALS` response.
+
+Response fields are `data.user.id` (UUID), `data.user.email` (string), `data.accessToken` (JWT string), `data.refreshToken` (opaque string), `data.accessTokenExpiresIn` (integer seconds), and `data.refreshTokenExpiresIn` (integer seconds). Other responses are `400 VALIDATION_ERROR`, `401 INVALID_CREDENTIALS`, `429 RATE_LIMIT_EXCEEDED`, or `503 RATE_LIMIT_UNAVAILABLE`.
 
 ### `POST /api/v1/auth/refresh`
 
@@ -161,6 +176,8 @@ Withdraws an active share. Only the owner can do this. Returns `204`, `400 INVAL
 ### `GET /api/v1/todos/:todoId/history`
 
 Returns the visible TODO history as `{ "items": [{ "id": "uuid", "eventId": "uuid", "todoId": "uuid", "actorId": "uuid", "eventType": "todo.created", "requestId": "uuid", "occurredAt": "2026-09-24T09:00:00.000Z", "details": {} }] }`. Access follows the same ownership or active-share visibility rules as the TODO itself. Invalid identifiers return `400 VALIDATION_ERROR`; missing or inaccessible TODOs return `404 TODO_NOT_FOUND`.
+
+The `eventType` values are `todo.created`, `todo.completed`, `todo.shared`, `todo.share-withdrawn`, and `todo.deleted`. `details` is an object containing event-specific audit data.
 
 ## 7. Health endpoints
 

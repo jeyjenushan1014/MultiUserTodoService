@@ -895,6 +895,47 @@ describe.skipIf(
     );
 
     it(
+      "returns history for an owned TODO",
+      async () => {
+        let result:
+          ApiResult | undefined;
+
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          result =
+            await request(
+              `/api/v1/todos/${userASecondTodo.id}/history`,
+              {
+                accessToken:
+                  userA.accessToken,
+              },
+            );
+
+          if (
+            result.status ===
+              200 &&
+            isRecord(result.body) &&
+            Array.isArray(result.body.items) &&
+            result.body.items.length > 0
+          ) {
+            break;
+          }
+
+          await wait(250);
+        }
+
+        expect(result?.status).toBe(
+          200,
+        );
+
+        expect(
+          isRecord(result?.body) &&
+          Array.isArray(result.body.items) &&
+          result.body.items.length,
+        ).toBeGreaterThan(0);
+      },
+    );
+
+    it(
       "returns the original TODO when the same create request is retried",
       async () => {
         const idempotencyKey =

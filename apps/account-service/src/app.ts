@@ -18,6 +18,10 @@ import {
 } from "./middleware/request-context.midddleware.js";
 
 import {
+  requestLoggerMiddleware,
+} from "./middleware/request-logger.middleware.js";
+
+import {
   internalEmailChangeRouter,
 } from "./modules/account/email-change/email-change.routes.js";
 
@@ -62,6 +66,10 @@ app.use(
 
 app.use(
   requestContextMiddleware,
+);
+
+app.use(
+  requestLoggerMiddleware,
 );
 
 app.use(

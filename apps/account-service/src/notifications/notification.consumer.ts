@@ -41,6 +41,15 @@ import {
   decryptPasswordResetToken,
 } from "../modules/account/password-reset/password-reset-token.crypto.js";
 
+import {
+  runWithRequestContext,
+} from "@todo/common";
+
+const rawEventRequestIdSchema =
+  z.object({
+    requestId: z.uuid(),
+  });
+
 const todoSharedNotificationSchema =
   z.object({
     eventId: z.uuid(),
@@ -201,10 +210,45 @@ export class TodoNotificationConsumer {
   private async process(
     message: ConsumeMessage,
   ): Promise<void> {
-    try {
-      const event =
-        parseMessage(message);
+    let event: unknown;
 
+    try {
+      event = parseMessage(message);
+    } catch (error) {
+      logger.error(
+        {
+          error,
+        },
+        "TODO notification processing failed",
+      );
+
+      this.channel.nack(
+        message,
+        false,
+        false,
+      );
+      return;
+    }
+
+    const requestId =
+      rawEventRequestIdSchema.safeParse(event).data
+        ?.requestId;
+
+    await runWithRequestContext(
+      {
+        requestId:
+          requestId ?? "unknown",
+        serviceName: "account-service",
+      },
+      () => this.processEvent(message, event),
+    );
+  }
+
+  private async processEvent(
+    message: ConsumeMessage,
+    event: unknown,
+  ): Promise<void> {
+    try {
       const shared =
         todoSharedNotificationSchema.safeParse(
           event,

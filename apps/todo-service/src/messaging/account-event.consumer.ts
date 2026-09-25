@@ -20,6 +20,10 @@ import {
 } from "../config/logger.js";
 
 import {
+  runWithRequestContext,
+} from "@todo/common";
+
+import {
   accountRegisteredEventSchema,
   accountEmailChangedEventSchema,
 } from "./account-event.schema.js";
@@ -150,6 +154,28 @@ function safeStringify(value: unknown): string {
     } catch {
       return "<unstringifiable>";
     }
+  }
+}
+
+function extractRequestId(
+  message: ConsumeMessage,
+): string | undefined {
+  try {
+    const parsed =
+      JSON.parse(message.content.toString("utf8")) as unknown;
+
+    if (typeof parsed !== "object" || parsed === null) {
+      return undefined;
+    }
+
+    const requestId =
+      (parsed as Record<string, unknown>).requestId;
+
+    return typeof requestId === "string"
+      ? requestId
+      : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -316,6 +342,22 @@ export class AccountEventConsumer {
   }
 
   private async handleMessage(
+    channel: ConfirmChannel,
+    message: ConsumeMessage,
+  ): Promise<void> {
+    const requestId =
+      extractRequestId(message);
+
+    await runWithRequestContext(
+      {
+        requestId: requestId ?? "unknown",
+        serviceName: "todo-service",
+      },
+      () => this.processMessage(channel, message),
+    );
+  }
+
+  private async processMessage(
     channel: ConfirmChannel,
     message: ConsumeMessage,
   ): Promise<void> {

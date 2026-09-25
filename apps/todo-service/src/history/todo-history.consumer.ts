@@ -12,6 +12,10 @@ import {
   logger,
 } from "../config/logger.js";
 
+import {
+  runWithRequestContext,
+} from "@todo/common";
+
 import type {
   TodoHistoryRepository,
 } from "./todo-history.interface.js";
@@ -230,6 +234,26 @@ function getOccurredAt(
   return occurredAt;
 }
 
+function extractRequestId(
+  message: ConsumeMessage,
+): string | undefined {
+  try {
+    const parsed =
+      JSON.parse(
+        message.content.toString(
+          "utf8",
+        ),
+      ) as unknown;
+
+    return isRecord(parsed) &&
+      typeof parsed.requestId === "string"
+      ? parsed.requestId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export class TodoHistoryConsumer {
   public constructor(
     private readonly channel:
@@ -350,6 +374,20 @@ export class TodoHistoryConsumer {
   }
 
   private async process(
+    message: ConsumeMessage,
+  ): Promise<void> {
+    await runWithRequestContext(
+      {
+        requestId:
+          extractRequestId(message) ??
+          "unknown",
+        serviceName: "todo-service",
+      },
+      () => this.processMessage(message),
+    );
+  }
+
+  private async processMessage(
     message: ConsumeMessage,
   ): Promise<void> {
     let appendStarted = false;

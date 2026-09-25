@@ -6,6 +6,10 @@ import {
   logger,
 } from "../config/logger.js";
 
+import {
+  runWithRequestContext,
+} from "@todo/common";
+
 import type {
   EventPublisher,
 } from "./event-publisher.interface.js";
@@ -95,76 +99,84 @@ export class OutboxService {
     let failed = 0;
 
     for (const event of events) {
-      try {
-        await this.publisher.publish(
-          createEnvelope(event),
-        );
+      await runWithRequestContext(
+        {
+          requestId: event.requestId,
+          serviceName: "account-service",
+        },
+        async () => {
+          try {
+            await this.publisher.publish(
+              createEnvelope(event),
+            );
 
-        await this.repository
-          .markPublished(
-            event.id,
-            this.workerId,
-            new Date(),
-          );
-
-        published += 1;
-
-        logger.info(
-          {
-            eventId:
-              event.id,
-
-            eventType:
-              event.eventType,
-
-            aggregateId:
-              event.aggregateId,
-          },
-          "Outbox event published",
-        );
-      } catch (error) {
-        const now =
-          new Date();
-
-        await this.repository
-          .markFailed(
-            {
-              eventId:
+            await this.repository
+              .markPublished(
                 event.id,
+                this.workerId,
+                new Date(),
+              );
 
-              errorMessage:
-                getErrorMessage(error),
+            published += 1;
 
-              nextAttemptAt:
-                calculateNextAttemptAt(
-                  now,
-                  event.publishAttempts,
-                  env
-                    .OUTBOX_MAX_RETRY_DELAY_SECONDS,
-                ),
-            },
-            this.workerId,
-          );
+            logger.info(
+              {
+                eventId:
+                  event.id,
 
-        failed += 1;
+                eventType:
+                  event.eventType,
 
-        logger.warn(
-          {
-            err: error,
+                aggregateId:
+                  event.aggregateId,
+              },
+              "Outbox event published",
+            );
+          } catch (error) {
+            const now =
+              new Date();
 
-            eventId:
-              event.id,
+            await this.repository
+              .markFailed(
+                {
+                  eventId:
+                    event.id,
 
-            eventType:
-              event.eventType,
+                  errorMessage:
+                    getErrorMessage(error),
 
-            completedAttempts:
-              event.publishAttempts +
-              1,
-          },
-          "Outbox event publishing failed",
-        );
-      }
+                  nextAttemptAt:
+                    calculateNextAttemptAt(
+                      now,
+                      event.publishAttempts,
+                      env
+                        .OUTBOX_MAX_RETRY_DELAY_SECONDS,
+                    ),
+                },
+                this.workerId,
+              );
+
+            failed += 1;
+
+            logger.warn(
+              {
+                err: error,
+
+                eventId:
+                  event.id,
+
+                eventType:
+                  event.eventType,
+
+                completedAttempts:
+                  event.publishAttempts +
+                  1,
+              },
+              "Outbox event publishing failed",
+            );
+          }
+        },
+      );
     }
 
     return {

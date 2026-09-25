@@ -2,6 +2,10 @@ import type {
   TodoEventPublisher,
 } from "./todo-event.publisher.interface.js";
 
+import {
+  runWithRequestContext,
+} from "@todo/common";
+
 import type {
   TodoOutboxRepository,
 } from "./todo-outbox.repository.interface.js";
@@ -97,8 +101,15 @@ export class TodoOutboxService {
 
     for (const event of events) {
       const publicationSucceeded =
-        await this.processEvent(
-          event,
+        await runWithRequestContext(
+          {
+            requestId: event.requestId,
+            serviceName: "todo-service",
+          },
+          () =>
+            this.processEvent(
+              event,
+            ),
         );
 
       if (publicationSucceeded) {

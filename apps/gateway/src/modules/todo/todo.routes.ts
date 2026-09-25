@@ -45,6 +45,10 @@ import {
 } from "./get/get.todo.controller.js";
 
 import {
+  getTodoHistoryController,
+} from "./history/history.controller.js";
+
+import {
   getTodoParamsSchema,
 } from "./get/get.todo.validation.js";
 
@@ -128,6 +132,14 @@ todoRouter.get(
     getTodoParamsSchema,
   ),
   getTodoController,
+);
+
+todoRouter.get(
+  "/:todoId/history",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  getTodoHistoryController,
 );
 
 todoRouter.patch(

@@ -34,7 +34,7 @@ function getErrorMessage(
   return "Unknown event publishing error";
 }
 
-function createEnvelope(
+export function createEnvelope(
   event: OutboxEvent,
 ): PublishedEventEnvelope {
   return {
@@ -47,11 +47,7 @@ function createEnvelope(
     eventVersion:
       event.eventVersion,
 
-    aggregateType:
-      event.aggregateType,
 
-    aggregateId:
-      event.aggregateId,
 
     occurredAt:
       event.occurredAt.toISOString(),

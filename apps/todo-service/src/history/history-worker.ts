@@ -2,6 +2,10 @@ import {
   connect,
 } from "amqplib";
 
+import type {
+  ChannelModel,
+} from "amqplib";
+
 import {
   database,
   verifyDatabaseConnection,
@@ -23,34 +27,106 @@ import {
   TodoHistoryConsumer,
 } from "./todo-history.consumer.js";
 
-const connection =
-  await connect(
-    env.RABBITMQ_URL,
-  );
-
-const channel =
-  await connection.createChannel();
-
-await verifyDatabaseConnection();
-
-const repository =
-  new PostgresTodoHistoryRepository();
-
-const consumer =
-  new TodoHistoryConsumer(
-    channel,
-    repository,
-  );
-
-await consumer.initialize();
-await consumer.start();
-
-logger.info(
-  "TODO history consumer started",
-);
-
 let shutdownStarted =
   false;
+
+function wait(
+  milliseconds: number,
+): Promise<void> {
+  return new Promise(
+    (resolve) => {
+      const timer =
+        setTimeout(
+          resolve,
+          milliseconds,
+        );
+
+      timer.unref();
+    },
+  );
+}
+
+let activeConnection:
+  ChannelModel | undefined;
+
+async function run(): Promise<void> {
+  while (!shutdownStarted) {
+    try {
+      await verifyDatabaseConnection();
+
+      const connection =
+        await connect(
+          env.RABBITMQ_URL,
+        );
+
+      const channel =
+        await connection.createChannel();
+
+      activeConnection =
+        connection;
+
+      connection.once(
+        "close",
+        () => {
+          logger.warn(
+            "TODO history RabbitMQ connection closed; reconnecting",
+          );
+        },
+      );
+
+      connection.on(
+        "error",
+        (error) => {
+          logger.warn(
+            {
+              err: error,
+            },
+            "TODO history RabbitMQ connection error",
+          );
+        },
+      );
+
+      const repository =
+        new PostgresTodoHistoryRepository();
+
+      const consumer =
+        new TodoHistoryConsumer(
+          channel,
+          repository,
+        );
+
+      await consumer.initialize();
+      await consumer.start();
+
+      logger.info(
+        "TODO history consumer started",
+      );
+
+      await new Promise<void>(
+        (resolve) => {
+          connection.once(
+            "close",
+            resolve,
+          );
+        },
+      );
+
+      activeConnection =
+        undefined;
+    } catch (error) {
+      logger.error(
+        {
+          err: error,
+        },
+        "TODO history consumer cycle failed; retrying",
+      );
+
+      await wait(
+        1000,
+      );
+    }
+  }
+}
 
 async function shutdown(
   signal: string,
@@ -68,8 +144,10 @@ async function shutdown(
     "TODO history consumer shutdown started",
   );
 
-  await channel.close();
-  await connection.close();
+  if (activeConnection !== undefined) {
+    await activeConnection.close();
+  }
+
   await database.end();
 
   logger.info(
@@ -92,5 +170,18 @@ process.once(
     void shutdown(
       "SIGINT",
     );
+  },
+);
+
+void run().catch(
+  (error: unknown) => {
+    logger.fatal(
+      {
+        err: error,
+      },
+      "TODO history consumer stopped unexpectedly",
+    );
+
+    process.exitCode = 1;
   },
 );

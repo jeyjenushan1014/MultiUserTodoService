@@ -60,6 +60,61 @@ implements OwnerProjectionRepository {
     }
   }
 
+  public async applyAccountEmailChanged(
+    data: ApplyOwnerProjectionData,
+  ): Promise<ApplyOwnerProjectionResult> {
+    const client =
+      await database.connect();
+
+    try {
+      await client.query(
+        "BEGIN",
+      );
+
+      const eventInserted =
+        await this.insertProcessedEvent(
+          client,
+          data,
+        );
+
+      if (!eventInserted) {
+        await client.query(
+          "COMMIT",
+        );
+
+        return "duplicate";
+      }
+
+      await client.query(
+        `
+          UPDATE todo_owners
+          SET
+            email = $2,
+            deactivated_at = NULL
+          WHERE id = $1
+        `,
+        [
+          data.userId,
+          data.email,
+        ],
+      );
+
+      await client.query(
+        "COMMIT",
+      );
+
+      return "applied";
+    } catch (error) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   private async insertProcessedEvent(
     client: PoolClient,
     data: ApplyOwnerProjectionData,

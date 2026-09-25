@@ -55,6 +55,10 @@ import {
 } from "./get/get.todo.controller.js";
 
 import {
+  listTodoHistoryController,
+} from "./history/list.todo.history.controller.js";
+
+import {
   withdrawTodoShareController,
 } from "./share/withdraw/withdraw.todo.share.controller.js";
 
@@ -148,6 +152,14 @@ todoRouter.get(
     getTodoParamsSchema,
   ),
   getTodoController,
+);
+
+todoRouter.get(
+  "/:todoId/history",
+  validateParams(
+    getTodoParamsSchema,
+  ),
+  listTodoHistoryController,
 );
 
 todoRouter.patch(

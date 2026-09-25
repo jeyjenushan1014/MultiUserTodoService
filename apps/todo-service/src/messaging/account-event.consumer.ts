@@ -21,18 +21,25 @@ import {
 
 import {
   accountRegisteredEventSchema,
+  accountEmailChangedEventSchema,
 } from "./account-event.schema.js";
 
-import type {
-  AccountRegisteredEvent,
-} from "./account-event.schema.js";
+// event types are validated via zod schemas; no direct imports needed here
 
 import type {
   OwnerProjectionService,
 } from "./owner-projection.service.js";
 
+import type {
+  AccountRegisteredEvent,
+  AccountEmailChangedEvent,
+} from "./account-event.schema.js";
+
 const ACCOUNT_REGISTERED_ROUTING_KEY =
   "account.registered";
+
+const ACCOUNT_EMAIL_CHANGED_ROUTING_KEY =
+  "account.email-changed";
 
 const RETRY_COUNT_HEADER =
   "x-todo-owner-retry-count";
@@ -133,6 +140,19 @@ function createPublishOptions(
   };
 }
 
+function safeStringify(value: unknown): string {
+  try {
+    if (typeof value === "string") return value;
+    return JSON.stringify(value);
+  } catch {
+    try {
+      return String(value);
+    } catch {
+      return "<unstringifiable>";
+    }
+  }
+}
+
 export class AccountEventConsumer {
   private connection:
     ChannelModel | undefined;
@@ -161,7 +181,7 @@ export class AccountEventConsumer {
       (error: Error) => {
         logger.error(
           {
-            err: error,
+            errMessage: safeStringify(error),
           },
           "TODO owner consumer RabbitMQ connection error",
         );
@@ -182,7 +202,7 @@ export class AccountEventConsumer {
       (error: Error) => {
         logger.error(
           {
-            err: error,
+            errMessage: safeStringify(error),
           },
           "TODO owner consumer RabbitMQ channel error",
         );
@@ -251,7 +271,7 @@ export class AccountEventConsumer {
       } catch (error) {
         logger.warn(
           {
-            err: error,
+            errMessage: String(error),
           },
           "TODO owner consumer channel close failed",
         );
@@ -264,7 +284,7 @@ export class AccountEventConsumer {
       } catch (error) {
         logger.warn(
           {
-            err: error,
+            errMessage: String(error),
           },
           "TODO owner consumer connection close failed",
         );
@@ -277,23 +297,43 @@ export class AccountEventConsumer {
     message: ConsumeMessage,
   ): Promise<void> {
     try {
-      const event =
-        this.parseEvent(
-          message,
-        );
+      const parsedJson =
+        JSON.parse(message.content.toString("utf8")) as unknown;
 
-      await this.service
-        .handleAccountRegistered(
-          event,
-        );
+      let eventType: string | undefined = undefined;
 
-      channel.ack(
-        message,
-      );
-    } catch (error) {
+      if (typeof parsedJson === "object" && parsedJson !== null) {
+        const p = parsedJson as Record<string, unknown>;
+        const ev = p.eventType;
+
+        if (typeof ev === "string") {
+          eventType = ev;
+        }
+      }
+
+      if (eventType === "account.registered") {
+        const event: AccountRegisteredEvent =
+          accountRegisteredEventSchema.parse(parsedJson);
+
+        await this.service.handleAccountRegistered(event);
+        channel.ack(message);
+        return;
+      }
+
+      if (eventType === "account.email-changed") {
+        const event: AccountEmailChangedEvent =
+          accountEmailChangedEventSchema.parse(parsedJson);
+
+        await this.service.handleAccountEmailChanged(event);
+        channel.ack(message);
+        return;
+      }
+
+      throw new Error("Unsupported account event type for owner projection");
+    } catch (err) {
       if (
-        error instanceof ZodError ||
-        error instanceof SyntaxError
+        err instanceof ZodError ||
+        err instanceof SyntaxError
       ) {
         await this.sendToDeadLetterQueue(
           channel,
@@ -307,7 +347,7 @@ export class AccountEventConsumer {
 
         logger.warn(
           {
-            err: error,
+            errMessage: safeStringify(err),
 
             messageId:
               message.properties
@@ -328,16 +368,13 @@ export class AccountEventConsumer {
         channel.ack(
           message,
         );
-      } catch (
-        retryPublicationError
-      ) {
+      } catch (retryPublicationError) {
         logger.error(
           {
-            err:
-              retryPublicationError,
+            errMessage: safeStringify(retryPublicationError),
 
-            processingError:
-              error,
+            processingErrorMessage:
+              safeStringify(err),
 
             messageId:
               message.properties
@@ -359,23 +396,7 @@ export class AccountEventConsumer {
     }
   }
 
-  private parseEvent(
-    message: ConsumeMessage,
-  ): AccountRegisteredEvent {
-    const parsedJson:
-      unknown =
-      JSON.parse(
-        message.content
-          .toString(
-            "utf8",
-          ),
-      );
-
-    return accountRegisteredEventSchema
-      .parse(
-        parsedJson,
-      );
-  }
+  // parseEvent() removed — message parsing and dispatch happens in handleMessage
 
   private async retryOrDeadLetter(
     channel: ConfirmChannel,
@@ -414,9 +435,28 @@ export class AccountEventConsumer {
     const nextRetryCount =
       currentRetryCount + 1;
 
+    let routingKey = ACCOUNT_REGISTERED_ROUTING_KEY;
+
+    try {
+      const parsed: unknown = JSON.parse(
+        message.content.toString("utf8"),
+      );
+
+      if (typeof parsed === "object" && parsed !== null) {
+        const p = parsed as Record<string, unknown>;
+        const ev = p.eventType;
+
+        if (typeof ev === "string") {
+          routingKey = ev;
+        }
+      }
+    } catch {
+      // keep default routing key
+    }
+
     channel.publish(
       env.RABBITMQ_RETRY_EXCHANGE,
-      ACCOUNT_REGISTERED_ROUTING_KEY,
+      routingKey,
       message.content,
       createPublishOptions(
         message,
@@ -511,6 +551,12 @@ export class AccountEventConsumer {
       ACCOUNT_REGISTERED_ROUTING_KEY,
     );
 
+    await channel.bindQueue(
+      env.TODO_OWNER_QUEUE,
+      env.RABBITMQ_EXCHANGE,
+      ACCOUNT_EMAIL_CHANGED_ROUTING_KEY,
+    );
+
     await channel.assertQueue(
       env.TODO_OWNER_RETRY_QUEUE,
       {
@@ -534,6 +580,12 @@ export class AccountEventConsumer {
       env.TODO_OWNER_RETRY_QUEUE,
       env.RABBITMQ_RETRY_EXCHANGE,
       ACCOUNT_REGISTERED_ROUTING_KEY,
+    );
+
+    await channel.bindQueue(
+      env.TODO_OWNER_RETRY_QUEUE,
+      env.RABBITMQ_RETRY_EXCHANGE,
+      ACCOUNT_EMAIL_CHANGED_ROUTING_KEY,
     );
 
     await channel.assertQueue(

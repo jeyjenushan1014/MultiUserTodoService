@@ -715,3 +715,36 @@ export async function withdrawTodoShare(
     requestId,
   });
 }
+
+/*
+GET /internal/v1/todos/:todoId/history
+*/
+export async function getTodoHistory(
+  todoId: string,
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<unknown> {
+  const endpoint =
+    new URL(
+      `/internal/v1/todos/${encodeURIComponent(todoId)}/history`,
+      env.TODO_SERVICE_URL,
+    );
+
+  const result =
+    await sendTodoRequest<unknown>({
+      method: "GET",
+      endpoint,
+      identity,
+      requestId,
+    });
+
+  if (result === undefined) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "TODO service returned an invalid response",
+    );
+  }
+
+  return result;
+}

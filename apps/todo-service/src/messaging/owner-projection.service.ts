@@ -4,6 +4,7 @@ import {
 
 import type {
   AccountRegisteredEvent,
+  AccountEmailChangedEvent,
 } from "./account-event.schema.js";
 
 import type {
@@ -66,6 +67,58 @@ export class OwnerProjectionService {
       },
       result === "applied"
         ? "TODO owner projection applied"
+        : "Duplicate account event ignored",
+    );
+
+    return result;
+  }
+
+  public async handleAccountEmailChanged(
+    event: AccountEmailChangedEvent,
+  ): Promise<ApplyOwnerProjectionResult> {
+    const result =
+      await this.repository
+        .applyAccountEmailChanged({
+          eventId:
+            event.eventId,
+
+          eventType:
+            event.eventType,
+
+          userId:
+            event.payload.userId,
+
+          email:
+            event.payload.email,
+
+          occurredAt:
+            new Date(
+              event.occurredAt,
+            ),
+
+          consumerName:
+            CONSUMER_NAME,
+        });
+
+    logger.info(
+      {
+        eventId:
+          event.eventId,
+
+        eventType:
+          event.eventType,
+
+        ownerId:
+          event.payload.userId,
+
+        projectionResult:
+          result,
+
+        requestId:
+          event.requestId,
+      },
+      result === "applied"
+        ? "TODO owner email updated"
         : "Duplicate account event ignored",
     );
 

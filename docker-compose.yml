@@ -3,14 +3,10 @@ name: multi-user-todo-platform
 services:
   account-postgres:
     image: postgres:17-alpine
-
     environment:
       POSTGRES_USER: ${ACCOUNT_POSTGRES_USER}
       POSTGRES_PASSWORD: ${ACCOUNT_POSTGRES_PASSWORD}
       POSTGRES_DB: ${ACCOUNT_POSTGRES_DB}
-
-    ports:
-      - "127.0.0.1:${ACCOUNT_POSTGRES_PORT:-5432}:5432"
 
     volumes:
       - account_postgres_data:/var/lib/postgresql/data
@@ -62,9 +58,6 @@ services:
       - --requirepass
       - "${REDIS_PASSWORD}"
 
-    ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
-
     volumes:
       - redis_data:/data
 
@@ -87,10 +80,6 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-
-    ports:
-      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
-      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
 
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -118,19 +107,22 @@ services:
 
     command:
       - node
-      - apps/todo-service/dist/src/outbox-worker.js
+      - apps/todo-service/dist/src/workers/outbox-worker.js
 
     restart: unless-stopped
 
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${TODO_DATABASE_URL}
+      TODO_DATABASE_URL: ${TODO_DATABASE_URL}
+      REDIS_URL: >-
+        redis://:${REDIS_PASSWORD}@redis:6379
       RABBITMQ_URL: ${RABBITMQ_URL}
       TODO_EVENTS_EXCHANGE: ${TODO_EVENTS_EXCHANGE:-todo.events}
       TODO_OUTBOX_WORKER_ID: ${TODO_OUTBOX_WORKER_ID:-todo-outbox-worker}
       TODO_OUTBOX_BATCH_SIZE: ${TODO_OUTBOX_BATCH_SIZE:-25}
       TODO_OUTBOX_POLL_INTERVAL_MS: ${TODO_OUTBOX_POLL_INTERVAL_MS:-1000}
       TODO_OUTBOX_LOCK_TIMEOUT_MS: ${TODO_OUTBOX_LOCK_TIMEOUT_MS:-30000}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       todo-postgres:
@@ -142,10 +134,6 @@ services:
 
   mailpit:
     image: axllent/mailpit:v1.27
-
-    ports:
-      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
-      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
 
     healthcheck:
       test:
@@ -235,11 +223,14 @@ services:
     healthcheck:
       test:
         - CMD
-        - wget
-        - --quiet
-        - --tries=1
-        - --spider
-        - http://localhost:3001/health
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3001/health')
+          .then(response => {
+            if (!response.ok) process.exit(1);
+          })
+          .catch(() => process.exit(1))
       interval: 10s
       timeout: 5s
       retries: 10

@@ -250,6 +250,22 @@ TODO_HISTORY_DLQ:
         .max(300_000)
         .default(30_000),
 
+    DATABASE_STARTUP_RETRIES:
+      z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .default(10),
+
+    DATABASE_STARTUP_RETRY_DELAY_MS:
+      z.coerce
+        .number()
+        .int()
+        .min(100)
+        .max(60_000)
+        .default(2000),
+
     SHUTDOWN_TIMEOUT_MS:
       z.coerce
         .number()

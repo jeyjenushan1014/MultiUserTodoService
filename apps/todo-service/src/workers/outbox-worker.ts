@@ -57,6 +57,10 @@ let worker:
 let shutdownStarted =
   false;
 
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function createWorkerId():
   string {
   return [
@@ -136,197 +140,118 @@ process.once(
   },
 );
 
-try {
-  const workerId =
-    createWorkerId();
+async function connectWithRetry(
+  url: string,
+): Promise<ReturnType<typeof connect>> {
+  const maxAttempts = 10;
 
-  connection =
-    await connect(
-      env.RABBITMQ_URL,
-    );
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const conn = await connect(url);
+      return conn;
+    } catch (err) {
+      const delay = Math.min(1000 * 2 ** (attempt + 1), 30_000);
 
-  connection.on(
-    "error",
-    (
-      error:
-        Error,
-    ) => {
-      logger.error(
+      logger.warn(
         {
-          error,
+          err,
+          attempt,
         },
-        "TODO outbox RabbitMQ connection error",
+        "Failed to connect to RabbitMQ; retrying",
       );
-    },
-  );
 
-  connection.on(
-    "close",
-    () => {
-      if (!shutdownStarted) {
+      if (attempt === maxAttempts - 1) {
         logger.error(
-          "TODO outbox RabbitMQ connection closed unexpectedly",
+          {
+            err,
+            attempts: attempt + 1,
+          },
+          "Exceeded RabbitMQ connect attempts",
         );
 
-        requestShutdown(
-          "rabbitmq-connection-closed",
-          1,
-        );
+        throw err;
       }
-    },
-  );
 
-  channel =
-    await connection
-      .createConfirmChannel();
-
-  channel.on(
-    "error",
-    (
-      error:
-        Error,
-    ) => {
-      logger.error(
-        {
-          error,
-        },
-        "TODO outbox RabbitMQ channel error",
-      );
-    },
-  );
-
-  const publisher =
-    new RabbitMqTodoEventPublisher(
-      channel,
-      env.TODO_EVENTS_EXCHANGE,
-    );
-
-  await publisher.initialize();
-
-  const repository =
-    new PostgresTodoOutboxRepository();
-
-  const service =
-    new TodoOutboxService(
-      repository,
-      publisher,
-      {
-        workerId,
-
-        batchSize:
-          env.TODO_OUTBOX_BATCH_SIZE,
-
-        lockTimeoutMilliseconds:
-          env
-            .TODO_OUTBOX_LOCK_TIMEOUT_MS,
-      },
-    );
-
-  worker =
-    new TodoOutboxWorker(
-      service,
-      env
-        .TODO_OUTBOX_POLL_INTERVAL_MS,
-      {
-        batchProcessed:
-          (result) => {
-            if (
-              result.claimed > 0
-            ) {
-              logger.info(
-                {
-                  workerId,
-                  ...result,
-                },
-                "TODO outbox batch processed",
-              );
-            }
-          },
-
-        processingFailed:
-          (error) => {
-            logger.error(
-              {
-                error,
-                workerId,
-              },
-              "TODO outbox batch processing failed",
-            );
-          },
-      },
-    );
-
-  logger.info(
-    {
-      workerId,
-
-      exchange:
-        env.TODO_EVENTS_EXCHANGE,
-
-      batchSize:
-        env.TODO_OUTBOX_BATCH_SIZE,
-
-      pollIntervalMilliseconds:
-        env
-          .TODO_OUTBOX_POLL_INTERVAL_MS,
-    },
-    "TODO outbox worker started",
-  );
-
-
-    await worker.run();
-  
-} catch (error) {
-  logger.error(
-    {
-      error,
-    },
-    "TODO outbox worker failed to start",
-  );
-
-  process.exitCode =
-    1;
-} finally {
-  shutdownStarted =
-    true;
-
-  const channelToClose =
-    channel;
-
-  if (
-    channelToClose !==
-    undefined
-  ) {
-    await closeResource(
-      "rabbitmq-channel",
-      () =>
-        channelToClose
-          .close(),
-    );
+      await wait(delay);
+    }
   }
-
-  const connectionToClose =
-    connection;
-
-  if (
-    connectionToClose !==
-    undefined
-  ) {
-    await closeResource(
-      "rabbitmq-connection",
-      () =>
-        connectionToClose
-          .close(),
-    );
-  }
-
-  await closeResource(
-    "postgresql-pool",
-    () =>
-      database.end(),
-  );
-
-  logger.info(
-    "TODO outbox worker stopped",
-  );
+  throw new Error("Failed to connect to RabbitMQ");
 }
+
+async function startLoop(): Promise<void> {
+  const workerId = createWorkerId();
+
+  while (!shutdownStarted) {
+    try {
+      connection = await connectWithRetry(env.RABBITMQ_URL);
+
+      connection.on("error", (error: Error) => {
+        logger.error({ error }, "TODO outbox RabbitMQ connection error");
+      });
+
+      connection.on("close", () => {
+        logger.warn("TODO outbox RabbitMQ connection closed; will attempt reconnect");
+      });
+
+      channel = await connection.createConfirmChannel();
+
+      channel.on("error", (error: Error) => {
+        logger.error({ error }, "TODO outbox RabbitMQ channel error");
+      });
+
+      const publisher = new RabbitMqTodoEventPublisher(channel, env.TODO_EVENTS_EXCHANGE);
+
+      await publisher.initialize();
+
+      const repository = new PostgresTodoOutboxRepository();
+
+      const service = new TodoOutboxService(repository, publisher, {
+        workerId,
+        batchSize: env.TODO_OUTBOX_BATCH_SIZE,
+        lockTimeoutMilliseconds: env.TODO_OUTBOX_LOCK_TIMEOUT_MS,
+      });
+
+      worker = new TodoOutboxWorker(service, env.TODO_OUTBOX_POLL_INTERVAL_MS, {
+        batchProcessed: (result) => {
+          if (result.claimed > 0) {
+            logger.info({ workerId, ...result }, "TODO outbox batch processed");
+          }
+        },
+
+        processingFailed: (error) => {
+          logger.error({ error, workerId }, "TODO outbox batch processing failed");
+        },
+      });
+
+      logger.info({ workerId, exchange: env.TODO_EVENTS_EXCHANGE, batchSize: env.TODO_OUTBOX_BATCH_SIZE, pollIntervalMilliseconds: env.TODO_OUTBOX_POLL_INTERVAL_MS }, "TODO outbox worker started");
+
+      await worker.run();
+
+      // worker.run returned (graceful stop) — break the loop
+      break;
+    } catch (error) {
+      logger.error({ error }, "TODO outbox worker failed; will retry after delay");
+
+      // wait before trying to reinitialize
+      await wait(env.TODO_OUTBOX_POLL_INTERVAL_MS);
+    } finally {
+      // close resources and prepare to retry if not shutting down
+      await closeResource("rabbitmq-channel", () => (channel ? channel.close() : Promise.resolve()));
+      channel = undefined;
+
+      await closeResource("rabbitmq-connection", () => (connection ? connection.close() : Promise.resolve()));
+      connection = undefined;
+    }
+  }
+
+  shutdownStarted = true;
+
+  await closeResource("postgresql-pool", () => database.end());
+
+  logger.info("TODO outbox worker stopped");
+}
+
+void startLoop().catch((error: unknown) => {
+  logger.error({ error }, "TODO outbox worker fatal failure");
+  process.exitCode = 1;
+});

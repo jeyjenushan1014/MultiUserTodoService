@@ -3,7 +3,8 @@ export interface ApplyOwnerProjectionData {
     string;
 
   readonly eventType:
-    "account.registered";
+    | "account.registered"
+    | "account.email-changed";
 
   readonly userId:
     string;
@@ -24,6 +25,13 @@ export type ApplyOwnerProjectionResult =
 
 export interface OwnerProjectionRepository {
   applyAccountRegistered(
+    data:
+      ApplyOwnerProjectionData,
+  ): Promise<
+    ApplyOwnerProjectionResult
+  >;
+
+  applyAccountEmailChanged(
     data:
       ApplyOwnerProjectionData,
   ): Promise<

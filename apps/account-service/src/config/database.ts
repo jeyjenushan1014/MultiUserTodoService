@@ -72,19 +72,41 @@ export async function checkDatabaseHealth():
 
 export async function verifyDatabaseConnection():
   Promise<void> {
-  try {
-    await database.query(
-      "SELECT 1",
-    );
-  } catch (error) {
-    logger.error(
-      {
-        error,
-      },
-      "PostgreSQL connection verification failed",
-    );
+  const maxRetries =
+    env.DATABASE_STARTUP_RETRIES;
 
-    throw error;
+  const retryDelay =
+    env.DATABASE_STARTUP_RETRY_DELAY_MS;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await database.query("SELECT 1");
+      return;
+    } catch (error) {
+      logger.warn(
+        {
+          error,
+          attempt,
+        },
+        "PostgreSQL connection attempt failed",
+      );
+
+      if (attempt === maxRetries) {
+        logger.error(
+          {
+            error,
+            attempts: attempt + 1,
+          },
+          "PostgreSQL connection failed after retries",
+        );
+
+        throw error;
+      }
+
+      const backoff = Math.min(2 ** (attempt + 1) * retryDelay, 30_000);
+
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
   }
 }
 

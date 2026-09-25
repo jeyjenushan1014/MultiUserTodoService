@@ -173,12 +173,6 @@ implements EventPublisher {
               eventVersion:
                 event.eventVersion,
 
-              aggregateType:
-                event.aggregateType,
-
-              aggregateId:
-                event.aggregateId,
-
               producer:
                 event.producer,
             },

@@ -11,6 +11,7 @@ import type {
 
 import type {
   AccountRegisteredEvent,
+  AccountEmailChangedEvent,
 } from "../account-event.schema.js";
 
 import type {
@@ -29,6 +30,13 @@ interface TestDependencies {
       ]
     >;
 
+  readonly applyAccountEmailChangedMock:
+    MockedFunction<
+      OwnerProjectionRepository[
+        "applyAccountEmailChanged"
+      ]
+    >;
+
   readonly service:
     OwnerProjectionService;
 }
@@ -42,14 +50,24 @@ function createDependencies():
       ]
     >();
 
+  const applyAccountEmailChangedMock =
+    vi.fn<
+      OwnerProjectionRepository[
+        "applyAccountEmailChanged"
+      ]
+    >();
+
   const repository:
     OwnerProjectionRepository = {
       applyAccountRegistered:
         applyAccountRegisteredMock,
+      applyAccountEmailChanged:
+        applyAccountEmailChangedMock,
   };
 
   return {
     applyAccountRegisteredMock,
+    applyAccountEmailChangedMock,
 
     service:
       new OwnerProjectionService(
@@ -203,6 +221,67 @@ describe(
         ).rejects.toThrow(
           "Database unavailable",
         );
+      },
+    );
+
+    it(
+      "applies an account email-changed event",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .applyAccountRegisteredMock
+          .mockResolvedValueOnce(
+            "applied",
+          );
+
+        const event: AccountEmailChangedEvent = {
+          eventId:
+            "39eb964c-991a-47bc-a012-e9db6eb86c10",
+
+          eventType:
+            "account.email-changed",
+
+          eventVersion:
+            1,
+
+          producer:
+            "account-service",
+
+          requestId:
+            "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+
+          occurredAt:
+            "2026-09-24T04:00:00.000Z",
+
+          payload: {
+            userId:
+              "9f134ed0-4503-4a23-a189-f065fe9fd838",
+
+            email:
+              "owner@example.com",
+          },
+        };
+
+        // adapt repository mock: the service calls applyAccountEmailChanged
+        dependencies
+          .applyAccountEmailChangedMock
+          .mockResolvedValueOnce("applied");
+
+        const result =
+          await dependencies
+            .service
+            .handleAccountEmailChanged(
+              event,
+            );
+
+        expect(result).toBe("applied");
+
+        expect(
+          dependencies
+            .applyAccountEmailChangedMock,
+        ).toHaveBeenCalledTimes(1);
       },
     );
   },

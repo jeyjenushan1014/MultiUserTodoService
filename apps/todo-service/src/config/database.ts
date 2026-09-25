@@ -47,15 +47,47 @@ database.on(
 
 export async function verifyDatabaseConnection():
 Promise<void> {
-  const client =
-    await database.connect();
+  const maxRetries =
+    env.DATABASE_STARTUP_RETRIES;
 
-  try {
-    await client.query(
-      "SELECT 1",
-    );
-  } finally {
-    client.release();
+  const retryDelay =
+    env.DATABASE_STARTUP_RETRY_DELAY_MS;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const client = await database.connect();
+
+      try {
+        await client.query("SELECT 1");
+        return;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          attempt,
+        },
+        "TODO database connection attempt failed",
+      );
+
+      if (attempt === maxRetries) {
+        logger.error(
+          {
+            err: error,
+            attempts: attempt + 1,
+          },
+          "TODO database connection failed after retries",
+        );
+
+        throw error;
+      }
+
+      const backoff = Math.min(2 ** (attempt + 1) * retryDelay, 30_000);
+
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
   }
 }
 

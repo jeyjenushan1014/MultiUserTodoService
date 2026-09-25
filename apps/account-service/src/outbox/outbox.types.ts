@@ -14,8 +14,6 @@ export interface PublishedEventEnvelope {
   readonly eventId: string;
   readonly eventType: string;
   readonly eventVersion: number;
-  readonly aggregateType: string;
-  readonly aggregateId: string;
   readonly occurredAt: string;
   readonly requestId: string;
   readonly producer: "account-service";

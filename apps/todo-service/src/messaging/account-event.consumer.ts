@@ -160,6 +160,9 @@ export class AccountEventConsumer {
   private channel:
     ConfirmChannel | undefined;
 
+  private connectionClosed:
+    Promise<void> | undefined;
+
   public constructor(
     private readonly service:
       OwnerProjectionService,
@@ -170,6 +173,16 @@ export class AccountEventConsumer {
     const connection =
       await amqp.connect(
         env.RABBITMQ_URL,
+      );
+
+    this.connectionClosed =
+      new Promise<void>(
+        (resolve) => {
+          connection.once(
+            "close",
+            resolve,
+          );
+        },
       );
 
     const channel =
@@ -289,6 +302,16 @@ export class AccountEventConsumer {
           "TODO owner consumer connection close failed",
         );
       }
+    }
+  }
+
+  public async waitForConnectionClose():
+  Promise<void> {
+    const connectionClosed =
+      this.connectionClosed;
+
+    if (connectionClosed !== undefined) {
+      await connectionClosed;
     }
   }
 

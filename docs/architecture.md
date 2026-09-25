@@ -41,7 +41,7 @@ This transactional-outbox pattern means a crash can delay publication, but canno
 
 ## 6. Cache and consistency
 
-Todo reads may use Redis, keyed by caller and query/resource identity. Cache entries expire and mutations invalidate affected entries. Durable cache-version state in Todo PostgreSQL prevents stale values surviving invalidation races. Redis failure falls back to PostgreSQL; the cache is never the source of truth.
+Owner-only TODO reads use Redis, keyed by the owner and query/resource identity. Cache entries expire and mutations invalidate affected entries. Shared-access reads remain PostgreSQL-backed because share withdrawal can change authorization independently of the owner cache version. Durable cache-version state in Todo PostgreSQL prevents stale owner values surviving invalidation races. Redis failure falls back to PostgreSQL; the cache is never the source of truth.
 
 ## 7. Sessions and credentials
 

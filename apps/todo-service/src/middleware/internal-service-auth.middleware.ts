@@ -15,6 +15,10 @@ import type {
   Response,
 } from "express";
 
+import {
+  timingSafeEqual,
+} from "node:crypto";
+
 import type {
   CallerIdentity,
   InternalIdentityEnvelope,
@@ -334,4 +338,32 @@ export function getInternalCallerIdentity<
   }
 
   return identity;
+}
+
+function secretsMatch(
+  suppliedSecret: string,
+  expectedSecret: string,
+): boolean {
+  const supplied = Buffer.from(suppliedSecret, "utf8");
+  const expected = Buffer.from(expectedSecret, "utf8");
+
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+export function requireInternalServiceKey(
+  request: Request,
+  _response: Response,
+  next: NextFunction,
+): void {
+  const suppliedSecret = request.header("x-internal-service-key");
+
+  if (
+    suppliedSecret === undefined ||
+    !secretsMatch(suppliedSecret, env.INTERNAL_SERVICE_SECRET)
+  ) {
+    next(createAuthenticationError());
+    return;
+  }
+
+  next();
 }

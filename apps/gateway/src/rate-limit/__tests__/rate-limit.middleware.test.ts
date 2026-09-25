@@ -315,5 +315,120 @@ describe(
         );
       },
     );
+
+    it(
+      "fails open when the rate-limit service rejects for an unavailable Redis",
+      async () => {
+        const service = {
+          consume:
+            vi.fn()
+              .mockRejectedValue(
+                new Error(
+                  "Redis unavailable",
+                ),
+              ),
+        } as unknown as
+          RateLimitService;
+
+        const middleware =
+          createRateLimitMiddleware({
+            service,
+
+            policy: {
+              scope:
+                "test",
+
+              maximumRequests:
+                10,
+
+              windowSeconds:
+                60,
+            },
+          });
+
+        const nextMock =
+          vi.fn();
+
+        await middleware(
+          {
+            ip:
+              "127.0.0.1",
+
+            socket: {},
+          } as Request,
+          createResponse()
+            .response,
+          nextMock as
+            NextFunction,
+        );
+
+        expect(
+          nextMock,
+        ).toHaveBeenCalledWith();
+      },
+    );
+
+    it(
+      "fails closed when the rate-limit service rejects for an unavailable Redis",
+      async () => {
+        const service = {
+          consume:
+            vi.fn()
+              .mockRejectedValue(
+                new Error(
+                  "Redis unavailable",
+                ),
+              ),
+        } as unknown as
+          RateLimitService;
+
+        const middleware =
+          createRateLimitMiddleware({
+            service,
+
+            policy: {
+              scope:
+                "authentication",
+
+              maximumRequests:
+                10,
+
+              windowSeconds:
+                60,
+
+              failClosed:
+                true,
+            },
+          });
+
+        const nextMock =
+          vi.fn();
+
+        await middleware(
+          {
+            ip:
+              "127.0.0.1",
+
+            socket: {},
+          } as Request,
+          createResponse()
+            .response,
+          nextMock as
+            NextFunction,
+        );
+
+        expect(
+          nextMock,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            statusCode:
+              503,
+
+            code:
+              "RATE_LIMIT_UNAVAILABLE",
+          }),
+        );
+      },
+    );
   },
 );

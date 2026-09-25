@@ -57,7 +57,7 @@ const cachedAccountReferenceSchema =
     })
     .strict();
 
-const cachedTodoDetailsSchema =
+export const cachedTodoDetailsSchema =
   cachedTodoSchema
     .extend({
       accessType: z.enum([

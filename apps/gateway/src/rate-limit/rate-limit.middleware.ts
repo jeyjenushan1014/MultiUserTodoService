@@ -52,6 +52,30 @@ export interface CreateRateLimitMiddlewareOptions {
     RateLimitIdentifierResolver;
 }
 
+function handleUnavailable(
+  policy:
+    RateLimitPolicy,
+  next:
+    NextFunction,
+): void {
+  if (
+    policy.failClosed ===
+    true
+  ) {
+    next(
+      new AppError(
+        503,
+        "RATE_LIMIT_UNAVAILABLE",
+        "Request protection is temporarily unavailable",
+      ),
+    );
+
+    return;
+  }
+
+  next();
+}
+
 export function createRateLimitMiddleware(
   options:
     CreateRateLimitMiddlewareOptions,
@@ -94,23 +118,10 @@ export function createRateLimitMiddleware(
       if (
         decision === undefined
       ) {
-        if (
-          options.policy.failClosed ===
-          true
-        ) {
-          next(
-            new AppError(
-              503,
-              "RATE_LIMIT_UNAVAILABLE",
-              "Request protection is temporarily unavailable",
-            ),
-          );
-
-          return;
-        }
-
-        next();
-
+        handleUnavailable(
+          options.policy,
+          next,
+        );
         return;
       }
 
@@ -156,12 +167,15 @@ export function createRateLimitMiddleware(
       }
 
       next();
-    } catch  {
+    } catch {
       /*
-       * Unexpected middleware failure also fails
-       * open to preserve platform availability.
+       * Redis failures are surfaced according to the
+       * policy while preserving the existing 503 error.
        */
-      next();
+      handleUnavailable(
+        options.policy,
+        next,
+      );
     }
   };
 }

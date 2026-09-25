@@ -11,10 +11,12 @@
   "test": "vitest run --config vitest.config.ts",
   "migrate": "node-pg-migrate up -m migrations",
   "start:outbox": "node dist/worker/outbox-publisher.worker.js",
+  "start:cleanup": "node dist/retention/cleanup.worker.js",
   "migrate:down": "node-pg-migrate down -m migrations",
   "migrate:create": "node-pg-migrate create -m migrations",
   "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
   "start:notification-consumer": "node dist/worker/notification.worker.js"
+  ,"start:owner-projection-rebuild": "node dist/maintenance/owner-projection-rebuild.worker.js"
 },
   "dependencies": {
     "@todo/common": "*",

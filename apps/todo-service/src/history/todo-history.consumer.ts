@@ -40,7 +40,7 @@ function getRetryCount(
   const value =
     message.properties.headers?.[
       HISTORY_RETRY_COUNT_HEADER
-    ];
+    ] as unknown;
 
   return typeof value === "number"
     ? value
@@ -51,19 +51,36 @@ function createPublishOptions(
   message: ConsumeMessage,
   retryCount?: number,
 ): Options.Publish {
+  const properties =
+    message.properties as unknown as {
+      readonly contentType?: unknown;
+      readonly headers?: unknown;
+      readonly messageId?: unknown;
+    };
+
   const headers =
-    message.properties.headers ?? {};
+    isRecord(properties.headers)
+      ? properties.headers
+      : {};
+
+  const contentType =
+    typeof properties.contentType === "string"
+      ? properties.contentType
+      : "application/json";
+
+  const messageId =
+    typeof properties.messageId === "string"
+      ? properties.messageId
+      : undefined;
 
   return {
     persistent: true,
-    contentType:
-      message.properties.contentType ??
-      "application/json",
-    ...(message.properties.messageId === undefined
+    contentType,
+    ...(messageId === undefined
       ? {}
       : {
           messageId:
-            message.properties.messageId,
+            messageId,
         }),
     headers:
       retryCount === undefined

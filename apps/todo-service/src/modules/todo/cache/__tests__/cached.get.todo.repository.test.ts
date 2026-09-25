@@ -254,22 +254,28 @@ describe(
     );
 
     it(
-      "does not use Redis for an authorized item read",
+      "returns an authorized item from Redis when available",
       async () => {
         const dependencies =
           createDependencies();
 
         dependencies
-          .findAccessibleByIdMock
+          .lookupItemMock
           .mockResolvedValueOnce(
-            todo,
+            {
+              cacheKey:
+                "todo:owner:1:1:item:todo",
+
+              value:
+                todo,
+            },
           );
 
         await dependencies
           .repository
           .findAccessibleById({
             callerId:
-              recipientId,
+                ownerId,
 
             todoId,
           });
@@ -277,6 +283,14 @@ describe(
         expect(
           dependencies
             .lookupItemMock,
+        ).toHaveBeenCalledWith(
+          ownerId,
+          todoId,
+        );
+
+        expect(
+          dependencies
+            .findAccessibleByIdMock,
         ).not.toHaveBeenCalled();
 
         expect(
@@ -315,7 +329,10 @@ describe(
         expect(
           dependencies
             .lookupItemMock,
-        ).not.toHaveBeenCalled();
+        ).toHaveBeenCalledWith(
+          recipientId,
+          todoId,
+        );
 
         expect(
           dependencies

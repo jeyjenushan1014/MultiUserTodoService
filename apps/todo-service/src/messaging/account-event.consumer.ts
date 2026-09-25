@@ -592,9 +592,6 @@ export class AccountEventConsumer {
 
           "x-dead-letter-exchange":
             env.RABBITMQ_EXCHANGE,
-
-          "x-dead-letter-routing-key":
-            ACCOUNT_REGISTERED_ROUTING_KEY,
         },
       },
     );

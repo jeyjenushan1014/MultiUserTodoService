@@ -1,5 +1,5 @@
 import type {
-  TodoResponse,
+  GetTodoResponse,
 } from "@todo/contracts";
 
 import {
@@ -21,7 +21,7 @@ import type {
 
 import {
   cachedListResultSchema,
-  cachedTodoSchema,
+  cachedTodoDetailsSchema,
 } from "./todo.cache.schema.js";
 
 import {
@@ -418,7 +418,7 @@ implements TodoReadCache {
     }
 
     const parsed =
-      cachedTodoSchema.safeParse(
+      cachedTodoDetailsSchema.safeParse(
         parseJson(
           serializedValue,
         ),
@@ -494,7 +494,7 @@ implements TodoReadCache {
 
   public async storeItem(
     cacheKey: string,
-    todo: TodoResponse,
+    todo: GetTodoResponse,
   ): Promise<void> {
     await writeCacheValue(
       cacheKey,

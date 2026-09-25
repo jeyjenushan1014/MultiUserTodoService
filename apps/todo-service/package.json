@@ -11,7 +11,8 @@
     "test": "vitest run --config vitest.config.ts",
     "migrate": "node-pg-migrate up -m migrations --migrations-table pgmigrations",
     "migrate:down": "node-pg-migrate down -m migrations --migrations-table pgmigrations",
-    "start:history-worker": "node dist/src/history/history-worker.js"
+    "start:history-worker": "node dist/src/history/history-worker.js",
+    "start:cleanup": "node dist/src/retention/cleanup.worker.js"
   },
   "dependencies": {
     "@todo/common": "1.0.0",

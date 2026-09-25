@@ -102,7 +102,8 @@ implements RefreshRepository {
 
       /*
        * A used token being presented again indicates
-       * token reuse. Revoke the complete session.
+       * token reuse. Revoke every active session for
+       * the account because the credential may be stolen.
        */
       if (credential.used_at !== null) {
         await client.query(
@@ -113,10 +114,11 @@ implements RefreshRepository {
                 revoked_at,
                 CURRENT_TIMESTAMP
               )
-            WHERE id = $1
+            WHERE user_id = $1
+              AND revoked_at IS NULL
           `,
           [
-            credential.session_id,
+            credential.user_id,
           ],
         );
 

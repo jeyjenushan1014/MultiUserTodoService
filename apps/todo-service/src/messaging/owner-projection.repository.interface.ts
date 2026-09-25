@@ -23,6 +23,18 @@ export type ApplyOwnerProjectionResult =
   | "applied"
   | "duplicate";
 
+export interface OwnerProjectionRebuildUser {
+  readonly userId: string;
+  readonly email: string;
+  readonly accountCreatedAt: Date;
+  readonly projectionOccurredAt: Date;
+}
+
+export interface OwnerProjectionRebuildResult {
+  readonly upserted: number;
+  readonly alreadyPresent: number;
+}
+
 export interface OwnerProjectionRepository {
   applyAccountRegistered(
     data:
@@ -37,4 +49,17 @@ export interface OwnerProjectionRepository {
   ): Promise<
     ApplyOwnerProjectionResult
   >;
+
+  startRebuild(
+    rebuildId: string,
+  ): Promise<void>;
+
+  applyRebuildBatch(
+    rebuildId: string,
+    users: readonly OwnerProjectionRebuildUser[],
+  ): Promise<OwnerProjectionRebuildResult>;
+
+  completeRebuild(
+    rebuildId: string,
+  ): Promise<number>;
 }

@@ -1,5 +1,5 @@
 import type {
-  TodoResponse,
+  GetTodoResponse,
 } from "@todo/contracts";
 
 import type {
@@ -12,7 +12,7 @@ export interface TodoItemCacheLookup {
     string;
 
   readonly value?:
-    TodoResponse;
+    GetTodoResponse;
 }
 
 export interface TodoListCacheLookup {
@@ -33,7 +33,7 @@ export interface TodoReadCache {
 
   storeItem(
     cacheKey: string,
-    todo: TodoResponse,
+    todo: GetTodoResponse,
   ): Promise<void>;
 
   lookupList(

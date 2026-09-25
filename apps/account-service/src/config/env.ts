@@ -170,6 +170,18 @@ OUTBOX_MAX_RETRY_DELAY_SECONDS:
        z.string()
         .min(32),
 
+    TODO_SERVICE_URL:
+      z.url()
+        .default("http://todo-service:3002"),
+
+    OWNER_PROJECTION_REBUILD_BATCH_SIZE:
+      z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .default(100),
+
     PASSWORD_HASH_ROUNDS: 
        z.coerce
           .number()
@@ -210,6 +222,55 @@ OUTBOX_MAX_RETRY_DELAY_SECONDS:
          .int()
          .positive()
         .default(604800),
+
+    CLEANUP_INTERVAL_MS:
+      z.coerce
+        .number()
+        .int()
+        .min(60_000)
+        .max(86_400_000)
+        .default(3_600_000),
+
+    CLEANUP_BATCH_SIZE:
+      z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(1_000)
+        .default(100),
+
+    SESSION_RETENTION_SECONDS:
+      z.coerce
+        .number()
+        .int()
+        .min(3_600)
+        .max(31_536_000)
+        .default(2_592_000),
+
+    TOKEN_RETENTION_SECONDS:
+      z.coerce
+        .number()
+        .int()
+        .min(3_600)
+        .max(31_536_000)
+        .default(2_592_000),
+
+    OUTBOX_RETENTION_SECONDS:
+      z.coerce
+        .number()
+        .int()
+        .min(3_600)
+        .max(31_536_000)
+        .default(2_592_000),
+
+    NOTIFICATION_RETENTION_SECONDS:
+      z.coerce
+        .number()
+        .int()
+        .min(3_600)
+        .max(31_536_000)
+        .default(2_592_000),
+
     LOG_LEVEL: z
       .enum([
         "fatal",

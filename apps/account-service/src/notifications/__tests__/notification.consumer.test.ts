@@ -23,6 +23,10 @@ import type {
   NotificationMailer,
 } from "../notification.mailer.js";
 
+import type {
+  NotificationDeliveryRepository,
+} from "../notification-delivery.repository.interface.js";
+
 vi.mock(
   "../../config/env.js",
   () => ({
@@ -196,6 +200,44 @@ function createMailer(): {
   };
 }
 
+function createDeliveryRepository(
+  status:
+    "claimed"
+    | "completed"
+    | "in-progress" = "claimed",
+): {
+  readonly repository: NotificationDeliveryRepository;
+  readonly claimMock: ReturnType<typeof vi.fn>;
+  readonly markSentMock: ReturnType<typeof vi.fn>;
+  readonly markFailedMock: ReturnType<typeof vi.fn>;
+} {
+  const claimMock =
+    vi.fn().mockResolvedValue({
+      status,
+      processingToken:
+        status === "claimed"
+          ? "processing-token"
+          : undefined,
+    });
+
+  const markSentMock =
+    vi.fn().mockResolvedValue(undefined);
+
+  const markFailedMock =
+    vi.fn().mockResolvedValue(undefined);
+
+  return {
+    repository: {
+      claim: claimMock,
+      markSent: markSentMock,
+      markFailed: markFailedMock,
+    },
+    claimMock,
+    markSentMock,
+    markFailedMock,
+  };
+}
+
 const sharedEvent = {
   eventId:
     "5403d006-532f-4d5f-8200-9893fe84e00d",
@@ -315,10 +357,16 @@ describe(
         } =
           createMailer();
 
+        const {
+          repository,
+        } =
+          createDeliveryRepository();
+
         const consumer =
           new TodoNotificationConsumer(
             channel.channel,
             mailer,
+            repository,
           );
 
         await consumer.initialize();
@@ -360,10 +408,16 @@ describe(
         } =
           createMailer();
 
+        const {
+          repository,
+        } =
+          createDeliveryRepository();
+
         const consumer =
           new TodoNotificationConsumer(
             channel.channel,
             mailer,
+            repository,
           );
 
         await consumer.start();
@@ -389,6 +443,11 @@ describe(
         } =
           createMailer();
 
+        const {
+          repository,
+        } =
+          createDeliveryRepository();
+
         queryMock.mockResolvedValue({
           rows: [
             {
@@ -404,6 +463,7 @@ describe(
           new TodoNotificationConsumer(
             channel.channel,
             mailer,
+            repository,
           );
 
         await consumer.start();
@@ -447,6 +507,11 @@ describe(
         } =
           createMailer();
 
+        const {
+          repository,
+        } =
+          createDeliveryRepository();
+
         queryMock.mockResolvedValue({
           rows: [
             {
@@ -462,6 +527,7 @@ describe(
           new TodoNotificationConsumer(
             channel.channel,
             mailer,
+            repository,
           );
 
         await consumer.start();
@@ -505,10 +571,16 @@ describe(
         } =
           createMailer();
 
+        const {
+          repository,
+        } =
+          createDeliveryRepository();
+
         const consumer =
           new TodoNotificationConsumer(
             channel.channel,
             mailer,
+            repository,
           );
 
         await consumer.start();
@@ -552,10 +624,16 @@ describe(
         } =
           createMailer();
 
+        const {
+          repository,
+        } =
+          createDeliveryRepository();
+
         const consumer =
           new TodoNotificationConsumer(
             channel.channel,
             mailer,
+            repository,
           );
 
         await consumer.start();
@@ -596,6 +674,12 @@ describe(
         } =
           createMailer();
 
+        const {
+          repository,
+          markFailedMock,
+        } =
+          createDeliveryRepository();
+
         sendTodoSharedEmailMock.mockRejectedValue(
           new Error("SMTP unavailable"),
         );
@@ -615,6 +699,7 @@ describe(
           new TodoNotificationConsumer(
             channel.channel,
             mailer,
+            repository,
           );
 
         await consumer.start();
@@ -640,6 +725,56 @@ describe(
             false,
           );
         });
+
+        expect(
+          markFailedMock,
+        ).toHaveBeenCalledWith(
+          sharedEvent.eventId,
+          "processing-token",
+          "SMTP unavailable",
+        );
+      },
+    );
+
+    it(
+      "acknowledges a completed duplicate without sending",
+      async () => {
+        const channel =
+          createChannel();
+
+        const {
+          mailer,
+          sendTodoSharedEmailMock,
+        } =
+          createMailer();
+
+        const {
+          repository,
+        } =
+          createDeliveryRepository("completed");
+
+        const consumer =
+          new TodoNotificationConsumer(
+            channel.channel,
+            mailer,
+            repository,
+          );
+
+        await consumer.start();
+
+        const callback =
+          channel.consumeMock.mock
+            .calls[0]?.[1] as (
+              message: ConsumeMessage,
+            ) => void;
+
+        callback(createMessage(sharedEvent));
+
+        await vi.waitFor(() => {
+          expect(channel.ackMock).toHaveBeenCalledTimes(1);
+        });
+
+        expect(sendTodoSharedEmailMock).not.toHaveBeenCalled();
       },
     );
   },

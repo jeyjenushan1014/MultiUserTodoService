@@ -25,16 +25,12 @@ implements GetTodoRepository {
   ) {
     this.databaseRepository =
       databaseRepository;
-
-    /*
-     * Preserve the constructor used by the
-     * existing composition code.
-     *
-     * Single-item authorization cannot use Redis
-     * because a share can be withdrawn at any time.
-     */
-    void readCache;
+    this.readCache =
+      readCache;
   }
+
+  private readonly readCache:
+    TodoReadCache;
 
   public async findAccessibleById(
     parameters:
@@ -42,9 +38,41 @@ implements GetTodoRepository {
   ): Promise<
     GetTodoResponse | undefined
   > {
-    return this.databaseRepository
-      .findAccessibleById(
-        parameters,
-      );
+    const cached =
+      await this.readCache
+        .lookupItem(
+          parameters.callerId,
+          parameters.todoId,
+        );
+
+    if (
+      cached?.value !==
+      undefined
+    ) {
+      return cached.value;
+    }
+
+    const result =
+      await this.databaseRepository
+        .findAccessibleById(
+          parameters,
+        );
+
+    if (
+      cached !==
+      undefined &&
+      result !==
+      undefined &&
+      result.ownerId ===
+      parameters.callerId
+    ) {
+      await this.readCache
+        .storeItem(
+          cached.cacheKey,
+          result,
+        );
+    }
+
+    return result;
   }
 }

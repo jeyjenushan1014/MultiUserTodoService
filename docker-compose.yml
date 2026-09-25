@@ -214,6 +214,8 @@ services:
       OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-60}
       OUTBOX_MAX_RETRY_DELAY_SECONDS: ${OUTBOX_MAX_RETRY_DELAY_SECONDS:-300}
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      TODO_SERVICE_URL: ${TODO_SERVICE_URL:-http://todo-service:3002}
+      OWNER_PROJECTION_REBUILD_BATCH_SIZE: ${OWNER_PROJECTION_REBUILD_BATCH_SIZE:-100}
       INTERNAL_IDENTITY_MAX_AGE_SECONDS: ${INTERNAL_IDENTITY_MAX_AGE_SECONDS:-30}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       JWT_SECRET: ${JWT_SECRET}
@@ -286,6 +288,47 @@ services:
         condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+
+    restart: unless-stopped
+
+  account-cleanup-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: account-service-runtime
+
+    command:
+      - npm
+      - run
+      - start:cleanup
+      - -w
+      - "@todo/account-service"
+
+    environment:
+      NODE_ENV: production
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      CLEANUP_INTERVAL_MS: ${CLEANUP_INTERVAL_MS:-3600000}
+      CLEANUP_BATCH_SIZE: ${CLEANUP_BATCH_SIZE:-100}
+      SESSION_RETENTION_SECONDS: ${SESSION_RETENTION_SECONDS:-2592000}
+      TOKEN_RETENTION_SECONDS: ${TOKEN_RETENTION_SECONDS:-2592000}
+      OUTBOX_RETENTION_SECONDS: ${OUTBOX_RETENTION_SECONDS:-2592000}
+      NOTIFICATION_RETENTION_SECONDS: ${NOTIFICATION_RETENTION_SECONDS:-2592000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    depends_on:
+      account-postgres:
+        condition: service_healthy
+      account-migrations:
+        condition: service_completed_successfully
 
     restart: unless-stopped
 
@@ -475,6 +518,42 @@ services:
 
       rabbitmq:
         condition: service_healthy
+
+    restart: unless-stopped
+
+  todo-cleanup-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+
+    command:
+      - npm
+      - run
+      - start:cleanup
+      - -w
+      - "@todo/todo-service"
+
+    environment:
+      NODE_ENV: production
+      TODO_DATABASE_URL: postgres://${TODO_POSTGRES_USER}:${TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${TODO_POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      CLEANUP_INTERVAL_MS: ${CLEANUP_INTERVAL_MS:-3600000}
+      CLEANUP_BATCH_SIZE: ${CLEANUP_BATCH_SIZE:-100}
+      EVENT_RETENTION_SECONDS: ${EVENT_RETENTION_SECONDS:-2592000}
+      OUTBOX_RETENTION_SECONDS: ${OUTBOX_RETENTION_SECONDS:-2592000}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    depends_on:
+      todo-postgres:
+        condition: service_healthy
+      todo-migrations:
+        condition: service_completed_successfully
 
     restart: unless-stopped
 

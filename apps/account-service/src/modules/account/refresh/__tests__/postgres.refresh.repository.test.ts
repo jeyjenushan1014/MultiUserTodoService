@@ -110,6 +110,19 @@ describe("PostgresRefreshRepository", () => {
       expect(result.sessionId).toBe("session-id");
       expect(result.userId).toBe("user-id");
     }
+
+    const revokeQuery =
+      clientMocks.query.mock.calls[2];
+
+    expect(revokeQuery?.[0]).toContain(
+      "WHERE user_id = $1",
+    );
+    expect(revokeQuery?.[0]).toContain(
+      "AND revoked_at IS NULL",
+    );
+    expect(revokeQuery?.[1]).toEqual([
+      "user-id",
+    ]);
   });
 
   it("returns invalid when token is not found", async () => {

@@ -29,6 +29,14 @@ import type {
   NotificationMailer,
 } from "./notification.mailer.js";
 
+import type {
+  NotificationDeliveryRepository,
+} from "./notification-delivery.repository.interface.js";
+
+import {
+  PostgresNotificationDeliveryRepository,
+} from "./postgres-notification-delivery.repository.js";
+
 import {
   decryptPasswordResetToken,
 } from "../modules/account/password-reset/password-reset-token.crypto.js";
@@ -112,6 +120,9 @@ export class TodoNotificationConsumer {
   public constructor(
     private readonly channel: Channel,
     private readonly mailer: NotificationMailer,
+    private readonly deliveryRepository:
+      NotificationDeliveryRepository =
+        new PostgresNotificationDeliveryRepository(),
   ) {}
 
   public async initialize(): Promise<void> {
@@ -200,19 +211,23 @@ export class TodoNotificationConsumer {
         );
 
       if (shared.success) {
-        const recipientEmail =
-          await findAccountEmail(
-            shared.data.payload.recipientId,
-          );
+        await this.deliver(
+          message,
+          shared.data.eventId,
+          async () => {
+            const recipientEmail =
+              await findAccountEmail(
+                shared.data.payload.recipientId,
+              );
 
-        if (recipientEmail !== undefined) {
-          await this.mailer.sendTodoSharedEmail(
-            recipientEmail,
-            shared.data.payload.todoId,
-          );
-        }
-
-        this.channel.ack(message);
+            if (recipientEmail !== undefined) {
+              await this.mailer.sendTodoSharedEmail(
+                recipientEmail,
+                shared.data.payload.todoId,
+              );
+            }
+          },
+        );
         return;
       }
 
@@ -222,19 +237,23 @@ export class TodoNotificationConsumer {
         );
 
       if (withdrawn.success) {
-        const recipientEmail =
-          await findAccountEmail(
-            withdrawn.data.payload.recipientId,
-          );
+        await this.deliver(
+          message,
+          withdrawn.data.eventId,
+          async () => {
+            const recipientEmail =
+              await findAccountEmail(
+                withdrawn.data.payload.recipientId,
+              );
 
-        if (recipientEmail !== undefined) {
-          await this.mailer.sendTodoShareWithdrawnEmail(
-            recipientEmail,
-            withdrawn.data.payload.todoId,
-          );
-        }
-
-        this.channel.ack(message);
+            if (recipientEmail !== undefined) {
+              await this.mailer.sendTodoShareWithdrawnEmail(
+                recipientEmail,
+                withdrawn.data.payload.todoId,
+              );
+            }
+          },
+        );
         return;
       }
 
@@ -249,16 +268,20 @@ export class TodoNotificationConsumer {
         );
       }
 
-      await this.mailer.sendPasswordResetEmail(
-        passwordResetRequested.data.payload.email,
-        decryptPasswordResetToken(
-          passwordResetRequested.data.payload
-            .encryptedResetToken,
-        ),
-        passwordResetRequested.data.payload.expiresAt,
+      await this.deliver(
+        message,
+        passwordResetRequested.data.eventId,
+        async () => {
+          await this.mailer.sendPasswordResetEmail(
+            passwordResetRequested.data.payload.email,
+            decryptPasswordResetToken(
+              passwordResetRequested.data.payload
+                .encryptedResetToken,
+            ),
+            passwordResetRequested.data.payload.expiresAt,
+          );
+        },
       );
-
-      this.channel.ack(message);
     } catch (error) {
       logger.error(
         {
@@ -272,6 +295,46 @@ export class TodoNotificationConsumer {
         false,
         false,
       );
+    }
+  }
+
+  private async deliver(
+    message: ConsumeMessage,
+    eventId: string,
+    send: () => Promise<void>,
+  ): Promise<void> {
+    const claim =
+      await this.deliveryRepository.claim(eventId);
+
+    if (claim.status === "completed") {
+      this.channel.ack(message);
+      return;
+    }
+
+    if (
+      claim.status === "in-progress"
+      || claim.processingToken === undefined
+    ) {
+      this.channel.nack(message, false, false);
+      return;
+    }
+
+    try {
+      await send();
+      await this.deliveryRepository.markSent(
+        eventId,
+        claim.processingToken,
+      );
+      this.channel.ack(message);
+    } catch (error) {
+      await this.deliveryRepository.markFailed(
+        eventId,
+        claim.processingToken,
+        error instanceof Error
+          ? error.message
+          : String(error),
+      );
+      throw error;
     }
   }
 }

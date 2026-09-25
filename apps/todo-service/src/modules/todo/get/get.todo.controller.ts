@@ -24,8 +24,19 @@ import {
   PostgresGetTodoRepository,
 } from "./postgres.get.todo.repository.js";
 
+import {
+  CachedGetTodoRepository,
+} from "../cache/cached.get.todo.repository.js";
+
+import {
+  RedisTodoReadCache,
+} from "../cache/redis.todo.read.cache.js";
+
 const repository =
-  new PostgresGetTodoRepository();
+  new CachedGetTodoRepository(
+    new PostgresGetTodoRepository(),
+    new RedisTodoReadCache(),
+  );
 
 const service =
   new GetTodoService(

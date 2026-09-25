@@ -295,6 +295,38 @@ TODO_HISTORY_DLQ:
         .min(1000)
         .max(60_000)
         .default(10_000),
+
+    CLEANUP_INTERVAL_MS:
+      z.coerce
+        .number()
+        .int()
+        .min(60_000)
+        .max(86_400_000)
+        .default(3_600_000),
+
+    CLEANUP_BATCH_SIZE:
+      z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(1_000)
+        .default(100),
+
+    EVENT_RETENTION_SECONDS:
+      z.coerce
+        .number()
+        .int()
+        .min(3_600)
+        .max(31_536_000)
+        .default(2_592_000),
+
+    OUTBOX_RETENTION_SECONDS:
+      z.coerce
+        .number()
+        .int()
+        .min(3_600)
+        .max(31_536_000)
+        .default(2_592_000),
   });
 
 export const env =

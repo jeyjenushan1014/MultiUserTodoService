@@ -30,6 +30,10 @@ import {
   todoRouter,
 } from "./modules/todo/todo.routes.js";
 
+import {
+  ownerProjectionRebuildRouter,
+} from "./messaging/owner-projection-rebuild.routes.js";
+
 
 export const app =
   express();
@@ -65,6 +69,11 @@ app.use(
 app.use(
   "/internal/v1/todos",
   todoRouter,
+);
+
+app.use(
+  "/internal/v1/owner-projection-rebuilds",
+  ownerProjectionRebuildRouter,
 );
 
 

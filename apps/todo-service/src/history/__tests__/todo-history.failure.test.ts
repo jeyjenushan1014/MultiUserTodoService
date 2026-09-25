@@ -167,7 +167,7 @@ describe(
 
         const callback =
           dependencies.consumeMock
-            .mock.calls[0]?.[1] as
+            .mock.calls[0]?.[1] as unknown as
             (
               message:
                 ConsumeMessage | null,
@@ -282,9 +282,10 @@ describe(
           "todo.created",
           expect.any(Buffer),
           expect.objectContaining({
-            headers: expect.objectContaining({
-              "x-todo-history-retry-count": 1,
-            }),
+            headers:
+              expect.objectContaining({
+                "x-todo-history-retry-count": 1,
+              }) as unknown as Record<string, unknown>,
           }),
         );
 

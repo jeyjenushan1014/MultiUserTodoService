@@ -84,7 +84,7 @@ describe(
   "CachedListTodosRepository",
   () => {
     it(
-      "uses PostgreSQL directly so withdrawn shares cannot remain cached",
+      "returns an owner list from Redis when available",
       async () => {
         const listTodosMock =
           vi.fn<
@@ -101,6 +101,182 @@ describe(
             totalItems:
               0,
           });
+
+        const databaseRepository:
+        ListTodosRepository = {
+          listTodos:
+            listTodosMock,
+        };
+
+        const {
+          readCache,
+          lookupListMock,
+          storeListMock,
+        } =
+          createReadCache();
+
+        lookupListMock
+          .mockResolvedValueOnce({
+            cacheKey:
+              "todo:owner:1:list:query",
+
+            value: {
+              items: [],
+
+              totalItems: 0,
+            },
+          });
+
+        const repository =
+          new CachedListTodosRepository(
+            databaseRepository,
+            readCache,
+          );
+
+        const parameters = {
+          ownerId:
+            "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+
+          page:
+            1,
+
+          pageSize:
+            20,
+
+          access:
+            "owned" as const,
+
+          sortBy:
+            "createdAt" as const,
+
+          sortOrder:
+            "desc" as const,
+        };
+
+        const result =
+          await repository.listTodos(
+            parameters,
+          );
+
+        expect(result).toEqual({
+          items:
+            [],
+
+          totalItems:
+            0,
+        });
+
+        expect(
+          lookupListMock,
+        ).toHaveBeenCalledWith(
+          parameters,
+        );
+
+        expect(
+          listTodosMock,
+        ).not.toHaveBeenCalled();
+
+        expect(
+          storeListMock,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "loads and stores an owner list on a cache miss",
+      async () => {
+        const listTodosMock =
+          vi.fn<
+            ListTodosRepository[
+              "listTodos"
+            ]
+          >()
+            .mockResolvedValue({
+              items: [],
+
+              totalItems: 0,
+            });
+
+        const databaseRepository:
+        ListTodosRepository = {
+          listTodos:
+            listTodosMock,
+        };
+
+        const {
+          readCache,
+          lookupListMock,
+          storeListMock,
+        } =
+          createReadCache();
+
+        lookupListMock
+          .mockResolvedValueOnce({
+            cacheKey:
+              "todo:owner:1:list:query",
+          });
+
+        const repository =
+          new CachedListTodosRepository(
+            databaseRepository,
+            readCache,
+          );
+
+        const parameters = {
+          ownerId:
+            "70668eae-dac5-4b75-9bd3-02c963eb5b99",
+
+          page:
+            1,
+
+          pageSize:
+            20,
+
+          access:
+            "owned" as const,
+
+          sortBy:
+            "createdAt" as const,
+
+          sortOrder:
+            "desc" as const,
+        };
+
+        const result =
+          await repository
+            .listTodos(
+              parameters,
+            );
+
+        expect(result).toEqual({
+          items: [],
+
+          totalItems: 0,
+        });
+
+        expect(
+          storeListMock,
+        ).toHaveBeenCalledWith(
+          "todo:owner:1:list:query",
+          result,
+        );
+      },
+    );
+
+    it(
+      "bypasses Redis for shared-access lists",
+      async () => {
+        const listTodosMock =
+          vi.fn<
+            ListTodosRepository[
+              "listTodos"
+            ]
+          >()
+            .mockResolvedValue({
+              items: [],
+
+              totalItems: 0,
+            });
 
         const databaseRepository:
         ListTodosRepository = {
@@ -132,7 +308,7 @@ describe(
             20,
 
           access:
-            "all" as const,
+            "shared" as const,
 
           sortBy:
             "createdAt" as const,
@@ -141,18 +317,18 @@ describe(
             "desc" as const,
         };
 
-        const result =
-          await repository.listTodos(
+        await repository
+          .listTodos(
             parameters,
           );
 
-        expect(result).toEqual({
-          items:
-            [],
+        expect(
+          lookupListMock,
+        ).not.toHaveBeenCalled();
 
-          totalItems:
-            0,
-        });
+        expect(
+          storeListMock,
+        ).not.toHaveBeenCalled();
 
         expect(
           listTodosMock,

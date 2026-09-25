@@ -10,6 +10,16 @@ import {
   logger,
 } from "./logger.js";
 
+export function redisReconnectStrategy(
+  retries:
+    number,
+): number {
+  return Math.min(
+    retries * 100,
+    3_000,
+  );
+}
+
 /*
 Converts an unknown thrown value into an Error
 instance suitable for structured logging.
@@ -44,18 +54,9 @@ export const redis =
       reconnectStrategy(
         retries:
           number,
-      ): number | Error {
-        if (
-          retries > 10
-        ) {
-          return new Error(
-            "Redis reconnect limit exceeded",
-          );
-        }
-
-        return Math.min(
-          retries * 100,
-          3_000,
+      ): number {
+        return redisReconnectStrategy(
+          retries,
         );
       },
     },

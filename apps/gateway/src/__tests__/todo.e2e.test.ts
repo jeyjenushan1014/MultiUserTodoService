@@ -762,6 +762,58 @@ describe.skipIf(
     );
 
     it(
+      "rejects a TODO request immediately after logout",
+      async () => {
+        const uniqueValue = [
+          Date.now(),
+          crypto.randomUUID(),
+        ].join("-");
+
+        const user =
+          await registerAndLogin(
+            `todo-e2e-revocation-${uniqueValue}@example.com`,
+          );
+
+        const logout =
+          await request(
+            "/api/v1/auth/logout",
+            {
+              method:
+                "POST",
+
+              accessToken:
+                user.accessToken,
+            },
+          );
+
+        expect(
+          logout.status,
+        ).toBe(204);
+
+        const result =
+          await request(
+            "/api/v1/todos",
+            {
+              accessToken:
+                user.accessToken,
+            },
+          );
+
+        expect(
+          result.status,
+        ).toBe(401);
+
+        expect(
+          getErrorCode(
+            result.body,
+          ),
+        ).toBe(
+          "INVALID_ACCESS_TOKEN",
+        );
+      },
+    );
+
+    it(
       "creates a TODO with normalized fields",
       async () => {
         const result =

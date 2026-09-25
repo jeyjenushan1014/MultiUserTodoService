@@ -212,6 +212,9 @@ interface AccountRequestOptions {
 
   readonly identity?:
     CallerIdentity;
+
+  readonly requiresServiceKey?:
+    boolean;
 }
 
 /*
@@ -238,10 +241,16 @@ function createRequestHeaders(
     Record<string, string> = {
       "x-request-id":
         options.requestId,
-
-      "x-internal-service-key":
-        env.INTERNAL_SERVICE_SECRET,
     };
+
+  if (
+    options.requiresServiceKey ===
+    true
+  ) {
+    headers[
+      "x-internal-service-key"
+    ] = env.INTERNAL_SERVICE_SECRET;
+  }
 
   if (options.body !== undefined) {
     headers["content-type"] =
@@ -418,6 +427,9 @@ export async function registerAccount(
 
       requestId,
 
+      requiresServiceKey:
+        true,
+
       body:
         request,
     });
@@ -458,6 +470,9 @@ export async function loginAccount(
         "POST",
 
       requestId,
+
+      requiresServiceKey:
+        true,
 
       body:
         request,
@@ -500,6 +515,9 @@ export async function refreshSession(
         "POST",
 
       requestId,
+
+      requiresServiceKey:
+        true,
 
       body:
         request,
@@ -676,6 +694,9 @@ export async function requestPasswordReset(
 
       requestId,
 
+      requiresServiceKey:
+        true,
+
       body:
         request,
     });
@@ -716,6 +737,9 @@ export async function confirmPasswordReset(
 
     body:
       request,
+
+    requiresServiceKey:
+      true,
   });
 }
 /*
@@ -745,6 +769,9 @@ export async function resolveAccountByEmail(
 
       body:
         request,
+
+      requiresServiceKey:
+        true,
     });
 
   if (

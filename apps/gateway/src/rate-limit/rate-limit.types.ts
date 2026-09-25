@@ -7,6 +7,9 @@ export interface RateLimitPolicy {
 
   readonly windowSeconds:
     number;
+
+  readonly failClosed?:
+    boolean;
 }
 
 export interface RateLimitConsumeCommand {

@@ -57,6 +57,9 @@ export const authenticationRateLimit =
       windowSeconds:
         env
           .AUTH_RATE_LIMIT_WINDOW_SECONDS,
+
+      failClosed:
+        true,
     },
   });
 
@@ -76,5 +79,8 @@ export const passwordResetRateLimit =
       windowSeconds:
         env
           .PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS,
+
+      failClosed:
+        true,
     },
   });

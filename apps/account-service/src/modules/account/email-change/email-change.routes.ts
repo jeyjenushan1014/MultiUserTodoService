@@ -7,8 +7,8 @@ import {
 } from "@todo/common";
 
 import {
-  requireInternalService,
-} from "../../../middleware/internal-service-auth.middleware.js";
+  requireInternalIdentityMiddleware,
+} from "../../../security/internal-identity.js";
 
 import {
   validateBody,
@@ -27,7 +27,7 @@ export const internalEmailChangeRouter =
 
 internalEmailChangeRouter.patch(
   "/me/email",
-  requireInternalService,
+  requireInternalIdentityMiddleware,
   validateBody(
     changeEmailSchema,
   ),

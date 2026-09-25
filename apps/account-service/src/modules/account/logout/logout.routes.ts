@@ -7,8 +7,8 @@ import {
 } from "@todo/common";
 
 import {
-  requireInternalService,
-} from "../../../middleware/internal-service-auth.middleware.js";
+  requireInternalIdentityMiddleware,
+} from "../../../security/internal-identity.js";
 
 import {
   logout,
@@ -20,12 +20,12 @@ export const internalLogoutRouter =
 
 internalLogoutRouter.post(
   "/logout",
-  requireInternalService,
+  requireInternalIdentityMiddleware,
   asyncHandler(logout),
 );
 
 internalLogoutRouter.post(
   "/logout-all",
-  requireInternalService,
+  requireInternalIdentityMiddleware,
   asyncHandler(logoutAll),
 );

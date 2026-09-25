@@ -7,8 +7,8 @@ import {
 } from "@todo/common";
 
 import {
-  requireInternalService,
-} from "../../../middleware/internal-service-auth.middleware.js";
+  requireInternalIdentityMiddleware,
+} from "../../../security/internal-identity.js";
 
 import {
   getCurrentAccount,
@@ -19,7 +19,7 @@ export const internalProfileRouter =
 
 internalProfileRouter.get(
   "/me",
-  requireInternalService,
+  requireInternalIdentityMiddleware,
   asyncHandler(
     getCurrentAccount,
   ),

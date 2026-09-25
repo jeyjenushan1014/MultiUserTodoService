@@ -254,5 +254,66 @@ describe(
         ).toHaveBeenCalledWith();
       },
     );
+
+    it(
+      "fails closed for protected policies when Redis is unavailable",
+      async () => {
+        const service = {
+          consume:
+            vi.fn()
+              .mockResolvedValue(
+                undefined,
+              ),
+        } as unknown as
+          RateLimitService;
+
+        const middleware =
+          createRateLimitMiddleware({
+            service,
+
+            policy: {
+              scope:
+                "authentication",
+
+              maximumRequests:
+                10,
+
+              windowSeconds:
+                60,
+
+              failClosed:
+                true,
+            },
+          });
+
+        const nextMock =
+          vi.fn();
+
+        await middleware(
+          {
+            ip:
+              "127.0.0.1",
+
+            socket: {},
+          } as Request,
+          createResponse()
+            .response,
+          nextMock as
+            NextFunction,
+        );
+
+        expect(
+          nextMock,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            statusCode:
+              503,
+
+            code:
+              "RATE_LIMIT_UNAVAILABLE",
+          }),
+        );
+      },
+    );
   },
 );

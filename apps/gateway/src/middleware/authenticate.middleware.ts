@@ -15,11 +15,16 @@ import type {
 
 import {
   AppError,
+  getRequestId,
 } from "@todo/common";
 
 import {
   env,
 } from "../config/env.js";
+
+import {
+  getCurrentAccount,
+} from "../clients/account-service.client.js";
 
 export interface AuthenticationLocals {
   callerIdentity?: CallerIdentity;
@@ -144,6 +149,37 @@ async function authenticateRequest(
 
   const claims =
     await verifyAccessToken(token);
+
+  const requestId =
+    getRequestId();
+
+  if (requestId === undefined) {
+    throw new AppError(
+      500,
+      "REQUEST_CONTEXT_UNAVAILABLE",
+      "Request context is unavailable",
+    );
+  }
+
+  try {
+    await getCurrentAccount(
+      claims,
+      requestId,
+    );
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.statusCode === 401
+    ) {
+      throw new AppError(
+        401,
+        "INVALID_ACCESS_TOKEN",
+        "The access token is invalid or expired",
+      );
+    }
+
+    throw error;
+  }
 
   response.locals.callerIdentity = {
     userId: claims.userId,

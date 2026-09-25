@@ -1,9 +1,6 @@
 /*
-The Gateway is the only public entry point.
-
-A public client is not allowed to choose the
-trusted request ID. The Gateway always creates
-a new system-generated UUID.
+The Gateway creates the request ID for public traffic;
+Account Service propagates it for signed internal requests.
 */
 
 import {
@@ -21,11 +18,17 @@ import {
 
 export const requestContextMiddleware:
   RequestHandler = (
-    _request,
+    request,
     response,
     next,
   ): void => {
+    const suppliedRequestId =
+      request.get(
+        REQUEST_ID_HEADER,
+      );
+
     const requestId =
+      suppliedRequestId ??
       randomUUID();
 
     response.setHeader(
@@ -38,7 +41,7 @@ export const requestContextMiddleware:
         requestId,
 
         serviceName:
-          "gateway",
+          "account-service",
       },
       next,
     );

@@ -65,6 +65,16 @@ async function run(): Promise<void> {
       activeConnection =
         connection;
 
+      const connectionClosed =
+        new Promise<void>(
+          (resolve) => {
+            connection.once(
+              "close",
+              resolve,
+            );
+          },
+        );
+
       connection.once(
         "close",
         () => {
@@ -102,14 +112,7 @@ async function run(): Promise<void> {
         "TODO history consumer started",
       );
 
-      await new Promise<void>(
-        (resolve) => {
-          connection.once(
-            "close",
-            resolve,
-          );
-        },
-      );
+      await connectionClosed;
 
       activeConnection =
         undefined;

@@ -1,25 +1,13 @@
 /*
 Protects internal TODO Service routes.
 
-The middleware verifies:
-
-1. the internal service key;
-2. the HMAC identity signature;
-3. the decoded identity structure;
-4. the Gateway issuer;
-5. the TODO Service audience;
-6. the trusted request-ID binding;
-7. the identity issue time;
-8. the identity expiry;
-9. the maximum permitted identity lifetime.
+The middleware verifies the HMAC identity signature, decoded identity
+structure, Gateway issuer, TODO Service audience, request-ID binding,
+identity issue time, identity expiry, and maximum permitted lifetime.
 
 After successful verification, the authenticated
 caller is stored in response.locals.callerIdentity.
 */
-
-import {
-  timingSafeEqual,
-} from "node:crypto";
 
 import type {
   NextFunction,
@@ -53,9 +41,6 @@ future is rejected.
 const ALLOWED_CLOCK_SKEW_SECONDS =
   5;
 
-const INTERNAL_SERVICE_KEY_HEADER =
-  "x-internal-service-key";
-
 const INTERNAL_IDENTITY_HEADER =
   "x-internal-identity";
 
@@ -77,16 +62,6 @@ type IdentityResponse<
 
 /*
 Creates one generic authentication error.
-
-The API must not reveal whether authentication failed
-because of:
-
-- missing headers;
-- wrong service key;
-- invalid signature;
-- invalid audience;
-- expired identity;
-- request-ID mismatch.
 */
 function createAuthenticationError():
   AppError {
@@ -119,47 +94,6 @@ function getRequiredHeader(
   }
 
   return value;
-}
-
-/*
-Compares the supplied internal service key using a
-timing-safe comparison.
-
-A normal string comparison such as:
-
-supplied === expected
-
-may expose a small timing difference.
-*/
-function secretsMatch(
-  suppliedSecret:
-    string,
-  expectedSecret:
-    string,
-): boolean {
-  const suppliedBuffer =
-    Buffer.from(
-      suppliedSecret,
-      "utf8",
-    );
-
-  const expectedBuffer =
-    Buffer.from(
-      expectedSecret,
-      "utf8",
-    );
-
-  if (
-    suppliedBuffer.length !==
-    expectedBuffer.length
-  ) {
-    return false;
-  }
-
-  return timingSafeEqual(
-    suppliedBuffer,
-    expectedBuffer,
-  );
 }
 
 /*
@@ -300,21 +234,6 @@ export function requireInternalIdentity(
     NextFunction,
 ): void {
   try {
-    const serviceKey =
-      getRequiredHeader(
-        request,
-        INTERNAL_SERVICE_KEY_HEADER,
-      );
-
-    if (
-      !secretsMatch(
-        serviceKey,
-        env.INTERNAL_SERVICE_SECRET,
-      )
-    ) {
-      throw createAuthenticationError();
-    }
-
     const encodedIdentity =
       getRequiredHeader(
         request,

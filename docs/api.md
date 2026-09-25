@@ -43,7 +43,7 @@ Access tokens are short-lived JWTs. Refresh tokens are opaque, rotated, stored o
 
 ## 4. Rate limits
 
-Redis-backed limits are shared across Gateway instances. Defaults are 100 requests per 60 seconds for the general API, 10 per 60 seconds for authentication, and 5 per 900 seconds for password-reset requests. A rejected request returns `429`, `RATE_LIMIT_EXCEEDED`, and `Retry-After` when available. Redis failure fails open for rate limiting; it does not change business data.
+Redis-backed limits are shared across Gateway instances. Defaults are 100 requests per 60 seconds for the general API, 10 per 60 seconds for authentication, and 5 per 900 seconds for password-reset requests. A rejected request returns `429`, `RATE_LIMIT_EXCEEDED`, and `Retry-After` when available. General API rate limiting fails open during a Redis outage so ordinary TODO reads and writes remain available. Authentication and password-reset rate limiting fail closed with `503 RATE_LIMIT_UNAVAILABLE` because disabling those protections would create a brute-force risk.
 
 ## 5. Authentication and account endpoints
 
@@ -158,6 +158,10 @@ Returns `400`, `403 TODO_SHARE_FORBIDDEN`, `404 TODO_NOT_FOUND`, `404 RECIPIENT_
 
 Withdraws an active share. Only the owner can do this. Returns `204`, `400 INVALID_UUID`, `403 TODO_SHARE_FORBIDDEN`, or `404 TODO_NOT_FOUND`. Active share state is checked on every operation, so an old access token does not preserve access.
 
+### `GET /api/v1/todos/:todoId/history`
+
+Returns the visible TODO history as `{ "items": [{ "id": "uuid", "eventId": "uuid", "todoId": "uuid", "actorId": "uuid", "eventType": "todo.created", "requestId": "uuid", "occurredAt": "2026-09-24T09:00:00.000Z", "details": {} }] }`. Access follows the same ownership or active-share visibility rules as the TODO itself. Invalid identifiers return `400 VALIDATION_ERROR`; missing or inaccessible TODOs return `404 TODO_NOT_FOUND`.
+
 ## 7. Health endpoints
 
 `GET /health` is public Gateway process health and returns `200` with `{ "status": "healthy", "service": "gateway" }`.
@@ -189,3 +193,11 @@ Internal `GET http://todo-service:3002/health/live` checks process liveness. `GE
 2. Call `POST /api/v1/todos/:todoId/shares` with a recipient email.
 3. The recipient lists with `access=shared` and may update only `state`.
 4. The owner withdraws access with `DELETE /api/v1/todos/:todoId/shares/:recipientId`.
+
+### Session revocation and history
+
+1. Call `POST /api/v1/auth/login` and retain the access token.
+2. Use the token to call `GET /api/v1/todos` or `GET /api/v1/todos/:todoId/history`.
+3. Call `POST /api/v1/auth/logout` with the same token.
+4. Reusing the token for a TODO endpoint returns `401 INVALID_ACCESS_TOKEN` immediately.
+5. A caller who can still see the TODO may retrieve its append-only history; inaccessible TODOs return the same not-found response as the TODO endpoint.

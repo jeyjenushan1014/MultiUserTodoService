@@ -94,6 +94,21 @@ export function createRateLimitMiddleware(
       if (
         decision === undefined
       ) {
+        if (
+          options.policy.failClosed ===
+          true
+        ) {
+          next(
+            new AppError(
+              503,
+              "RATE_LIMIT_UNAVAILABLE",
+              "Request protection is temporarily unavailable",
+            ),
+          );
+
+          return;
+        }
+
         next();
 
         return;

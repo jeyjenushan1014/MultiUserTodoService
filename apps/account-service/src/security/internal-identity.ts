@@ -14,6 +14,7 @@ identity used by operations such as:
 
 import type {
   Request,
+  RequestHandler,
 } from "express";
 
 import type {
@@ -255,3 +256,20 @@ export function requireInternalIdentity(
 
   return identity;
 }
+
+export const requireInternalIdentityMiddleware:
+  RequestHandler = (
+    request,
+    _response,
+    next,
+  ): void => {
+    try {
+      requireInternalIdentity(
+        request,
+      );
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };

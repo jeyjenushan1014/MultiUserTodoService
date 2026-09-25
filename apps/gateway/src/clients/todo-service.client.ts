@@ -237,9 +237,6 @@ function createRequestHeaders(
       "x-request-id":
         options.requestId,
 
-      "x-internal-service-key":
-        env.INTERNAL_SERVICE_SECRET,
-
       ...createIdentityHeaders(
         options.identity,
         options.requestId,

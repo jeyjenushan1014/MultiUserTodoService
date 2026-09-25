@@ -22,6 +22,7 @@
     "migrate:todo": "npm run migrate -w @todo/todo-service",
     "migrate:todo:down": "npm run migrate:down -w @todo/todo-service",
     "test:e2e": "npm run test:e2e -w @todo/gateway",
+    "test:docs": "node scripts/verify-api-docs.mjs",
     "start:outbox-worker": "node dist/src/workers/outbox-worker.js"
      
 

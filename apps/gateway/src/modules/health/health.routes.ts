@@ -4,6 +4,7 @@ import {
 
 import {
   getHealthController,
+  getDependencyHealthController,
 } from "./health.controller.js";
 
 export const healthRouter =
@@ -12,4 +13,9 @@ export const healthRouter =
 healthRouter.get(
   "/",
   getHealthController,
+);
+
+healthRouter.get(
+  "/dependencies",
+  getDependencyHealthController,
 );

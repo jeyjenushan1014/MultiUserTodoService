@@ -183,6 +183,8 @@ The `eventType` values are `todo.created`, `todo.completed`, `todo.shared`, `tod
 
 `GET /health` is public Gateway process health and returns `200` with `{ "status": "healthy", "service": "gateway" }`.
 
+`GET /health/dependencies` is public operational health and probes Gateway Redis, Account Service `/health`, and Todo Service `/health/ready`. It returns `200` with `{ "status": "healthy", "service": "gateway", "dependencies": { "redis": "available", "accountService": "available", "todoService": "available" } }` when all dependencies respond successfully. It returns `503` with the same shape and an `"unavailable"` dependency value when any probe fails. Probes have the configured downstream timeout and do not expose credentials or downstream response bodies.
+
 Internal `GET http://account-service:3001/health` checks Account PostgreSQL and returns `200` when available or `503` with `dependencies.database: "unavailable"` when not.
 
 Internal `GET http://todo-service:3002/health/live` checks process liveness. `GET http://todo-service:3002/health/ready` checks Todo PostgreSQL and Redis; database failure returns `503`, while Redis failure is reported as degraded without stopping TODO operations.

@@ -33,6 +33,29 @@ const healthResponseSchema =
     service: z.string(),
   });
 
+const dependencyHealthResponseSchema =
+  z.object({
+    status: z.enum([
+      "healthy",
+      "degraded",
+    ]),
+
+    service:
+      z.literal("gateway"),
+
+    dependencies:
+      z.object({
+        redis:
+          z.string(),
+
+        accountService:
+          z.string(),
+
+        todoService:
+          z.string(),
+      }),
+  });
+
 const errorResponseSchema =
   z.object({
     error: z.object({
@@ -96,6 +119,24 @@ describe("Gateway application", () => {
         REQUEST_ID_HEADER
       ],
     ).toMatch(UUID_PATTERN);
+  });
+
+  it("exposes aggregate dependency health", async () => {
+    const response =
+      await request(app)
+        .get("/health/dependencies");
+
+    expect(
+      [200, 503],
+    ).toContain(
+      response.status,
+    );
+
+    expect(
+      dependencyHealthResponseSchema.parse(
+        response.body as unknown,
+      ).service,
+    ).toBe("gateway");
   });
 
 it(

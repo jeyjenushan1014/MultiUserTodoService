@@ -32,12 +32,14 @@ The Compose file runs account and TODO migrations before the dependent services.
 npm install
 npm run check
 npm run test:e2e
+npm run test:docs
 npm run build
 npm run lint
 npm test
 ```
 
 `npm run check` runs linting, TypeScript builds, and unit tests. `npm run test:e2e` exercises the Gateway against the running Docker stack. Use `npm run clean` to remove generated build output.
+`npm run test:docs` verifies that every public Gateway endpoint and required API flow is present in `docs/api.md`.
 
 ## Documentation
 

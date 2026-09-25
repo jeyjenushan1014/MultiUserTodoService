@@ -137,12 +137,17 @@ async function verifyAccessToken(
   }
 }
 
+interface AuthenticateOptions {
+  readonly allowAccountServiceUnavailable?: boolean;
+}
+
 async function authenticateRequest(
   request: Request,
   response: Response<
     unknown,
     AuthenticationLocals
   >,
+  options: AuthenticateOptions,
 ): Promise<void> {
   const token =
     extractBearerToken(request);
@@ -178,7 +183,23 @@ async function authenticateRequest(
       );
     }
 
-    throw error;
+    if (
+      options.allowAccountServiceUnavailable ===
+        true &&
+      error instanceof AppError &&
+      (
+        error.statusCode === 503 ||
+        error.statusCode === 504
+      )
+    ) {
+      /*
+       * Read-only TODO views can continue from
+       * verified JWT claims while Account Service
+       * is unavailable. Writes remain fail-closed.
+       */
+    } else {
+      throw error;
+    }
   }
 
   response.locals.callerIdentity = {
@@ -188,8 +209,10 @@ async function authenticateRequest(
   };
 }
 
-export const authenticate:
-  RequestHandler = (
+function createAuthenticateMiddleware(
+  options: AuthenticateOptions = {},
+): RequestHandler {
+  return (
     request: Request,
     response: Response,
     next: NextFunction,
@@ -197,6 +220,7 @@ export const authenticate:
     void authenticateRequest(
       request,
       response,
+      options,
     )
       .then(() => {
         next();
@@ -207,6 +231,15 @@ export const authenticate:
         },
       );
   };
+}
+
+export const authenticate =
+  createAuthenticateMiddleware();
+
+export const authenticateTodoRead =
+  createAuthenticateMiddleware({
+    allowAccountServiceUnavailable: true,
+  });
 
 export function getCallerIdentity(
   response: Response,

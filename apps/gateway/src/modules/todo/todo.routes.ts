@@ -4,6 +4,7 @@ import {
 
 import {
   authenticate,
+  authenticateTodoRead,
 } from "../../middleware/authenticate.middleware.js";
 
 
@@ -87,12 +88,9 @@ export const todoRouter =
  * prevents any protected controller from
  * executing without authentication context.
  */
-todoRouter.use(
-  authenticate,
-);
-
 todoRouter.post(
   "/",
+  authenticate,
   validateBody(
     createTodoSchema,
   ),
@@ -101,6 +99,7 @@ todoRouter.post(
 
 todoRouter.get(
   "/",
+  authenticateTodoRead,
   validateQuery(
     listTodosQuerySchema,
   ),
@@ -109,6 +108,7 @@ todoRouter.get(
 
 todoRouter.post(
   "/:todoId/shares",
+  authenticate,
   validateParams(
     getTodoParamsSchema,
   ),
@@ -120,6 +120,7 @@ todoRouter.post(
 
 todoRouter.delete(
   "/:todoId/shares/:recipientId",
+  authenticate,
   validateParams(
     withdrawTodoShareParamsSchema,
   ),
@@ -128,6 +129,7 @@ todoRouter.delete(
 
 todoRouter.get(
   "/:todoId",
+  authenticateTodoRead,
   validateParams(
     getTodoParamsSchema,
   ),
@@ -136,6 +138,7 @@ todoRouter.get(
 
 todoRouter.get(
   "/:todoId/history",
+  authenticateTodoRead,
   validateParams(
     getTodoParamsSchema,
   ),
@@ -144,6 +147,7 @@ todoRouter.get(
 
 todoRouter.patch(
   "/:todoId",
+  authenticate,
   validateParams(
     getTodoParamsSchema,
   ),
@@ -155,6 +159,7 @@ todoRouter.patch(
 
 todoRouter.delete(
   "/:todoId",
+  authenticate,
   validateParams(
     getTodoParamsSchema,
   ),

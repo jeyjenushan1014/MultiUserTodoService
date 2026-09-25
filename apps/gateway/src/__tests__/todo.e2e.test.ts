@@ -730,7 +730,7 @@ describe.skipIf(
             result.body,
           ),
         ).toBe(
-          "AUTHENTICATION_REQUIRED",
+          "INVALID_ACCESS_TOKEN",
         );
       },
     );

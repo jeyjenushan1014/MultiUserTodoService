@@ -41,6 +41,8 @@ Access tokens are short-lived JWTs. Refresh tokens are opaque, rotated, stored o
 
 `details` is present for validation errors and omitted otherwise. Error messages never contain stack traces, SQL, credentials, passwords, reset tokens, or access tokens. Common status meanings are `400` invalid input, `401` missing or invalid authentication, `403` authenticated but not permitted, `404` missing or invisible resource, `409` business conflict, `413` body too large, `429` rate limit exceeded, `502` malformed downstream response, `503` downstream unavailable, `504` downstream timeout, and `500` unexpected failure.
 
+Protected Gateway endpoints return `401 INVALID_ACCESS_TOKEN` for a missing Authorization header, malformed Bearer credentials, or an invalid, expired, or revoked access token.
+
 ### Shared response fields
 
 | Field | Type | Meaning |

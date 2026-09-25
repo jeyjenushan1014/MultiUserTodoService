@@ -43,6 +43,17 @@ implements EventPublisher {
     const connection =
       await amqp.connect(
         env.RABBITMQ_URL,
+        {
+          clientProperties: {
+            /*
+             * A fixed connection name, distinct from the per-run outbox
+             * lock workerId, so the gateway health check can find this
+             * process via the RabbitMQ management API.
+             */
+            connection_name:
+              env.ACCOUNT_OUTBOX_WORKER_ID,
+          },
+        },
       );
 
     const channel =

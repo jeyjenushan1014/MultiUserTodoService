@@ -38,6 +38,12 @@ process.env.PASSWORD_HASH_ROUNDS ??=
 process.env.RABBITMQ_URL ??=
   "amqp://guest:guest@localhost:5672";
 
+process.env.RABBITMQ_USER ??=
+  "guest";
+
+process.env.RABBITMQ_PASSWORD ??=
+  "guest";
+
 /*
  * Shared internal service authentication.
  *

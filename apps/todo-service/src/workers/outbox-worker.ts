@@ -142,12 +142,21 @@ process.once(
 
 async function connectWithRetry(
   url: string,
+  workerId: string,
 ): Promise<ReturnType<typeof connect>> {
   const maxAttempts = 10;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const conn = await connect(url);
+      const conn = await connect(url, {
+        /*
+         * Named so the gateway health check can find this connection via
+         * the RabbitMQ management API.
+         */
+        clientProperties: {
+          connection_name: workerId,
+        },
+      });
       return conn;
     } catch (err) {
       const delay = Math.min(1000 * 2 ** (attempt + 1), 30_000);
@@ -183,7 +192,7 @@ async function startLoop(): Promise<void> {
 
   while (!shutdownStarted) {
     try {
-      connection = await connectWithRetry(env.RABBITMQ_URL);
+      connection = await connectWithRetry(env.RABBITMQ_URL, workerId);
 
       connection.on("error", (error: Error) => {
         logger.error({ error }, "TODO outbox RabbitMQ connection error");

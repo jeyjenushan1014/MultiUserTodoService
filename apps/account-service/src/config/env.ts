@@ -85,7 +85,13 @@ OUTBOX_MAX_RETRY_DELAY_SECONDS:
     .min(10)
     .max(86_400)
     .default(300),
-    
+
+ACCOUNT_OUTBOX_WORKER_ID:
+  z
+    .string()
+    .min(1)
+    .default("account-outbox-worker"),
+
     PASSWORD_RESET_TOKEN_TTL_MINUTES: z.coerce
         .number()
         .int()

@@ -121,23 +121,32 @@ describe("Gateway application", () => {
     ).toMatch(UUID_PATTERN);
   });
 
-  it("exposes aggregate dependency health", async () => {
-    const response =
-      await request(app)
-        .get("/health/dependencies");
+  it(
+    "exposes aggregate dependency health",
+    async () => {
+      const response =
+        await request(app)
+          .get("/health/dependencies");
 
-    expect(
-      [200, 503],
-    ).toContain(
-      response.status,
-    );
+      expect(
+        [200, 503],
+      ).toContain(
+        response.status,
+      );
 
-    expect(
-      dependencyHealthResponseSchema.parse(
-        response.body as unknown,
-      ).service,
-    ).toBe("gateway");
-  });
+      expect(
+        dependencyHealthResponseSchema.parse(
+          response.body as unknown,
+        ).service,
+      ).toBe("gateway");
+    },
+    /*
+     * This check performs several real network probes, each bounded by
+     * DOWNSTREAM_TIMEOUT_MS (5s), which leaves no headroom under
+     * vitest's default 5s test timeout.
+     */
+    10_000,
+  );
 
 it(
   "replaces a valid caller-supplied request ID",

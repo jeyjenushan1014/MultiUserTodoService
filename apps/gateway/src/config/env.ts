@@ -80,6 +80,47 @@ PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:
     "TODO_SERVICE_URL must be a valid URL",
   ),
 
+  RABBITMQ_MANAGEMENT_URL: z
+    .url()
+    .default("http://rabbitmq:15672"),
+
+  RABBITMQ_USER: z
+    .string()
+    .min(1),
+
+  RABBITMQ_PASSWORD: z
+    .string()
+    .min(1),
+
+  MAILPIT_URL: z
+    .url()
+    .default("http://mailpit:8025"),
+
+  TODO_OWNER_QUEUE: z
+    .string()
+    .min(1)
+    .default("todo.owner-projection"),
+
+  RABBITMQ_NOTIFICATION_QUEUE: z
+    .string()
+    .min(1)
+    .default("todo.notifications"),
+
+  TODO_HISTORY_QUEUE: z
+    .string()
+    .min(1)
+    .default("todo.history"),
+
+  TODO_OUTBOX_WORKER_ID: z
+    .string()
+    .min(1)
+    .default("todo-outbox-worker"),
+
+  ACCOUNT_OUTBOX_WORKER_ID: z
+    .string()
+    .min(1)
+    .default("account-outbox-worker"),
+
   DOWNSTREAM_TIMEOUT_MS: z.coerce
     .number()
     .int()

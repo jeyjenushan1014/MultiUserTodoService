@@ -13,7 +13,7 @@ The publisher is decoupled from consumers: the domain request commits its databa
 | `eventId` | UUID | Globally unique event identity and deduplication key |
 | `eventType` | string | Stable event name |
 | `eventVersion` | positive integer | Payload schema version; current version is `1` |
-| `producer` | enum | `account-service`, `todo-service`, `activity-service`, or `notification-worker` |
+| `producer` | string | Emitting service. Currently `account-service` or `todo-service` |
 | `requestId` | UUID | Request that caused the domain change |
 | `occurredAt` | ISO-8601 datetime | Time of the committed domain change |
 | `payload` | object | Event-specific data |
@@ -34,23 +34,23 @@ All are produced by Todo Service after the related TODO/share mutation and outbo
 
 ### `todo.created` version 1
 
-Payload: `todoId`, `ownerId`, `actorUserId` (UUIDs), and `title` (string). Published for a successful create. History records creation.
+Payload: `todoId`, `ownerId` (UUIDs), and `title` (string). Published for a successful create. History records creation.
 
 ### `todo.completed` version 1
 
-Payload: `todoId`, `ownerId`, and `actorUserId` (UUIDs). Published only when state changes into `completed`; updating an already completed TODO does not publish another completion event.
+Payload: `todoId`, `ownerId`, and `completedByUserId` (UUIDs). Published only when state changes into `completed`; updating an already completed TODO does not publish another completion event.
 
 ### `todo.shared` version 1
 
-Payload: `todoId`, `ownerId`, `actorUserId`, `sharedWithUserId` (UUIDs), and `title` (string). Consumed by Account Service notification consumer, which sends the sharing email to the recipient email currently known by Account Service. History records the share.
+Payload: `shareId`, `todoId`, `ownerId`, and `recipientId` (UUIDs). Consumed by Account Service notification consumer, which sends the sharing email to the recipient email currently known by Account Service. History records the share.
 
 ### `todo.share-withdrawn` version 1
 
-Payload: `todoId`, `ownerId`, `actorUserId`, and `sharedWithUserId` (UUIDs). History records withdrawal. Authorization checks the active share row immediately, so the event is not required for access revocation.
+Payload: `shareId`, `todoId`, `ownerId`, and `recipientId` (UUIDs). History records withdrawal. Authorization checks the active share row immediately, so the event is not required for access revocation.
 
 ### `todo.deleted` version 1
 
-Payload: `todoId`, `ownerId`, `actorUserId` (UUIDs), and `participantUserIds` (UUID array). The participant snapshot is included because the TODO no longer exists for a consumer to query. History records deletion for every participant-visible record.
+Payload: `todoId`, `ownerId`, and `deletedByUserId` (UUIDs). History records deletion.
 
 ## 5. Consumer failure and duplication
 

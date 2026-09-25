@@ -12,7 +12,7 @@ Account Service and Todo Service listen only on the Docker network. A client mus
 
 All JSON endpoints use `Content-Type: application/json`. Request bodies are limited to 100 KB. Dates are ISO-8601 strings with an explicit offset. IDs are UUIDs.
 
-The Gateway generates a request ID for every request and returns it as `x-request-id`. A valid incoming request ID may be used as correlation input; invalid or missing values are replaced with a generated UUID.
+The Gateway generates a request ID for every request and returns it as `x-request-id`. The gateway always generates its own request ID; an incoming `x-request-id` header is never used as correlation input.
 
 ## 2. Authentication
 
@@ -149,15 +149,15 @@ Response `200` has `{ "items": [], "pagination": { "page": 1, "pageSize": 20, "t
 
 ### `GET /api/v1/todos/:todoId`
 
-Returns one visible TODO with owner and sharing details. Returns `200`, `400 INVALID_UUID`, or `404 TODO_NOT_FOUND`. The same `404` is used when the TODO exists but is not visible to the caller.
+Returns one visible TODO with owner and sharing details. Returns `200`, `400 VALIDATION_ERROR`, or `404 TODO_NOT_FOUND`. The same `404` is used when the TODO exists but is not visible to the caller.
 
 ### `PATCH /api/v1/todos/:todoId`
 
-Partially updates `title`, `description`, `state`, and/or `dueDate`. At least one field is required. Owners may change every field; an active share recipient may change only `state`. Returns `200` with the updated TODO, `400` invalid input, `403 TODO_UPDATE_FORBIDDEN`, `404 TODO_NOT_FOUND`, or `409 TODO_TITLE_ALREADY_EXISTS`.
+Partially updates `title`, `description`, `state`, and/or `dueDate`. At least one field is required. Owners may change every field; an active share recipient may change only `state`. Returns `200` with the updated TODO, `400 VALIDATION_ERROR`, `404 TODO_NOT_FOUND` (used for both a missing TODO and one the caller cannot update — no existence disclosure), or `409 TODO_TITLE_ALREADY_EXISTS`.
 
 ### `DELETE /api/v1/todos/:todoId`
 
-Soft-deletes an owned TODO and emits `todo.deleted`. Returns `204`, `400 INVALID_UUID`, or `404 TODO_NOT_FOUND` for both inaccessible and missing TODOs. Only the owner can delete.
+Soft-deletes an owned TODO and emits `todo.deleted`. Returns `204`, `400 VALIDATION_ERROR`, or `404 TODO_NOT_FOUND` for both inaccessible and missing TODOs. Only the owner can delete.
 
 ### `POST /api/v1/todos/:todoId/shares`
 
@@ -167,11 +167,11 @@ Shares an owned TODO with a registered account by email. Request: `{ "recipientE
 { "id": "uuid", "todoId": "uuid", "ownerId": "uuid", "recipientId": "uuid", "permission": "state-update", "sharedAt": "2026-09-24T09:00:00.000Z" }
 ```
 
-Returns `400`, `403 TODO_SHARE_FORBIDDEN`, `404 TODO_NOT_FOUND`, `404 RECIPIENT_ACCOUNT_NOT_FOUND` for an authenticated lookup with no matching account, or `409 TODO_ALREADY_SHARED`/`TODO_SELF_SHARE_NOT_ALLOWED`. The recipient notification is asynchronous.
+Returns `400 VALIDATION_ERROR`, `404 TODO_NOT_FOUND` (used for both a missing TODO and one the caller does not own), `404 ACCOUNT_NOT_FOUND` for an authenticated lookup with no matching account, or `409 TODO_ALREADY_SHARED`/`TODO_SELF_SHARE_NOT_ALLOWED`. The recipient notification is asynchronous.
 
 ### `DELETE /api/v1/todos/:todoId/shares/:recipientId`
 
-Withdraws an active share. Only the owner can do this. Returns `204`, `400 INVALID_UUID`, `403 TODO_SHARE_FORBIDDEN`, or `404 TODO_NOT_FOUND`. Active share state is checked on every operation, so an old access token does not preserve access.
+Withdraws an active share. Only the owner can do this. Returns `204`, `400 VALIDATION_ERROR`, or `404 TODO_SHARE_NOT_FOUND` (used for both a missing share and one the caller cannot withdraw). Active share state is checked on every operation, so an old access token does not preserve access.
 
 ### `GET /api/v1/todos/:todoId/history`
 

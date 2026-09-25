@@ -15,7 +15,7 @@ import {
 
 import {
   requestContextMiddleware,
-} from "./middleware/request-context.midddleware.js";
+} from "./middleware/request-context.middleware.js";
 
 import {
   requestLoggerMiddleware,

@@ -7,6 +7,10 @@ import {
 } from "@todo/common";
 
 import {
+  authenticate,
+} from "../../../middleware/authenticate.middleware.js";
+
+import {
   getMe,
 } from "./profile.controller.js";
 
@@ -15,5 +19,6 @@ export const profileRouter =
 
 profileRouter.get(
   "/me",
+  authenticate,
   asyncHandler(getMe),
 );

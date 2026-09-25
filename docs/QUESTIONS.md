@@ -1,46 +1,73 @@
 # Questions and Challenges
 
-## 1. How can I make the Docker setup simple for a new developer?
+This is the Day 3 version of this document. Day 2's questions (Docker setup, single-service Redis
+caching) are superseded — the system is now three services plus five worker processes coordinated
+through Postgres, Redis, and RabbitMQ, and the hard problems moved with it.
+
+## 1. How do I keep two services' event contracts from silently drifting apart?
 
 ### Challenge
 
-The Docker setup was one of the most difficult parts of this project. Initially, my `Dockerfile` and `docker-compose.yml` did not produce the expected results. I was concerned that a new developer would find it difficult to run the project after cloning the repository because they might need to install PostgreSQL and Redis separately or execute several undocumented commands manually.
-
+Todo Service publishes domain events (`todo.shared`, `account.email-changed`, etc.) that Account
+Service consumes, and vice versa. Early on, the consumer's parsing schema and the producer's actual
+payload were written independently in two different packages, so a passing unit test on each side
+proved nothing about whether the two services agreed with each other. A schema mismatch only shows
+up at runtime, as a dead-lettered message, which is much harder to notice than a failing test.
 
 ### Solution
 
-I reviewed Docker and Docker Compose documentation and also used AI as a supporting resource to understand the problem. I then improved the setup by containerizing the Node.js application and defining the application, PostgreSQL, and Redis as separate services in Docker Compose.
-
-I added health checks for PostgreSQL and Redis so that their availability could be verified. The application service was configured to depend on the healthy database and cache services. I also documented the required environment variables, ports, migration process, and startup command in the README.
-
-As a result, a new developer can clone the repository, create the required `.env` file from the example, and start the complete environment using the documented Docker Compose command. This reduces manual setup and helps avoid the common “it works on my machine” problem.
+Event payload types now live once, in `@todo/contracts`, and both the producer and the consumer
+import the same type instead of each maintaining its own copy. I also deleted a second, unused
+event-contract module (`integration-events/`) that existed only in `dist/` output and was never
+imported anywhere, so there was exactly one definition of each event's shape left to drift from.
 
 ### Learning Outcome
 
-This challenge helped me understand the difference between a Docker image and a container, multi-stage Docker builds, Docker Compose service communication, health checks, volumes, environment variables, startup order, and reproducible development environments.
+A shared contract package only prevents drift if it is the *only* place the shape is defined and
+every consumer actually imports from it — a second definition sitting unused is just as dangerous
+as no shared definition at all, because nothing stops someone from wiring it up later by mistake.
 
----
-
-## 2. How can I implement Redis caching without returning incorrect or stale TODO data?
+## 2. How do I avoid two authentication implementations quietly disagreeing?
 
 ### Challenge
 
-Redis caching was another major challenge. The first implementation did not always return the expected result. A cached TODO list could become outdated after creating, updating, or deleting a TODO. Because the application supports multiple users, I also needed to ensure that one user's cached TODO data could never be returned to another user.
+The gateway grew two ways to verify an access token: a router-level middleware that also checks the
+session is still live, and a controller-level function that only checks the JWT signature. They used
+different error codes for the same failure (`INVALID_ACCESS_TOKEN` vs `UNAUTHORIZED`), and only one
+of them re-checked whether the session had been revoked.
 
 ### Solution
 
-I researched Redis caching strategies and used AI to help compare possible approaches. I implemented user-specific cache keys so that cached data is isolated by owner. The cache keys also include the TODO identifier or a normalized representation of the list query.
-
-I used a version-based invalidation strategy. When a TODO is created, updated, or deleted, the user's cache version is incremented. Future read operations use the new version, so old cached entries are no longer selected. Cached values also have a time-to-live to ensure that unused entries expire automatically.
-
-The database remains the source of truth. Redis is used only to improve read performance. If Redis is unavailable, the application logs the cache failure and continues retrieving data from PostgreSQL instead of failing the entire API request.
+I extracted the actual JWT-parsing/verification logic into one shared module
+(`security/access-token-claims.ts`) and made both call sites use it, so there is one error vocabulary.
+Endpoints that should stop working the instant a session ends (profile, email change) now go through
+the session-checked middleware. Logout deliberately keeps the signature-only path, because logout has
+to succeed even against a token whose session was already ended by something else (a second logout
+call, or reuse-detection revoking every session on the account) — collapsing that into the
+session-checked path would make logout itself fail in exactly the case it exists to handle.
 
 ### Learning Outcome
 
-This challenge helped me understand cache hits and misses, TTL, user-specific cache keys, cache invalidation, stale-data prevention, graceful degradation, and why a cache must not replace the main database.
+"Two implementations of the same concept" is not always a bug to delete down to one; sometimes it is
+two call sites with a genuinely different requirement that were previously hiding behind duplicated
+code instead of a documented decision. The fix was to make the shared part shared and keep only the
+part that is actually different.
 
----
+## 3. What did I deliberately choose not to change in this pass?
+
+This pass focused on the review's minor findings (m2–m10): health reporting, password-reset rate
+limiting, docker-compose start ordering, the Redis healthcheck, the duplicate event contract, the
+two auth paths, and documentation drift in `docs/api.md` and `docs/events.md`. The larger, riskier
+findings from the same review — the ones that require an actual design decision rather than a small
+correction (for example, how session revocation should be checked without a synchronous call to
+Account Service on every TODO read) — were left for a follow-up pass rather than folded in here,
+because getting that tradeoff right is worth its own review rather than a rushed change alongside
+a batch of smaller fixes.
 
 ## Overall Reflection
 
-The Docker and Redis tasks were the most challenging parts of the project because my initial implementations did not provide the expected results. Instead of stopping, I identified the specific problems, reviewed relevant documentation, used AI as a supporting learning tool, tested different solutions, and corrected the implementations. These challenges improved both my technical knowledge and my confidence in troubleshooting backend infrastructure problems.
+The recurring theme this time was not "does this one component work" but "do two independently
+written components still agree with each other" — a shared contract, a duplicated auth check, and a
+stale doc are all the same failure mode: something was true when it was written and nothing forced it
+to stay true afterward. `npm run check` catches the first kind of bug; it does not catch the second,
+which is why this document exists.

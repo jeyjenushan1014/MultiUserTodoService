@@ -63,9 +63,8 @@ services:
 
     healthcheck:
       test:
-        - CMD
-        - redis-cli
-        - ping
+        - CMD-SHELL
+        - redis-cli -a "$${REDIS_PASSWORD}" ping
       interval: 5s
       timeout: 3s
       retries: 20
@@ -131,6 +130,8 @@ services:
     depends_on:
       todo-postgres:
         condition: service_healthy
+      todo-migrations:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
 
@@ -573,6 +574,7 @@ services:
       ACCOUNT_SERVICE_URL: http://account-service:3001
       TODO_SERVICE_URL: http://todo-service:3002
       DOWNSTREAM_TIMEOUT_MS: ${DOWNSTREAM_TIMEOUT_MS:-5000}
+      REQUEST_BODY_LIMIT: ${REQUEST_BODY_LIMIT:-100kb}
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
@@ -614,9 +616,9 @@ services:
 
     depends_on:
       account-service:
-        condition: service_healthy
+        condition: service_started
       todo-service:
-        condition: service_healthy
+        condition: service_started
 
     restart: unless-stopped
 

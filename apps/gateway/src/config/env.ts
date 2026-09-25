@@ -128,6 +128,11 @@ PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:
     .max(30000)
     .default(5000),
 
+  REQUEST_BODY_LIMIT: z
+    .string()
+    .min(1)
+    .default("100kb"),
+
   INTERNAL_SERVICE_SECRET: z
     .string()
     .min(32),

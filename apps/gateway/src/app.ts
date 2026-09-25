@@ -36,6 +36,10 @@ import {
 } from "./middleware/request-logger.middleware.js";
 
 import {
+  env,
+} from "./config/env.js";
+
+import {
   passwordResetRouter,
 } from "./modules/auth/password-reset/password-reset.routes.js";
 
@@ -81,7 +85,7 @@ app.use(
 
 app.use(
   express.json({
-    limit: "100kb",
+    limit: env.REQUEST_BODY_LIMIT,
     strict: true,
   }),
 );

@@ -15,8 +15,8 @@ import {
 } from "../../../clients/account-service.client.js";
 
 import {
-  verifyAccessToken,
-} from "../../../security/access-token-verifier.js";
+  getCallerIdentity,
+} from "../../../middleware/authenticate.middleware.js";
 
 export const changeEmail:
   RequestHandler = async (
@@ -24,9 +24,7 @@ export const changeEmail:
     response,
   ): Promise<void> => {
     const identity =
-      await verifyAccessToken(
-        request,
-      );
+      getCallerIdentity(response);
 
     const requestId =
       getRequestId();

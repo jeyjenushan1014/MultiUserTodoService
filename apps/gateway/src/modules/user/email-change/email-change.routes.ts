@@ -7,6 +7,10 @@ import {
 } from "@todo/common";
 
 import {
+  authenticate,
+} from "../../../middleware/authenticate.middleware.js";
+
+import {
   validateBody,
 } from "../../../middleware/validate-body.middleware.js";
 
@@ -23,6 +27,7 @@ export const emailChangeRouter =
 
 emailChangeRouter.patch(
   "/me/email",
+  authenticate,
   validateBody(
     changeEmailSchema,
   ),

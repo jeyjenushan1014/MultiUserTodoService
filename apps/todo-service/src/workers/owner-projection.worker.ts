@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition */
-
 import {
   database,
   verifyDatabaseConnection,
@@ -50,6 +48,8 @@ async function startWorkerLoop(): Promise<void> {
 
       activeConsumer = undefined;
 
+      // shutdownStarted can flip while awaiting above, via the SIGTERM/SIGINT handlers
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (!shutdownStarted) {
         logger.warn(
           "TODO owner projection RabbitMQ connection closed; reconnecting",

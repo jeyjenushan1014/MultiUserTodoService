@@ -53,7 +53,7 @@ interface TokenOptions {
     string;
 
   readonly expiresIn?:
-    string;
+    string | number;
 }
 
 async function createToken(
@@ -133,7 +133,7 @@ describe(
             401,
 
           code:
-            "UNAUTHORIZED",
+            "INVALID_ACCESS_TOKEN",
         });
       },
     );
@@ -152,7 +152,7 @@ describe(
             401,
 
           code:
-            "UNAUTHORIZED",
+            "INVALID_ACCESS_TOKEN",
         });
       },
     );
@@ -177,7 +177,7 @@ describe(
             401,
 
           code:
-            "UNAUTHORIZED",
+            "INVALID_ACCESS_TOKEN",
         });
       },
     );
@@ -202,7 +202,7 @@ describe(
             401,
 
           code:
-            "UNAUTHORIZED",
+            "INVALID_ACCESS_TOKEN",
         });
       },
     );
@@ -213,7 +213,7 @@ describe(
         const token =
           await createToken({
             expiresIn:
-              "0s",
+              Math.floor(Date.now() / 1000) - 60,
           });
 
         await expect(
@@ -227,7 +227,7 @@ describe(
             401,
 
           code:
-            "UNAUTHORIZED",
+            "INVALID_ACCESS_TOKEN",
         });
       },
     );

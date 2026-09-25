@@ -7,6 +7,10 @@ import {
 
 import { PostgresPasswordResetRepository } from "../password-reset.repository.js";
 
+import {
+  decryptPasswordResetToken,
+} from "../password-reset-token.crypto.js";
+
 const clientMocks = vi.hoisted(() => ({
   query: vi.fn(),
   release: vi.fn(),
@@ -41,19 +45,14 @@ describe("PostgresPasswordResetRepository", () => {
     // COMMIT
     clientMocks.query.mockResolvedValueOnce({});
 
-    const payload = {
-      userId: "user-id",
-      email: "user@example.com",
-      resetToken: "reset-token",
-      expiresAt: expiresAt.toISOString(),
-    };
+    const resetToken = "reset-token";
 
     await repo.createPasswordReset({
       tokenId: "token-id",
       eventId: "event-id",
       userId: "user-id",
-      email: payload.email,
-      resetToken: payload.resetToken,
+      email: "user@example.com",
+      resetToken,
       tokenHash: "hash",
       occurredAt,
       expiresAt,
@@ -67,8 +66,28 @@ describe("PostgresPasswordResetRepository", () => {
     expect(outboxCall).toBeDefined();
 
     const params = outboxCall?.[1] as unknown[];
-    // payload parameter is the 6th parameter (index 5)
-    expect(params[5]).toBe(JSON.stringify(payload));
+    const payload = JSON.parse(
+      params[5] as string,
+    ) as {
+      userId: string;
+      email: string;
+      encryptedResetToken: string;
+      expiresAt: string;
+    };
+
+    expect(payload.userId).toBe("user-id");
+    expect(payload.email).toBe("user@example.com");
+    expect(payload.expiresAt).toBe(
+      expiresAt.toISOString(),
+    );
+    expect(
+      decryptPasswordResetToken(
+        payload.encryptedResetToken,
+      ),
+    ).toBe(resetToken);
+    expect(
+      params[5],
+    ).not.toContain(resetToken);
   });
 
   it("completes password reset, consumes tokens and revokes sessions", async () => {

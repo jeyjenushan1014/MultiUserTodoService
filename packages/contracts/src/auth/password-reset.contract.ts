@@ -14,7 +14,7 @@ export interface ConfirmPasswordResetRequest {
 export interface AccountPasswordResetRequestedPayload {
   readonly userId: string;
   readonly email: string;
-  readonly resetToken: string;
+  readonly encryptedResetToken: string;
   readonly expiresAt: string;
 }
 

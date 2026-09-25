@@ -72,6 +72,10 @@ describe(
             sendTodoShareWithdrawnEmail:
               vi.fn()
                 .mockResolvedValue(undefined),
+
+            sendPasswordResetEmail:
+              vi.fn()
+                .mockResolvedValue(undefined),
           };
 
         const consumer =
@@ -148,6 +152,10 @@ describe(
                 .mockResolvedValue(undefined),
 
             sendTodoShareWithdrawnEmail:
+              vi.fn()
+                .mockResolvedValue(undefined),
+
+            sendPasswordResetEmail:
               vi.fn()
                 .mockResolvedValue(undefined),
           };

@@ -4,6 +4,16 @@ import type {
 } from "amqplib";
 
 import {
+  z,
+} from "zod";
+
+import type {
+  AccountPasswordResetRequestedPayload,
+  TodoShareWithdrawnPayload,
+  TodoSharedPayload,
+} from "@todo/contracts";
+
+import {
   database,
 } from "../config/database.js";
 
@@ -15,14 +25,61 @@ import {
   logger,
 } from "../config/logger.js";
 
-import {
-  todoSharedNotificationSchema,
-  todoShareWithdrawnNotificationSchema,
-} from "./notification.types.js";
-
 import type {
   NotificationMailer,
 } from "./notification.mailer.js";
+
+import {
+  decryptPasswordResetToken,
+} from "../modules/account/password-reset/password-reset-token.crypto.js";
+
+const todoSharedNotificationSchema =
+  z.object({
+    eventId: z.uuid(),
+    eventType: z.literal("todo.shared"),
+    eventVersion: z.number().int(),
+    producer: z.literal("todo-service"),
+    requestId: z.uuid(),
+    occurredAt: z.string(),
+    payload: z.object({
+      shareId: z.uuid(),
+      todoId: z.uuid(),
+      ownerId: z.uuid(),
+      recipientId: z.uuid(),
+    }) satisfies z.ZodType<TodoSharedPayload>,
+  });
+
+const todoShareWithdrawnNotificationSchema =
+  z.object({
+    eventId: z.uuid(),
+    eventType: z.literal("todo.share-withdrawn"),
+    eventVersion: z.number().int(),
+    producer: z.literal("todo-service"),
+    requestId: z.uuid(),
+    occurredAt: z.string(),
+    payload: z.object({
+      shareId: z.uuid(),
+      todoId: z.uuid(),
+      ownerId: z.uuid(),
+      recipientId: z.uuid(),
+    }) satisfies z.ZodType<TodoShareWithdrawnPayload>,
+  });
+
+const passwordResetRequestedNotificationSchema =
+  z.object({
+    eventId: z.uuid(),
+    eventType: z.literal("account.password-reset-requested"),
+    eventVersion: z.number().int(),
+    producer: z.literal("account-service"),
+    requestId: z.uuid(),
+    occurredAt: z.string(),
+    payload: z.object({
+      userId: z.uuid(),
+      email: z.email(),
+      encryptedResetToken: z.string().min(1),
+      expiresAt: z.string(),
+    }) satisfies z.ZodType<AccountPasswordResetRequestedPayload>,
+  });
 
 function parseMessage(
   message: ConsumeMessage,
@@ -109,6 +166,12 @@ export class TodoNotificationConsumer {
       env.RABBITMQ_EXCHANGE,
       "todo.share-withdrawn",
     );
+
+    await this.channel.bindQueue(
+      env.RABBITMQ_NOTIFICATION_QUEUE,
+      env.RABBITMQ_EXCHANGE,
+      "account.password-reset-requested",
+    );
   }
 
   public async start(): Promise<void> {
@@ -158,23 +221,42 @@ export class TodoNotificationConsumer {
           event,
         );
 
-      if (!withdrawn.success) {
+      if (withdrawn.success) {
+        const recipientEmail =
+          await findAccountEmail(
+            withdrawn.data.payload.recipientId,
+          );
+
+        if (recipientEmail !== undefined) {
+          await this.mailer.sendTodoShareWithdrawnEmail(
+            recipientEmail,
+            withdrawn.data.payload.todoId,
+          );
+        }
+
+        this.channel.ack(message);
+        return;
+      }
+
+      const passwordResetRequested =
+        passwordResetRequestedNotificationSchema.safeParse(
+          event,
+        );
+
+      if (!passwordResetRequested.success) {
         throw new Error(
-          "Invalid TODO notification event",
+          "Invalid notification event",
         );
       }
 
-      const recipientEmail =
-        await findAccountEmail(
-          withdrawn.data.payload.recipientId,
-        );
-
-      if (recipientEmail !== undefined) {
-        await this.mailer.sendTodoShareWithdrawnEmail(
-          recipientEmail,
-          withdrawn.data.payload.todoId,
-        );
-      }
+      await this.mailer.sendPasswordResetEmail(
+        passwordResetRequested.data.payload.email,
+        decryptPasswordResetToken(
+          passwordResetRequested.data.payload
+            .encryptedResetToken,
+        ),
+        passwordResetRequested.data.payload.expiresAt,
+      );
 
       this.channel.ack(message);
     } catch (error) {

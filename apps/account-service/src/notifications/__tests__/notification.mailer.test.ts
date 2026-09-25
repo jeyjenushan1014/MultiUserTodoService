@@ -106,6 +106,38 @@ describe(
     );
 
     it(
+      "sends a usable password reset token",
+      async () => {
+        const mailer =
+          new SmtpNotificationMailer();
+
+        await mailer.sendPasswordResetEmail(
+          "recipient@example.com",
+          "reset-token",
+          "2026-09-24T12:00:00.000Z",
+        );
+
+        expect(
+          sendMailMock,
+        ).toHaveBeenCalledWith({
+          from:
+            "no-reply@todo.local",
+
+          to:
+            "recipient@example.com",
+
+          subject:
+            "Reset your password",
+
+          text:
+            "Reset your password.\n\n" +
+            "Reset token: reset-token\n" +
+            "Expires at: 2026-09-24T12:00:00.000Z",
+        });
+      },
+    );
+
+    it(
       "propagates SMTP errors",
       async () => {
         const error =

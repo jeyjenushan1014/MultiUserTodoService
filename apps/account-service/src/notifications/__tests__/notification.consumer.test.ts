@@ -15,6 +15,10 @@ import {
   TodoNotificationConsumer,
 } from "../notification.consumer.js";
 
+import {
+  encryptPasswordResetToken,
+} from "../../modules/account/password-reset/password-reset-token.crypto.js";
+
 import type {
   NotificationMailer,
 } from "../notification.mailer.js";
@@ -34,6 +38,9 @@ vi.mock(
 
       RABBITMQ_NOTIFICATION_DLQ:
         "todo.notifications.dlq",
+
+      INTERNAL_SERVICE_SECRET:
+        "test-internal-service-secret-with-more-than-32-characters",
     },
   }),
 );
@@ -160,11 +167,15 @@ function createMailer(): {
   mailer: NotificationMailer;
   sendTodoSharedEmailMock: ReturnType<typeof vi.fn>;
   sendTodoShareWithdrawnEmailMock: ReturnType<typeof vi.fn>;
+  sendPasswordResetEmailMock: ReturnType<typeof vi.fn>;
 } {
   const sendTodoSharedEmailMock =
     vi.fn().mockResolvedValue(undefined);
 
   const sendTodoShareWithdrawnEmailMock =
+    vi.fn().mockResolvedValue(undefined);
+
+  const sendPasswordResetEmailMock =
     vi.fn().mockResolvedValue(undefined);
 
   return {
@@ -174,10 +185,14 @@ function createMailer(): {
 
       sendTodoShareWithdrawnEmail:
         sendTodoShareWithdrawnEmailMock,
+
+      sendPasswordResetEmail:
+        sendPasswordResetEmailMock,
     },
 
     sendTodoSharedEmailMock,
     sendTodoShareWithdrawnEmailMock,
+    sendPasswordResetEmailMock,
   };
 }
 
@@ -190,6 +205,9 @@ const sharedEvent = {
 
   eventVersion: 1,
 
+  producer:
+    "todo-service",
+
   requestId:
     "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
 
@@ -197,6 +215,9 @@ const sharedEvent = {
     "2026-09-24T10:00:00.000Z",
 
   payload: {
+    shareId:
+      "e0ff170f-f355-4dbd-b246-f087715d59ca",
+
     todoId:
       "3bf53c86-0932-43d0-85ed-bd536c694677",
 
@@ -205,12 +226,6 @@ const sharedEvent = {
 
     recipientId:
       "7e2c3d67-0b12-4f65-9c70-2cdbbb443c4e",
-
-    permission:
-      "state-update",
-
-    sharedAt:
-      "2026-09-24T10:00:00.000Z",
   },
 };
 
@@ -223,6 +238,9 @@ const withdrawnEvent = {
 
   eventVersion: 1,
 
+  producer:
+    "todo-service",
+
   requestId:
     "67dd883e-0ca4-4101-9a11-5bf22dbfcaf0",
 
@@ -230,6 +248,9 @@ const withdrawnEvent = {
     "2026-09-24T10:00:00.000Z",
 
   payload: {
+    shareId:
+      "e0ff170f-f355-4dbd-b246-f087715d59ca",
+
     todoId:
       "3bf53c86-0932-43d0-85ed-bd536c694677",
 
@@ -238,9 +259,41 @@ const withdrawnEvent = {
 
     recipientId:
       "7e2c3d67-0b12-4f65-9c70-2cdbbb443c4e",
+  },
+};
 
-    withdrawnAt:
-      "2026-09-24T10:00:00.000Z",
+const passwordResetRequestedEvent = {
+  eventId:
+    "7d4b5d3d-1c7b-4f09-8d8d-438b3d5e7e3d",
+
+  eventType:
+    "account.password-reset-requested",
+
+  eventVersion: 1,
+
+  producer:
+    "account-service",
+
+  requestId:
+    "0a1fd5d3-3d6e-4f9d-9a1d-82d79175efcc",
+
+  occurredAt:
+    "2026-09-24T11:00:00.000Z",
+
+  payload: {
+    userId:
+      "8a7d9d1c-7f79-4d13-8d42-24f5d8769a2b",
+
+    email:
+      "recipient@example.com",
+
+    encryptedResetToken:
+      encryptPasswordResetToken(
+        "reset-token",
+      ),
+
+    expiresAt:
+      "2026-09-24T12:00:00.000Z",
   },
 };
 
@@ -431,6 +484,54 @@ describe(
           ).toHaveBeenCalledWith(
             "recipient@example.com",
             withdrawnEvent.payload.todoId,
+          );
+        });
+
+        expect(
+          channel.ackMock,
+        ).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it(
+      "sends an email for account.password-reset-requested",
+      async () => {
+        const channel =
+          createChannel();
+
+        const {
+          mailer,
+          sendPasswordResetEmailMock,
+        } =
+          createMailer();
+
+        const consumer =
+          new TodoNotificationConsumer(
+            channel.channel,
+            mailer,
+          );
+
+        await consumer.start();
+
+        const callback =
+          channel.consumeMock.mock
+            .calls[0]?.[1] as (
+              message: ConsumeMessage,
+            ) => void;
+
+        callback(
+          createMessage(
+            passwordResetRequestedEvent,
+          ),
+        );
+
+        await vi.waitFor(() => {
+          expect(
+            sendPasswordResetEmailMock,
+          ).toHaveBeenCalledWith(
+            "recipient@example.com",
+            "reset-token",
+            passwordResetRequestedEvent.payload.expiresAt,
           );
         });
 

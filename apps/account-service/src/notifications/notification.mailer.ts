@@ -16,6 +16,12 @@ export interface NotificationMailer {
     recipientEmail: string,
     todoId: string,
   ): Promise<void>;
+
+  sendPasswordResetEmail(
+    recipientEmail: string,
+    resetToken: string,
+    expiresAt: string,
+  ): Promise<void>;
 }
 
 export class SmtpNotificationMailer
@@ -53,6 +59,22 @@ implements NotificationMailer {
       text:
         `TODO sharing was withdrawn.\n\n` +
         `TODO ID: ${todoId}`,
+    });
+  }
+
+  public async sendPasswordResetEmail(
+    recipientEmail: string,
+    resetToken: string,
+    expiresAt: string,
+  ): Promise<void> {
+    await this.transporter.sendMail({
+      from: env.MAIL_FROM,
+      to: recipientEmail,
+      subject: "Reset your password",
+      text:
+        `Reset your password.\n\n` +
+        `Reset token: ${resetToken}\n` +
+        `Expires at: ${expiresAt}`,
     });
   }
 }

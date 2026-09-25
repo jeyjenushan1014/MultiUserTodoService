@@ -24,6 +24,10 @@ import type {
   PasswordResetRepository,
 } from "./password-reset.repository.interface.js";
 
+import {
+  encryptPasswordResetToken,
+} from "./password-reset-token.crypto.js";
+
 interface PasswordResetUserRow {
   readonly id: string;
   readonly email: string;
@@ -157,7 +161,10 @@ implements PasswordResetRepository {
       AccountPasswordResetRequestedPayload = {
         userId: data.userId,
         email: data.email,
-        resetToken: data.resetToken,
+        encryptedResetToken:
+          encryptPasswordResetToken(
+            data.resetToken,
+          ),
         expiresAt:
           data.expiresAt.toISOString(),
       };

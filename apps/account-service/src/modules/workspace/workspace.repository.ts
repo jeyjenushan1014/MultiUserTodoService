@@ -405,6 +405,39 @@ implements WorkspaceRepository {
     }
   }
 
+  public async listWorkspacesForUser(
+    userId: string,
+  ): Promise<readonly Workspace[]> {
+    const client = await database.connect();
+
+    try {
+      const result = await client.query<WorkspaceDatabaseRow & { readonly role: WorkspaceRole }>(
+        `
+          SELECT
+            workspaces.id,
+            workspaces.name,
+            workspaces.created_by,
+            workspaces.created_at
+          FROM workspaces
+          INNER JOIN workspace_members
+            ON workspace_members.workspace_id = workspaces.id
+          WHERE workspace_members.user_id = $1
+          ORDER BY workspaces.created_at ASC
+        `,
+        [userId],
+      );
+
+      return result.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        createdBy: row.created_by,
+        createdAt: row.created_at.toISOString(),
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
   public async addMember(
     data: AddWorkspaceMemberData,
   ): Promise<MembershipMutationResult> {

@@ -139,6 +139,19 @@ export class WorkspaceService {
     return result.members;
   }
 
+  public async listWorkspacesForAccount(
+    userId: string,
+  ): Promise<readonly WorkspaceAccount[]> {
+    const workspaces = await this.repository.listWorkspacesForUser(userId);
+
+    return workspaces.map((w) => ({
+      id: w.id,
+      name: w.name,
+      createdBy: w.createdBy,
+      createdAt: w.createdAt,
+    }));
+  }
+
   public async addMember(
     workspaceId: string,
     actorId: string,

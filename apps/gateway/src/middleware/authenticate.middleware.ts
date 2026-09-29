@@ -24,6 +24,7 @@ import {
 
 export interface AuthenticationLocals {
   callerIdentity?: CallerIdentity;
+  accessTokenIssuedAt?: number;
 }
 
 /*
@@ -60,6 +61,7 @@ async function authenticateRequest(
     sessionId: claims.sessionId,
     email: claims.email,
   };
+  response.locals.accessTokenIssuedAt = claims.issuedAt;
 }
 
 function createAuthenticateMiddleware():

@@ -17,6 +17,7 @@ import {
 import {
   validateParams,
 } from "../../middleware/validate-params.middleware.js";
+import { authorizeWorkspace } from "../../middleware/authorize-workspace.middleware.js";
 
 import {
   addWorkspaceMemberController,
@@ -48,6 +49,7 @@ workspaceRouter.post(
 workspaceRouter.get(
   "/:workspaceId",
   authenticate,
+  authorizeWorkspace("workspace.read"),
   validateParams(workspaceIdParamsSchema),
   asyncHandler(getWorkspaceController),
 );
@@ -55,6 +57,7 @@ workspaceRouter.get(
 workspaceRouter.get(
   "/:workspaceId/members",
   authenticate,
+  authorizeWorkspace("member.list"),
   validateParams(workspaceIdParamsSchema),
   asyncHandler(listWorkspaceMembersController),
 );
@@ -62,6 +65,7 @@ workspaceRouter.get(
 workspaceRouter.post(
   "/:workspaceId/members",
   authenticate,
+  authorizeWorkspace("member.add"),
   validateParams(workspaceIdParamsSchema),
   validateBody(addWorkspaceMemberSchema),
   asyncHandler(addWorkspaceMemberController),
@@ -70,6 +74,7 @@ workspaceRouter.post(
 workspaceRouter.patch(
   "/:workspaceId/members/:userId",
   authenticate,
+  authorizeWorkspace("member.change-role"),
   validateParams(workspaceMemberParamsSchema),
   validateBody(changeWorkspaceMemberRoleSchema),
   asyncHandler(changeWorkspaceMemberRoleController),
@@ -78,6 +83,7 @@ workspaceRouter.patch(
 workspaceRouter.delete(
   "/:workspaceId/members/:userId",
   authenticate,
+  authorizeWorkspace("member.remove"),
   validateParams(workspaceMemberParamsSchema),
   asyncHandler(removeWorkspaceMemberController),
 );

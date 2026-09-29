@@ -18,6 +18,10 @@ import {
   resolveAccountBodySchema,
 } from "./account-lookup.validation.js";
 
+import {
+  getAccountWorkspacesController,
+} from "./account-lookup.workspaces.controller.js";
+
 export const accountLookupRouter =
   Router();
 
@@ -28,4 +32,10 @@ accountLookupRouter.post(
     resolveAccountBodySchema,
   ),
   resolveAccountController,
+);
+
+accountLookupRouter.get(
+  "/:userId/workspaces",
+  requireInternalService,
+  getAccountWorkspacesController,
 );

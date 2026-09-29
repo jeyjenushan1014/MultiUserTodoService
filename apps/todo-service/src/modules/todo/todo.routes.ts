@@ -87,6 +87,9 @@ import {
   RedisTodoCacheInvalidator,
 } from "./cache/redis.todo.cache.invalidator.js";
 
+import { database } from "../../config/database.js";
+import { authorizeWorkspace } from "../../middleware/authorize-workspace.middleware.js";
+
 export const todoRouter =
   Router();
 
@@ -129,9 +132,35 @@ todoRouter.get(
 
 todoRouter.post(
   "/:todoId/shares",
+  // Attach workspaceId when available (fail-open for NULL workspace_id)
+  async (req, _res, next) => {
+    try {
+      const todoId = (req.params as Record<string, string>).todoId;
+
+      if (typeof todoId === "string" && todoId.length > 0) {
+        const result = await database.query<{ workspace_id: string | null }>(
+          `SELECT workspace_id FROM todos WHERE id = $1 AND deleted_at IS NULL`,
+          [todoId],
+        );
+
+        const row = result.rows[0];
+
+        if (row && row.workspace_id !== null) {
+          (req.params as Record<string, string>).workspaceId = row.workspace_id;
+        }
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  },
+
   validateParams(
     getTodoParamsSchema,
   ),
+  // Require workspace read permission if the TODO belongs to a workspace
+  authorizeWorkspace("task.update"),
   validateBody(
     createTodoShareBodySchema,
   ),
@@ -140,9 +169,34 @@ todoRouter.post(
 
 todoRouter.delete(
   "/:todoId/shares/:recipientId",
+  async (req, _res, next) => {
+    try {
+      const todoId = (req.params as Record<string, string>).todoId;
+
+      if (typeof todoId === "string" && todoId.length > 0) {
+        const result = await database.query<{ workspace_id: string | null }>(
+          `SELECT workspace_id FROM todos WHERE id = $1 AND deleted_at IS NULL`,
+          [todoId],
+        );
+
+        const row = result.rows[0];
+
+        if (row && row.workspace_id !== null) {
+          (req.params as Record<string, string>).workspaceId = row.workspace_id;
+        }
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  },
+
   validateParams(
     withdrawTodoShareParamsSchema,
   ),
+  // If the TODO belongs to a workspace, require update permission
+  authorizeWorkspace("task.update"),
   withdrawTodoShareController,
 );
 
@@ -151,6 +205,31 @@ todoRouter.get(
   validateParams(
     getTodoParamsSchema,
   ),
+  // Attach workspaceId for read checks when present; GetTodoService also applies access rules
+  async (req, _res, next) => {
+    try {
+      const todoId = (req.params as Record<string, string>).todoId;
+
+      if (typeof todoId === "string" && todoId.length > 0) {
+        const result = await database.query<{ workspace_id: string | null }>(
+          `SELECT workspace_id FROM todos WHERE id = $1 AND deleted_at IS NULL`,
+          [todoId],
+        );
+
+        const row = result.rows[0];
+
+        if (row && row.workspace_id !== null) {
+          (req.params as Record<string, string>).workspaceId = row.workspace_id;
+        }
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  authorizeWorkspace("task.read"),
   getTodoController,
 );
 
@@ -159,6 +238,30 @@ todoRouter.get(
   validateParams(
     getTodoParamsSchema,
   ),
+  async (req, _res, next) => {
+    try {
+      const todoId = (req.params as Record<string, string>).todoId;
+
+      if (typeof todoId === "string" && todoId.length > 0) {
+        const result = await database.query<{ workspace_id: string | null }>(
+          `SELECT workspace_id FROM todos WHERE id = $1 AND deleted_at IS NULL`,
+          [todoId],
+        );
+
+        const row = result.rows[0];
+
+        if (row && row.workspace_id !== null) {
+          (req.params as Record<string, string>).workspaceId = row.workspace_id;
+        }
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  authorizeWorkspace("task.read"),
   listTodoHistoryController,
 );
 
@@ -170,6 +273,30 @@ todoRouter.patch(
   validateBody(
     updateTodoBodySchema,
   ),
+  async (req, _res, next) => {
+    try {
+      const todoId = (req.params as Record<string, string>).todoId;
+
+      if (typeof todoId === "string" && todoId.length > 0) {
+        const result = await database.query<{ workspace_id: string | null }>(
+          `SELECT workspace_id FROM todos WHERE id = $1 AND deleted_at IS NULL`,
+          [todoId],
+        );
+
+        const row = result.rows[0];
+
+        if (row && row.workspace_id !== null) {
+          (req.params as Record<string, string>).workspaceId = row.workspace_id;
+        }
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  authorizeWorkspace("task.update"),
   updateTodoController,
 );
 
@@ -178,5 +305,29 @@ todoRouter.delete(
   validateParams(
     getTodoParamsSchema,
   ),
+  async (req, _res, next) => {
+    try {
+      const todoId = (req.params as Record<string, string>).todoId;
+
+      if (typeof todoId === "string" && todoId.length > 0) {
+        const result = await database.query<{ workspace_id: string | null }>(
+          `SELECT workspace_id FROM todos WHERE id = $1 AND deleted_at IS NULL`,
+          [todoId],
+        );
+
+        const row = result.rows[0];
+
+        if (row && row.workspace_id !== null) {
+          (req.params as Record<string, string>).workspaceId = row.workspace_id;
+        }
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  authorizeWorkspace("task.delete"),
   deleteTodoController,
 );

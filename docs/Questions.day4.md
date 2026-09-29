@@ -339,7 +339,61 @@ and immediate-revocation proof are not implemented yet.
 A transactional outbox removes the database/broker dual-write gap, but it does
 not by itself prove authorization propagation or TN-7.
 
+## Activity 11 — Exposing workspace membership as a public API (TN-1, TN-8, TN-12)
 
+### Question
+
+The workspace persistence layer (schema, repository, self-change guard, last-administrator guard,
+membership event) existed, but nothing outside a unit test could reach it. What HTTP surface should
+expose it, and how do I avoid leaking workspace existence through the response shape?
+
+### Challenge
+
+Account Service already owns membership, so it makes sense for it to also enforce `canPerform`
+directly against its own database rather than waiting for the projection consumer planned for TN-6.
+The read endpoints (get workspace, list members) needed a rule for what a non-member sees: revealing
+"403 forbidden" for a real workspace but "404" for a fake one would let a caller learn which
+workspace IDs exist by probing.
+
+### What I considered
+
+1. Return `403` for a real workspace the caller cannot access, `404` for one that does not exist.
+2. Return `404` for both, since every current role can read a workspace it belongs to — the only
+   real distinction is "member" vs "not a member," and a non-member should not learn which case
+   applies.
+
+### Resolution
+
+Chose option 2. `findWorkspaceForActor` and `listMembers` fold "workspace does not exist" and "actor
+is not a member" into the same `not-found` result before it ever reaches the controller. Mutation
+endpoints keep `forbidden` (a member lacking permission) distinct from `not-found` (no membership at
+all), because a member already knows their own role — that isn't a leak.
+
+### Evidence
+
+- `npm run test -w @todo/account-service -- workspace` (repository read tests, service tests,
+  validation tests) and `npm run test -w @todo/gateway -- workspace` (gateway validation tests).
+- Live manual verification against the running `docker-compose` stack, recorded in
+  `docs/authorization.md` §7: self-add rejected with `403` (TN-8), a removed member gets the same
+  `404` a nonexistent workspace would (TN-12), and a `viewer` attempting an administrator-only
+  action gets `403`.
+- `docs/api.md` §5a documents every endpoint and status code exactly as the code returns them.
+
+### Remaining challenge
+
+`last-administrator` (TN-9) could not be reproduced live with two real accounts under the current
+three-role model — reaching it requires an actor with admin permission acting on a target who is
+already the sole administrator, which the self-change guard and the permission table together make
+unreachable through the public API today. This is recorded as an honest gap in
+`docs/authorization.md` §5, not hidden. It stays covered only at the repository/service level, where
+the database rows are constructed directly instead of arising from a real request sequence.
+
+### Learning
+
+Folding "not-found" and "actor lacks membership" together has to be decided per-endpoint, not
+globally — mutation endpoints still need `forbidden` to distinguish "you're a member but not
+allowed" from "you have no relationship to this workspace at all," while read endpoints do not,
+because every role can read.
 
 ```markdown
 ## Activity N — Short title (requirement IDs)

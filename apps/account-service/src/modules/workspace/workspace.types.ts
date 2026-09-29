@@ -58,3 +58,31 @@ export interface MembershipDatabaseRow {
   readonly user_id: string;
   readonly role: WorkspaceRole;
 }
+
+export interface WorkspaceMember {
+  readonly userId: string;
+  readonly role: WorkspaceRole;
+}
+
+/*
+"not-found" covers both a workspace that does not exist and a
+workspace the actor is not a member of, so a caller cannot learn a
+workspace exists by the response differing (TN-12).
+*/
+export type WorkspaceLookupResult =
+  | {
+      readonly status: "found";
+      readonly workspace: Workspace;
+    }
+  | {
+      readonly status: "not-found";
+    };
+
+export type MemberListResult =
+  | {
+      readonly status: "found";
+      readonly members: readonly WorkspaceMember[];
+    }
+  | {
+      readonly status: "not-found";
+    };

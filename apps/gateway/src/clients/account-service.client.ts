@@ -22,6 +22,14 @@ import type {
    ResolveAccountResponse
     } from "@todo/contracts";
 
+import type {
+  AddWorkspaceMemberRequest,
+  ChangeWorkspaceMemberRoleRequest,
+  CreateWorkspaceRequest,
+  ListWorkspaceMembersResponse,
+  WorkspaceResponse,
+} from "@todo/contracts";
+
 import {
   AppError,
   encodeIdentity,
@@ -202,7 +210,8 @@ interface AccountRequestOptions {
   readonly method:
     | "GET"
     | "POST"
-    | "PATCH";
+    | "PATCH"
+    | "DELETE";
 
   readonly requestId:
     string;
@@ -740,6 +749,221 @@ export async function confirmPasswordReset(
 
     requiresServiceKey:
       true,
+  });
+}
+
+/*
+POST /internal/v1/workspaces
+*/
+export async function createWorkspace(
+  identity:
+    CallerIdentity,
+  request:
+    CreateWorkspaceRequest,
+  requestId:
+    string,
+): Promise<WorkspaceResponse> {
+  const result =
+    await sendAccountRequest<
+      WorkspaceResponse
+    >({
+      path:
+        "/internal/v1/workspaces",
+
+      method:
+        "POST",
+
+      requestId,
+
+      identity,
+
+      body:
+        request,
+    });
+
+  if (
+    result === undefined ||
+    !isRecord(result)
+  ) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
+}
+
+/*
+GET /internal/v1/workspaces/:workspaceId
+*/
+export async function getWorkspace(
+  identity:
+    CallerIdentity,
+  workspaceId:
+    string,
+  requestId:
+    string,
+): Promise<WorkspaceResponse> {
+  const result =
+    await sendAccountRequest<
+      WorkspaceResponse
+    >({
+      path:
+        `/internal/v1/workspaces/${workspaceId}`,
+
+      method:
+        "GET",
+
+      requestId,
+
+      identity,
+    });
+
+  if (
+    result === undefined ||
+    !isRecord(result)
+  ) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
+}
+
+/*
+GET /internal/v1/workspaces/:workspaceId/members
+*/
+export async function listWorkspaceMembers(
+  identity:
+    CallerIdentity,
+  workspaceId:
+    string,
+  requestId:
+    string,
+): Promise<ListWorkspaceMembersResponse> {
+  const result =
+    await sendAccountRequest<
+      ListWorkspaceMembersResponse
+    >({
+      path:
+        `/internal/v1/workspaces/${workspaceId}/members`,
+
+      method:
+        "GET",
+
+      requestId,
+
+      identity,
+    });
+
+  if (
+    result === undefined ||
+    !isRecord(result)
+  ) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+
+  return result;
+}
+
+/*
+POST /internal/v1/workspaces/:workspaceId/members
+*/
+export async function addWorkspaceMember(
+  identity:
+    CallerIdentity,
+  workspaceId:
+    string,
+  request:
+    AddWorkspaceMemberRequest,
+  requestId:
+    string,
+): Promise<void> {
+  await sendAccountRequest<
+    undefined
+  >({
+    path:
+      `/internal/v1/workspaces/${workspaceId}/members`,
+
+    method:
+      "POST",
+
+    requestId,
+
+    identity,
+
+    body:
+      request,
+  });
+}
+
+/*
+PATCH /internal/v1/workspaces/:workspaceId/members/:userId
+*/
+export async function changeWorkspaceMemberRole(
+  identity:
+    CallerIdentity,
+  workspaceId:
+    string,
+  userId:
+    string,
+  request:
+    ChangeWorkspaceMemberRoleRequest,
+  requestId:
+    string,
+): Promise<void> {
+  await sendAccountRequest<
+    undefined
+  >({
+    path:
+      `/internal/v1/workspaces/${workspaceId}/members/${userId}`,
+
+    method:
+      "PATCH",
+
+    requestId,
+
+    identity,
+
+    body:
+      request,
+  });
+}
+
+/*
+DELETE /internal/v1/workspaces/:workspaceId/members/:userId
+*/
+export async function removeWorkspaceMember(
+  identity:
+    CallerIdentity,
+  workspaceId:
+    string,
+  userId:
+    string,
+  requestId:
+    string,
+): Promise<void> {
+  await sendAccountRequest<
+    undefined
+  >({
+    path:
+      `/internal/v1/workspaces/${workspaceId}/members/${userId}`,
+
+    method:
+      "DELETE",
+
+    requestId,
+
+    identity,
   });
 }
 /*

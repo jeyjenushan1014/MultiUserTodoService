@@ -53,6 +53,10 @@ import {
   internalProfileRouter,
 } from "./modules/account/profile/profile.routes.js";
 
+import {
+  internalWorkspaceRouter,
+} from "./modules/workspace/workspace.routes.js";
+
 export const app =
   express();
 
@@ -114,6 +118,11 @@ app.use(
   internalEmailChangeRouter,
 );
 
+
+app.use(
+  "/internal/v1/workspaces",
+  internalWorkspaceRouter,
+);
 app.use(
   "/internal/v1/accounts",
   accountLookupRouter,

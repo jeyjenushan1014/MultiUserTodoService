@@ -118,6 +118,49 @@ Returns `200` with `{ "data": { "user": { "id": "uuid", "email": "alice@example.
 
 Request: `{ "email": "new@example.com" }`. The email is normalized and uniqueness is enforced by the Account database. Returns `200` with the user object. Todo projections update asynchronously from `account.email-changed`, so TODO responses may briefly converge to the new email.
 
+## 5a. Workspace endpoints (TN-1)
+
+Every endpoint requires the same bearer access token as the endpoints above. A caller who is not a
+member of a workspace receives `404 WORKSPACE_NOT_FOUND` for that workspace — identical to a
+workspace that does not exist — so membership cannot be inferred from the response (TN-12). Roles
+and what each may do are defined once in `packages/contracts/src/authorization/workspace-authorization.ts`
+and documented in full in `docs/authorization.md`.
+
+### `POST /api/v1/workspaces`
+
+Request: `{ "name": "Engineering" }`. Creates a workspace and makes the caller its first
+administrator. Returns `201` with
+`{ "data": { "workspace": { "id", "name", "createdBy", "createdAt" } } }`.
+
+### `GET /api/v1/workspaces/:workspaceId`
+
+Returns `200` with the workspace if the caller is a member (any role), otherwise
+`404 WORKSPACE_NOT_FOUND`.
+
+### `GET /api/v1/workspaces/:workspaceId/members`
+
+Returns `200` with `{ "data": { "members": [{ "userId", "role" }, ...] } }` if the caller is a
+member (any role), otherwise `404 WORKSPACE_NOT_FOUND`.
+
+### `POST /api/v1/workspaces/:workspaceId/members`
+
+Administrator only. Request: `{ "userId": "uuid", "role": "administrator" | "editor" | "viewer" }`.
+Returns `204`. `403 WORKSPACE_ACTION_FORBIDDEN` if the caller is not an administrator,
+`403 WORKSPACE_SELF_CHANGE_FORBIDDEN` if `userId` is the caller's own id (TN-8),
+`404 WORKSPACE_NOT_FOUND` if the workspace does not exist, the caller is not a member, the target
+account is not registered, or the target is already a member — these cases are intentionally
+indistinguishable in the response.
+
+### `PATCH /api/v1/workspaces/:workspaceId/members/:userId`
+
+Administrator only. Request: `{ "role": "administrator" | "editor" | "viewer" }`. Returns `204`.
+Same `403`/`404` rules as add-member, plus `409 WORKSPACE_LAST_ADMINISTRATOR` if demoting `userId`
+would leave the workspace with no administrator (TN-9).
+
+### `DELETE /api/v1/workspaces/:workspaceId/members/:userId`
+
+Administrator only. Returns `204`. Same `403`/`404`/`409` rules as changing a role.
+
 ## 6. TODO endpoints
 
 All endpoints in this section require authentication.

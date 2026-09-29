@@ -7,6 +7,10 @@ import {
   canPerform,
 } from "@todo/contracts";
 
+import type {
+  WorkspaceRole,
+} from "@todo/contracts";
+
 import {
   database,
 } from "../../config/database.js";
@@ -27,11 +31,13 @@ import type {
   AddWorkspaceMemberData,
   ChangeWorkspaceMemberRoleData,
   CreateWorkspaceData,
+  MemberListResult,
   MembershipDatabaseRow,
   MembershipMutationResult,
   RemoveWorkspaceMemberData,
   Workspace,
   WorkspaceDatabaseRow,
+  WorkspaceLookupResult,
 } from "./workspace.types.js";
 
 async function rollback(
@@ -262,6 +268,138 @@ implements WorkspaceRepository {
       );
 
       throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async findWorkspaceForActor(
+    workspaceId: string,
+    actorId: string,
+  ): Promise<WorkspaceLookupResult> {
+    const client =
+      await database.connect();
+
+    try {
+      const result =
+        await client.query<
+          WorkspaceDatabaseRow & {
+            readonly role: WorkspaceRole;
+          }
+        >(
+          `
+            SELECT
+              workspaces.id,
+              workspaces.name,
+              workspaces.created_by,
+              workspaces.created_at,
+              workspace_members.role
+            FROM workspaces
+            INNER JOIN workspace_members
+              ON workspace_members.workspace_id = workspaces.id
+            WHERE workspaces.id = $1
+              AND workspace_members.user_id = $2
+          `,
+          [
+            workspaceId,
+            actorId,
+          ],
+        );
+
+      const row =
+        result.rows[0];
+
+      if (
+        row === undefined ||
+        !canPerform(
+          row.role,
+          "workspace.read",
+        )
+      ) {
+        return {
+          status: "not-found",
+        };
+      }
+
+      return {
+        status: "found",
+        workspace: {
+          id: row.id,
+          name: row.name,
+          createdBy: row.created_by,
+          createdAt:
+            row.created_at.toISOString(),
+        },
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  public async listMembers(
+    workspaceId: string,
+    actorId: string,
+  ): Promise<MemberListResult> {
+    const client =
+      await database.connect();
+
+    try {
+      const actorResult =
+        await client.query<
+          Pick<MembershipDatabaseRow, "role">
+        >(
+          `
+            SELECT role
+            FROM workspace_members
+            WHERE workspace_id = $1
+              AND user_id = $2
+          `,
+          [
+            workspaceId,
+            actorId,
+          ],
+        );
+
+      const actorRole =
+        actorResult.rows[0]?.role;
+
+      if (
+        actorRole === undefined ||
+        !canPerform(
+          actorRole,
+          "member.list",
+        )
+      ) {
+        return {
+          status: "not-found",
+        };
+      }
+
+      const membersResult =
+        await client.query<MembershipDatabaseRow>(
+          `
+            SELECT
+              user_id,
+              role
+            FROM workspace_members
+            WHERE workspace_id = $1
+            ORDER BY created_at ASC
+          `,
+          [
+            workspaceId,
+          ],
+        );
+
+      return {
+        status: "found",
+        members:
+          membersResult.rows.map(
+            (row) => ({
+              userId: row.user_id,
+              role: row.role,
+            }),
+          ),
+      };
     } finally {
       client.release();
     }

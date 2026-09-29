@@ -1437,3 +1437,189 @@ describe(
     );
   },
 );
+
+describe(
+  "PostgresWorkspaceRepository reads",
+  () => {
+    beforeEach(
+      () => {
+        databaseMocks
+          .connect
+          .mockReset();
+      },
+    );
+
+    it(
+      "returns the workspace when the actor is a member",
+      async () => {
+        const createdAt =
+          new Date(
+            "2026-09-29T10:00:00.000Z",
+          );
+
+        const harness =
+          createClientHarness([
+            {
+              rows: [
+                {
+                  id: "workspace-id",
+                  name: "Engineering",
+                  created_by: "creator-id",
+                  created_at: createdAt,
+                  role: "viewer",
+                },
+              ],
+            },
+          ]);
+
+        databaseMocks
+          .connect
+          .mockResolvedValue(
+            harness.client,
+          );
+
+        const repository =
+          new PostgresWorkspaceRepository();
+
+        const result =
+          await repository.findWorkspaceForActor(
+            "workspace-id",
+            "actor-id",
+          );
+
+        expect(result).toEqual({
+          status: "found",
+          workspace: {
+            id: "workspace-id",
+            name: "Engineering",
+            createdBy: "creator-id",
+            createdAt: createdAt.toISOString(),
+          },
+        });
+
+        expect(
+          harness.getReleaseCount(),
+        ).toBe(1);
+      },
+    );
+
+    it(
+      "returns not-found when the actor is not a member, without distinguishing a missing workspace",
+      async () => {
+        const harness =
+          createClientHarness([
+            {
+              rows: [],
+            },
+          ]);
+
+        databaseMocks
+          .connect
+          .mockResolvedValue(
+            harness.client,
+          );
+
+        const repository =
+          new PostgresWorkspaceRepository();
+
+        const result =
+          await repository.findWorkspaceForActor(
+            "workspace-id",
+            "outsider-id",
+          );
+
+        expect(result).toEqual({
+          status: "not-found",
+        });
+      },
+    );
+
+    it(
+      "lists members when the actor is a member",
+      async () => {
+        const harness =
+          createClientHarness([
+            {
+              rows: [
+                {
+                  role: "administrator",
+                },
+              ],
+            },
+            {
+              rows: [
+                {
+                  user_id: "creator-id",
+                  role: "administrator",
+                },
+                {
+                  user_id: "viewer-id",
+                  role: "viewer",
+                },
+              ],
+            },
+          ]);
+
+        databaseMocks
+          .connect
+          .mockResolvedValue(
+            harness.client,
+          );
+
+        const repository =
+          new PostgresWorkspaceRepository();
+
+        const result =
+          await repository.listMembers(
+            "workspace-id",
+            "creator-id",
+          );
+
+        expect(result).toEqual({
+          status: "found",
+          members: [
+            {
+              userId: "creator-id",
+              role: "administrator",
+            },
+            {
+              userId: "viewer-id",
+              role: "viewer",
+            },
+          ],
+        });
+      },
+    );
+
+    it(
+      "returns not-found when listing members without an existing membership",
+      async () => {
+        const harness =
+          createClientHarness([
+            {
+              rows: [],
+            },
+          ]);
+
+        databaseMocks
+          .connect
+          .mockResolvedValue(
+            harness.client,
+          );
+
+        const repository =
+          new PostgresWorkspaceRepository();
+
+        const result =
+          await repository.listMembers(
+            "workspace-id",
+            "outsider-id",
+          );
+
+        expect(result).toEqual({
+          status: "not-found",
+        });
+      },
+    );
+  },
+);

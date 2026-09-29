@@ -64,6 +64,10 @@ import {
   refreshRouter,
 } from "./modules/auth/refresh/refresh.routes.js";
 
+import {
+  workspaceRouter,
+} from "./modules/workspace/workspace.routes.js";
+
 export const app =
   express();
 
@@ -139,6 +143,11 @@ app.use(
 app.use(
   "/api/v1/todos",
   todoRouter,
+);
+
+app.use(
+  "/api/v1/workspaces",
+  workspaceRouter,
 );
 
 app.use(

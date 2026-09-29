@@ -4,11 +4,17 @@
 committed before any implementation, per the rule that the TN-6/TN-7 tension has to be resolved
 on paper first — changing where authorization state lives after code depends on it means
 rewriting every service's assumption about the caller twice instead of once.
-**Status: permission policy and persistence foundation implemented; public workspace APIs,
-projections, and endpoint enforcement pending.** This
-document was written before implementation so that the TN-6/TN-7 tension was resolved on paper
-first. The role/action policy now exists in `@todo/contracts`; no endpoint claims to enforce it
-until the local membership projections described below have been built
+**Status: permission policy, persistence, and the workspace HTTP API are implemented; local
+membership projections in Gateway/Todo Service and endpoint enforcement outside Account Service
+are pending.** This document was written before implementation so that the TN-6/TN-7 tension was
+resolved on paper first. The role/action policy exists in `@todo/contracts`, workspace and
+membership mutations are reachable through `POST/GET/PATCH/DELETE /api/v1/workspaces...`
+(Account Service is the source of truth and enforces `canPerform` directly against its own
+database), and every mutation's `self-change`/`forbidden`/`last-administrator`/`not-found` outcome
+is verified live through the Gateway, not just at the repository layer. TN-6 is not yet fully
+satisfied end-to-end: Gateway and Todo Service do not yet hold a local projection of membership, so
+no *other* service can make an authorization decision without asking Account Service — this is the
+next section to build.
 
 ## 1. The problem this document exists to resolve
 
@@ -90,17 +96,29 @@ remove the last administrator (TN-9).
 
 Listed explicitly so nothing here is claimed as done before it is:
 
-- The exact role list and the operations each role permits (comes with the TN-3/TN-4
-  implementation commit, and fills in the `AUT-1` table).
-- The database schema for `workspaces` and `workspace_members` (comes with the TN-1/TN-2
-  implementation commit).
-- The last-administrator guard mechanics (TN-9).
-- A real PostgreSQL concurrency proof for the workspace-row lock used by the last-administrator
-  guard (TN-9).
+- The database schema for `workspaces` and `workspace_members` (done — see
+  `009_create_workspaces_and_memberships.cjs`).
+- The workspace HTTP API surface (done — `docs/api.md` §5a; live-verified through the Gateway,
+  not just unit-tested).
+- Local membership projections outside Account Service (Gateway, Todo Service) so TN-6 holds for
+  every service, not only the one that owns the data.
 - The backfill migration moving existing ownerless tasks into the "no workspace" path (TN-10,
-  TN-11).
-- The measured propagation latency number (comes once the event and consumer exist; will be
-  recorded here and in `docs/architecture.md` ARC-8).
+  TN-11) — Todo Service has not been touched yet.
+- The measured propagation latency number for `workspace.membership-changed` (comes once a
+  projection consumer exists; will be recorded here and in `docs/architecture.md` ARC-8).
+- A real PostgreSQL concurrency proof for the workspace-row lock used by the last-administrator
+  guard (TN-9) under two concurrent requests, rather than serial unit tests.
+
+Note on TN-9's reachability: under the current three-role model, `last-administrator` can only be
+produced by a caller acting on a target they are not (self-change is rejected first) while holding
+`member.remove`/`member.change-role` permission themselves — which requires being an
+administrator distinct from the target. If the target is genuinely the sole administrator, no such
+distinct administrator can exist, so this outcome is not reachable through the public API today
+with the current permission table. It is exercised directly at the repository and service layers
+(fixed rows, not derived from real requests) and exists as a guard for future paths that mutate
+membership on someone else's behalf — for example account deletion cascading a removal (DG-1,
+planned) — where the normal actor/self-change rules do not apply. This is recorded here rather than
+silently left implied, per the project's rule that an unproven claim is worse than a stated gap.
 
 ## 6. Manual verification of this document (design-stage proof)
 
@@ -132,3 +150,25 @@ revocation, which are not implemented yet.
    place membership changes) rather than duplicating the INSERT in four repositories — the
    session-revocation commit did this once already; the role commit should not regress to
    duplicating it.
+
+## 7. Manual verification performed for the workspace HTTP API (this commit)
+
+Run against the live `docker-compose` stack (`docker compose up -d --build account-service gateway`),
+using two freshly registered accounts:
+
+1. `POST /api/v1/workspaces` as user A → `201`, user A is returned as the workspace in
+   `GET /api/v1/workspaces/:id`.
+2. `POST /api/v1/workspaces/:id/members` with `userId` set to A's own id →
+   `403 WORKSPACE_SELF_CHANGE_FORBIDDEN` (TN-8, confirmed live, not just unit-tested).
+3. `POST /api/v1/workspaces/:id/members` adding user B as `editor` → `204`; `PATCH .../members/:userIdB`
+   promoting B to `administrator` → `204`; `DELETE .../members/:userIdB` → `204` (back to one
+   administrator).
+4. After removal, `GET /api/v1/workspaces/:id` as user B → `404 WORKSPACE_NOT_FOUND` — identical
+   to a workspace that never existed, confirming TN-12 live (not inferable whether B was ever a
+   member or whether the workspace exists).
+5. Re-added B as `viewer`; B attempting `POST /api/v1/workspaces/:id/members` →
+   `403 WORKSPACE_ACTION_FORBIDDEN` (role enforcement confirmed live for a non-administrator).
+6. `last-administrator` (TN-9) was **not** reproduced live in this session — see the reachability
+   note in §5. It remains covered only by the repository/service tests that construct the state
+   directly.
+

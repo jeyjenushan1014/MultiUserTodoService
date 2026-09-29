@@ -246,7 +246,52 @@ test for simultaneous administrator removal or demotion.
 No TN requirement receives evidence merely because the tables exist. Evidence is added only when
 every clause of an individual TN requirement is complete and its automated failure test passes.
 
-## Activity 8 — Do I need another infrastructure component?
+### Progress made
+
+The persistence foundation now exists: reversible migrations create `workspaces` and
+`workspace_members`; workspace creation inserts its initial administrator in the same transaction;
+and membership mutations serialize on the workspace row before checking actor authority and the
+last-administrator invariant. Unit tests exercise transaction ordering, rollback, self-add refusal,
+non-administrator refusal, and last-administrator refusal.
+
+This does not complete a TN requirement. There is no public workspace API, no real PostgreSQL
+concurrency proof, no membership event, and no task migration or endpoint enforcement. Therefore no
+new Day 4 evidence row is added.
+
+## Activity 8 — Why did Windows report a missing `WORKSPACE_ACTIONS` export?
+
+### Question
+
+Why did `node scripts/verify-authorization-docs.mjs` report that
+`packages/contracts/dist/index.js` did not export `WORKSPACE_ACTIONS` even though the source package
+exports the authorization module?
+
+### Challenge
+
+The verifier intentionally imports the built public artifact, not TypeScript source. `dist` is
+ignored by Git, so a checkout can retain an older local artifact. TypeScript incremental metadata
+can also say a build is current even when a different configuration produced the metadata. In that
+case Node correctly reads the stale JavaScript and cannot find the new export.
+
+### Resolution
+
+`npm run verify:authorization` now cleans the Contracts `dist` directory before building. The build
+configuration also uses its own `tsconfig.build.tsbuildinfo` file instead of sharing incremental
+metadata with the development/test configuration. A direct manual invocation of the verifier still
+expects the artifact to have been built first; the supported command is `npm run
+verify:authorization`.
+
+### Learning
+
+Generated artifacts that are ignored by Git cannot be assumed to match checked-out source. A proof
+command that tests a built public interface must create that artifact from a known clean state.
+The npm output is also evidence about the checked-out revision: if `verify:authorization` prints a
+command without the clean step, the cleanup fix is not present locally. Cleaning and rebuilding
+cannot repair a missing source-level root export. The verifier now loads the root module as a
+namespace so that this situation produces a direct diagnostic naming the missing exports and the
+source file to inspect instead of Node's named-import syntax error.
+
+## Activity 9 — Do I need another infrastructure component?
 
 ### Question
 

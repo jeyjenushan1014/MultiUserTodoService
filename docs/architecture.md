@@ -11,7 +11,7 @@ See [architecture-diagram.md](architecture-diagram.md) for the visual topology a
 | Component | Responsibility | Owns |
 |---|---|---|
 | Gateway | Public HTTP entry point, JWT enforcement, rate limiting, request correlation, downstream translation | No business data |
-| Account Service | Registration, credentials, sessions, refresh rotation, password reset, profile and email | `users`, `sessions`, `refresh_tokens`, `password_reset_tokens`, account `outbox_events` |
+| Account Service | Registration, credentials, sessions, refresh rotation, password reset, profile, email, and workspace-membership source of truth | `users`, `sessions`, `refresh_tokens`, `password_reset_tokens`, `workspaces`, `workspace_members`, account `outbox_events` |
 | Todo Service | TODO lifecycle, sharing, authorization, idempotent creates, projections, cache-backed reads, history | `todos`, `todo_shares`, `todo_owners`, `todo_idempotency_records`, `processed_events`, `todo_history`, todo `outbox_events` |
 | Account outbox worker | Publishes account events | Account outbox rows |
 | Todo outbox worker | Publishes todo events | Todo outbox rows |

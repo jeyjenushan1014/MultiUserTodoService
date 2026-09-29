@@ -21,6 +21,11 @@ import {
 } from "./config/env.js";
 
 import {
+  startWorkspaceMembershipConsumer,
+  stopWorkspaceMembershipConsumer,
+} from "./events/workspace-membership.consumer.js";
+
+import {
   logger,
 } from "./config/logger.js";
 
@@ -54,6 +59,8 @@ Promise<void> {
 
   try {
     await connectCache();
+    // start consumer that keeps local membership projection in Redis
+    startWorkspaceMembershipConsumer();
   } catch (error) {
     logger.warn(
       {
@@ -120,6 +127,8 @@ Promise<void> {
 
       await Promise.allSettled([
         database.end(),
+
+        stopWorkspaceMembershipConsumer(),
 
         cache.isOpen
           ? cache.quit()

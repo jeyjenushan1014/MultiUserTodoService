@@ -248,6 +248,20 @@ TODO_HISTORY_DLQ:
         .min(1)
         .default("100kb"),
 
+    /** TTL (seconds) for workspace membership projection entries in Redis */
+    WORKSPACE_MEMBERSHIP_CACHE_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(10)
+      .max(86_400)
+      .default(900),
+
+    /** Queue name for workspace membership events consumed by TODO Service */
+    TODO_WORKSPACE_MEMBERSHIP_QUEUE: z
+      .string()
+      .min(1)
+      .default("todo.workspace-membership"),
+
     DATABASE_POOL_MAX:
       z.coerce
         .number()

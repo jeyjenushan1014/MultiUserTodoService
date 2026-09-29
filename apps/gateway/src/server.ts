@@ -23,6 +23,10 @@ import {
   startSessionRevocationConsumer,
   stopSessionRevocationConsumer,
 } from "./security/session-revocation.consumer.js";
+import {
+  startWorkspaceMembershipConsumer,
+  stopWorkspaceMembershipConsumer,
+} from "./security/workspace-membership.consumer.js";
 
 let shutdownStarted =
   false;
@@ -62,6 +66,7 @@ authentication fails open on a revocation-cache miss until it
 catches up (see session-revocation.cache.ts).
 */
 startSessionRevocationConsumer();
+startWorkspaceMembershipConsumer();
 
 const server:
   Server =
@@ -89,6 +94,7 @@ async function closeDependencies():
     await Promise.allSettled([
       disconnectRedis(),
       stopSessionRevocationConsumer(),
+      stopWorkspaceMembershipConsumer(),
     ]);
 
   let shutdownSucceeded =

@@ -100,8 +100,9 @@ Listed explicitly so nothing here is claimed as done before it is:
   `009_create_workspaces_and_memberships.cjs`).
 - The workspace HTTP API surface (done — `docs/api.md` §5a; live-verified through the Gateway,
   not just unit-tested).
-- Local membership projections outside Account Service (Gateway, Todo Service) so TN-6 holds for
-  every service, not only the one that owns the data.
+-- Local membership projections outside Account Service (Gateway, Todo Service) so TN-6 holds for
+  every service, not only the one that owns the data. (IMPLEMENTED: Gateway and Todo Service now
+  consume `workspace.membership-changed` and maintain a Redis-based projection.)
 - The backfill migration moving existing ownerless tasks into the "no workspace" path (TN-10,
   TN-11) — Todo Service has not been touched yet.
 - The measured propagation latency number for `workspace.membership-changed` (comes once a

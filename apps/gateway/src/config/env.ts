@@ -126,6 +126,12 @@ PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:
     .min(1)
     .default("todo.notifications"),
 
+  /** Queue receiving workspace membership change events for local projection */
+  GATEWAY_WORKSPACE_MEMBERSHIP_QUEUE: z
+    .string()
+    .min(1)
+    .default("gateway.workspace-membership"),
+
   TODO_HISTORY_QUEUE: z
     .string()
     .min(1)

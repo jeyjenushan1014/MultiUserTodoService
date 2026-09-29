@@ -3,10 +3,12 @@ name: CI Pipeline
 on:
   push:
     branches:
+      - main
       - task-3-microservices
 
   pull_request:
     branches:
+      - main
       - task-3-microservices
 
   workflow_dispatch:

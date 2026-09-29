@@ -10,8 +10,14 @@ vi.mock("../../../config/logger.js", () => ({
   logger: {error: vi.fn()},
 }));
 
-function createClient() {
-  return {query: vi.fn(), release: vi.fn()};
+function createClient(): {
+  query: ReturnType<typeof vi.fn>;
+  release: ReturnType<typeof vi.fn>;
+} {
+  return {
+    query: vi.fn(),
+    release: vi.fn(),
+  };
 }
 
 describe("PostgresWorkspaceRepository", () => {

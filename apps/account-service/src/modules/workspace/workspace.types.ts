@@ -24,8 +24,8 @@ export interface AddWorkspaceMemberData {
   readonly changedAt: Date;
 }
 
-export interface ChangeWorkspaceMemberRoleData
-extends AddWorkspaceMemberData {}
+export type ChangeWorkspaceMemberRoleData =
+  AddWorkspaceMemberData;
 
 export interface RemoveWorkspaceMemberData {
   readonly workspaceId: string;

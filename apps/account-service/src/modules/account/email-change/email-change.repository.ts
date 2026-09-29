@@ -10,6 +10,10 @@ import {
   database,
 } from "../../../config/database.js";
 
+import {
+  insertSessionRevokedOutboxEvent,
+} from "../../../outbox/session-revoked-event.js";
+
 import type {
   EmailChangeRepository,
 } from "./email-change.repository.interface.js";
@@ -183,22 +187,38 @@ implements EmailChangeRepository {
        * Revoke every existing session so that
        * the user must authenticate again.
        */
-      await client.query(
-        `
-          UPDATE sessions
-          SET revoked_at =
-            COALESCE(
-              revoked_at,
-              CURRENT_TIMESTAMP
-            )
-          WHERE
-            user_id = $1
-            AND revoked_at IS NULL
-        `,
-        [
+      const revocation =
+        await client.query<{
+          revoked_at: Date;
+        }>(
+          `
+            UPDATE sessions
+            SET revoked_at =
+              COALESCE(
+                revoked_at,
+                CURRENT_TIMESTAMP
+              )
+            WHERE
+              user_id = $1
+              AND revoked_at IS NULL
+            RETURNING revoked_at
+          `,
+          [
+            data.userId,
+          ],
+        );
+
+      if (
+        (revocation.rowCount ?? 0) > 0
+      ) {
+        await insertSessionRevokedOutboxEvent(
+          client,
           data.userId,
-        ],
-      );
+          null,
+          revocation.rows[0]?.revoked_at ??
+            new Date(),
+        );
+      }
 
       await client.query("COMMIT");
 

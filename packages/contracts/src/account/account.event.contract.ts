@@ -21,3 +21,19 @@ export type AccountEmailChangedEvent =
     "account.email-changed",
     AccountEmailChangedPayload
   >;
+
+/*
+A null sessionId means every session for userId is revoked
+as of revokedAt, rather than one specific session.
+*/
+export interface AccountSessionRevokedPayload {
+  readonly userId: string;
+  readonly sessionId: string | null;
+  readonly revokedAt: string;
+}
+
+export type AccountSessionRevokedEvent =
+  EventEnvelope<
+    "account.session-revoked",
+    AccountSessionRevokedPayload
+  >;

@@ -6,6 +6,10 @@ import {
   database,
 } from "../../../config/database.js";
 
+import {
+  insertSessionRevokedOutboxEvent,
+} from "../../../outbox/session-revoked-event.js";
+
 import type {
   RefreshRepository,
 } from "./refresh.repository.interface.js";
@@ -106,21 +110,37 @@ implements RefreshRepository {
        * the account because the credential may be stolen.
        */
       if (credential.used_at !== null) {
-        await client.query(
-          `
-            UPDATE sessions
-            SET revoked_at =
-              COALESCE(
-                revoked_at,
-                CURRENT_TIMESTAMP
-              )
-            WHERE user_id = $1
-              AND revoked_at IS NULL
-          `,
-          [
+        const revocation =
+          await client.query<{
+            revoked_at: Date;
+          }>(
+            `
+              UPDATE sessions
+              SET revoked_at =
+                COALESCE(
+                  revoked_at,
+                  CURRENT_TIMESTAMP
+                )
+              WHERE user_id = $1
+                AND revoked_at IS NULL
+              RETURNING revoked_at
+            `,
+            [
+              credential.user_id,
+            ],
+          );
+
+        if (
+          (revocation.rowCount ?? 0) > 0
+        ) {
+          await insertSessionRevokedOutboxEvent(
+            client,
             credential.user_id,
-          ],
-        );
+            null,
+            revocation.rows[0]?.revoked_at ??
+              new Date(),
+          );
+        }
 
         await client.query("COMMIT");
 

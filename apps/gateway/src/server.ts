@@ -19,6 +19,11 @@ import {
   disconnectRedis,
 } from "./config/redis.js";
 
+import {
+  startSessionRevocationConsumer,
+  stopSessionRevocationConsumer,
+} from "./security/session-revocation.consumer.js";
+
 let shutdownStarted =
   false;
 
@@ -51,6 +56,13 @@ try {
   );
 }
 
+/*
+The consumer retries its own connection in the background;
+authentication fails open on a revocation-cache miss until it
+catches up (see session-revocation.cache.ts).
+*/
+startSessionRevocationConsumer();
+
 const server:
   Server =
   app.listen(
@@ -76,6 +88,7 @@ async function closeDependencies():
   const results =
     await Promise.allSettled([
       disconnectRedis(),
+      stopSessionRevocationConsumer(),
     ]);
 
   let shutdownSucceeded =

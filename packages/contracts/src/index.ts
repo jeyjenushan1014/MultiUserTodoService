@@ -67,6 +67,11 @@ export type {
   AccountEmailChangedPayload,
 } from "./account/index.js";
 
+export type {
+  AccountSessionRevokedEvent,
+  AccountSessionRevokedPayload,
+} from "./account/index.js";
+
 export * from "./auth/index.js";
 export * from "./todo/index.js";
 

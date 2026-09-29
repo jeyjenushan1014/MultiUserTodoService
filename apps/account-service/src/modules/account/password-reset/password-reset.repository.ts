@@ -13,6 +13,10 @@ import {
   database,
 } from "../../../config/database.js";
 
+import {
+  insertSessionRevokedOutboxEvent,
+} from "../../../outbox/session-revoked-event.js";
+
 import type {
   CreatePasswordResetData,
   PasswordResetUser,
@@ -361,18 +365,28 @@ private async revokeUserSessions(
   userId: string,
   occurredAt: Date,
 ): Promise<void> {
-  await client.query(
-    `
-      UPDATE sessions
-      SET revoked_at = $2
-      WHERE user_id = $1
-        AND revoked_at IS NULL
-    `,
-    [
+  const revocation =
+    await client.query(
+      `
+        UPDATE sessions
+        SET revoked_at = $2
+        WHERE user_id = $1
+          AND revoked_at IS NULL
+      `,
+      [
+        userId,
+        occurredAt,
+      ],
+    );
+
+  if ((revocation.rowCount ?? 0) > 0) {
+    await insertSessionRevokedOutboxEvent(
+      client,
       userId,
+      null,
       occurredAt,
-    ],
-  );
+    );
+  }
 }
 
 private async insertPasswordResetCompletedEvent(

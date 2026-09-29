@@ -18,6 +18,7 @@ export interface AccessTokenClaims {
   readonly userId: string;
   readonly sessionId: string;
   readonly email: string;
+  readonly issuedAt: number;
 }
 
 const jwtSecret =
@@ -95,13 +96,17 @@ export async function verifyAccessTokenClaims(
     const email =
       verificationResult.payload.email;
 
+    const issuedAt =
+      verificationResult.payload.iat;
+
     if (
       typeof userId !== "string" ||
       userId.length === 0 ||
       typeof sessionId !== "string" ||
       sessionId.length === 0 ||
       typeof email !== "string" ||
-      email.length === 0
+      email.length === 0 ||
+      typeof issuedAt !== "number"
     ) {
       throw new Error(
         "Required access-token claims are missing",
@@ -112,6 +117,7 @@ export async function verifyAccessTokenClaims(
       userId,
       sessionId,
       email,
+      issuedAt,
     };
   } catch {
     /*

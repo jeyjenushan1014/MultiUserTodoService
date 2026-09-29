@@ -578,6 +578,10 @@ services:
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      GATEWAY_SESSION_REVOCATION_QUEUE: ${GATEWAY_SESSION_REVOCATION_QUEUE:-gateway.session-revocations}
+      SESSION_REVOCATION_CACHE_TTL_SECONDS: ${SESSION_REVOCATION_CACHE_TTL_SECONDS:-900}
       MAILPIT_URL: http://mailpit:8025
       TODO_OWNER_QUEUE: ${TODO_OWNER_QUEUE:-todo.owner-projection}
       RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
@@ -619,6 +623,8 @@ services:
         condition: service_started
       todo-service:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
 
     restart: unless-stopped
 

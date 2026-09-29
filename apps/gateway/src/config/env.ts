@@ -92,6 +92,26 @@ PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:
     .string()
     .min(1),
 
+  RABBITMQ_URL: z
+    .string()
+    .min(1),
+
+  RABBITMQ_EXCHANGE: z
+    .string()
+    .min(1)
+    .default("todo.events"),
+
+  GATEWAY_SESSION_REVOCATION_QUEUE: z
+    .string()
+    .min(1)
+    .default("gateway.session-revocations"),
+
+  SESSION_REVOCATION_CACHE_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(900),
+
   MAILPIT_URL: z
     .url()
     .default("http://mailpit:8025"),

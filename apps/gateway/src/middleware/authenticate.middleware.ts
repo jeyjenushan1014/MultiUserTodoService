@@ -11,33 +11,35 @@ import type {
 
 import {
   AppError,
-  getRequestId,
 } from "@todo/common";
-
-import {
-  getCurrentAccount,
-} from "../clients/account-service.client.js";
 
 import {
   extractBearerToken,
   verifyAccessTokenClaims,
 } from "../security/access-token-claims.js";
 
+import {
+  isSessionRevoked,
+} from "../security/session-revocation.cache.js";
+
 export interface AuthenticationLocals {
   callerIdentity?: CallerIdentity;
 }
 
-interface AuthenticateOptions {
-  readonly allowAccountServiceUnavailable?: boolean;
-}
-
+/*
+ * Authorization no longer requires a synchronous call to Account
+ * Service: revocation is learned asynchronously via
+ * account.session-revoked and cached locally in Redis (see
+ * session-revocation.consumer.ts and session-revocation.cache.ts).
+ * Stopping Account Service no longer affects any authenticated
+ * request, reads or writes.
+ */
 async function authenticateRequest(
   request: Request,
   response: Response<
     unknown,
     AuthenticationLocals
   >,
-  options: AuthenticateOptions,
 ): Promise<void> {
   const token =
     extractBearerToken(request);
@@ -45,51 +47,12 @@ async function authenticateRequest(
   const claims =
     await verifyAccessTokenClaims(token);
 
-  const requestId =
-    getRequestId();
-
-  if (requestId === undefined) {
+  if (await isSessionRevoked(claims)) {
     throw new AppError(
-      500,
-      "REQUEST_CONTEXT_UNAVAILABLE",
-      "Request context is unavailable",
+      401,
+      "INVALID_ACCESS_TOKEN",
+      "The access token is invalid or expired",
     );
-  }
-
-  try {
-    await getCurrentAccount(
-      claims,
-      requestId,
-    );
-  } catch (error) {
-    if (
-      error instanceof AppError &&
-      error.statusCode === 401
-    ) {
-      throw new AppError(
-        401,
-        "INVALID_ACCESS_TOKEN",
-        "The access token is invalid or expired",
-      );
-    }
-
-    if (
-      options.allowAccountServiceUnavailable ===
-        true &&
-      error instanceof AppError &&
-      (
-        error.statusCode === 503 ||
-        error.statusCode === 504
-      )
-    ) {
-      /*
-       * Read-only TODO views can continue from
-       * verified JWT claims while Account Service
-       * is unavailable. Writes remain fail-closed.
-       */
-    } else {
-      throw error;
-    }
   }
 
   response.locals.callerIdentity = {
@@ -99,9 +62,8 @@ async function authenticateRequest(
   };
 }
 
-function createAuthenticateMiddleware(
-  options: AuthenticateOptions = {},
-): RequestHandler {
+function createAuthenticateMiddleware():
+  RequestHandler {
   return (
     request: Request,
     response: Response,
@@ -110,7 +72,6 @@ function createAuthenticateMiddleware(
     void authenticateRequest(
       request,
       response,
-      options,
     )
       .then(() => {
         next();
@@ -126,10 +87,12 @@ function createAuthenticateMiddleware(
 export const authenticate =
   createAuthenticateMiddleware();
 
+/*
+ * Reads and writes now use the same check; kept as a separate
+ * export so call sites do not need to change.
+ */
 export const authenticateTodoRead =
-  createAuthenticateMiddleware({
-    allowAccountServiceUnavailable: true,
-  });
+  authenticate;
 
 export function getCallerIdentity(
   response: Response,

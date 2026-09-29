@@ -46,3 +46,8 @@ export type {
   AccountEmailChangedEvent,
   AccountEmailChangedPayload,
 } from "./account.event.contract.js";
+
+export type {
+  AccountSessionRevokedEvent,
+  AccountSessionRevokedPayload,
+} from "./account.event.contract.js";

@@ -74,9 +74,9 @@ export type {
 
 export * from "./auth/index.js";
 export * from "./todo/index.js";
+export * from "./authorization/index.js";
 
 
-  
 export type {
   ResolvedAccount,
   ResolveAccountRequest,

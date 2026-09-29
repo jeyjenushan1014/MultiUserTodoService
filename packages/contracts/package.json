@@ -16,7 +16,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+   "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --config ../../vitest.config.mjs --root .",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   }
 }

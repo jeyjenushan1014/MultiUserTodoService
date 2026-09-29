@@ -15,7 +15,7 @@
     "build": "npm run build -w @todo/contracts && npm run build -w @todo/common && npm run build -w @todo/account-service && npm run build -w @todo/gateway && npm run build -w @todo/todo-service",
     "build:packages": "npm run build -w @todo/contracts && npm run build -w @todo/common",
     "lint": "npm run build:packages && eslint \"packages/**/*.ts\" \"apps/**/*.ts\" --max-warnings=0",
-    "test": "npm run test -w @todo/common && npm run test -w @todo/account-service && npm run test -w @todo/gateway && npm run test -w @todo/todo-service",
+   "test": "npm run test -w @todo/contracts && npm run test -w @todo/common && npm run test -w @todo/account-service && npm run test -w @todo/gateway && npm run test -w @todo/todo-service",
     "check": "npm run lint && npm run build && npm test",
     "migrate:account": "npm run migrate -w @todo/account-service",
     "clean": "node scripts/clean.mjs",
@@ -23,7 +23,8 @@
     "migrate:todo:down": "npm run migrate:down -w @todo/todo-service",
     "test:e2e": "npm run test:e2e -w @todo/gateway",
     "test:docs": "node scripts/verify-api-docs.mjs",
-    "start:outbox-worker": "node dist/src/workers/outbox-worker.js"
+    "start:outbox-worker": "node dist/src/workers/outbox-worker.js",
+    "verify:authorization": "npm run clean -w @todo/contracts && npm run build -w @todo/contracts && npm run test -w @todo/contracts && node scripts/verify-authorization-docs.mjs"
      
 
   },

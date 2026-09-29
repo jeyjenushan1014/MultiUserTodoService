@@ -5,9 +5,49 @@
 ```bash
 npm run check
 npm run test:e2e
+npm run verify:authorization
 ```
 
 `npm run check` runs lint, TypeScript builds, and unit tests without requiring manually started infrastructure. `npm run test:e2e` exercises the public Gateway path against the Docker stack.
+
+`npm run verify:authorization` is the reproducible proof for the currently implemented Day 4
+authorization-policy scope. It builds the public `@todo/contracts` artifact, runs the policy unit
+tests, imports the built artifact as a consumer would, and fails if the AUT-1 table in
+`docs/authorization.md` differs from any executable role/action decision. A successful run prints
+the number of roles and actions verified. It does not prove workspace persistence or endpoint
+enforcement; those remain explicitly uncovered.
+
+## Manual authorization verification
+
+Run these steps from a clean clone. No database, broker, Redis instance, or application process is
+needed for the current policy-only scope.
+
+```bash
+npm ci
+npm run verify:authorization
+```
+
+Expected final line:
+
+```text
+Authorization proof passed: 3 roles x 11 actions; AUT-1 matches the built public contract.
+```
+
+To prove that the check detects drift rather than merely producing green output, temporarily change
+one `yes` to `no` in the AUT-1 permission table and rerun the command. It must exit non-zero with an
+`AUT-1 disagrees with the executable policy` assertion. Restore the document and rerun; it must
+pass. Do not commit the deliberate breakage.
+
+For code-level inspection, verify that endpoints will import the public function rather than role
+strings once enforcement is implemented:
+
+```bash
+rg -n 'canPerform|role\s*===' apps packages
+```
+
+At the present stage this finds the shared policy and its proof only. After endpoint enforcement is
+added, every authorization decision must call `canPerform`; a direct endpoint comparison such as
+`role === "administrator"` is a review failure.
 
 ## Automated coverage
 
@@ -29,6 +69,7 @@ The isolation rule is verified for get, update, and delete: an inaccessible TODO
 | IR-2 to IR-6 | Gateway client timeout, connection failure, downstream status mapping, and malformed-response tests. |
 | RR-1 to RR-9 | Container stop/restart checks in the failure-test table below. These require runtime execution, not unit tests alone. |
 | SR-3 to SR-8 | Gateway E2E isolation, permissions, revocation, email-change, and reset-token tests. |
+| AUT-1 | `npm run verify:authorization`; compares every Markdown permission cell with the built public contract. |
 
 ## Failure tests
 

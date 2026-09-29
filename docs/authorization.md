@@ -1,9 +1,9 @@
 # Authorization Design — Tenancy & Roles (Day 4)
 
-**Status: design only.** No workspace or role code exists yet. This document is written and
-committed before any implementation, per the rule that the TN-6/TN-7 tension has to be resolved
-on paper first — changing where authorization state lives after code depends on it means
-rewriting every service's assumption about the caller twice instead of once.
+**Status: permission policy implemented; workspace persistence and enforcement pending.** This
+document was written before implementation so that the TN-6/TN-7 tension was resolved on paper
+first. The role/action policy now exists in `@todo/contracts`; no endpoint claims to enforce it
+until the local membership projections described below have been built
 
 ## 1. The problem this document exists to resolve
 
@@ -84,12 +84,36 @@ Source: `apps/account-service/src/outbox/session-revoked-event.ts`,
 - This satisfies TN-5 directly: the table is the single place, and it is enforced from that single
   place everywhere, which is also what `AUT-2` will point to.
 
+### Permission table (AUT-1)
+
+The executable source of this table is
+`packages/contracts/src/authorization/workspace-authorization.ts`. `canPerform(role, action)` is
+the only policy decision function services may call. A row describes an operation; **yes** means
+permitted and **no** means refused.
+
+| Operation | Administrator | Editor | Viewer |
+|---|---:|---:|---:|
+| Read workspace | yes | yes | yes |
+| Update workspace | yes | no | no |
+| Delete workspace | yes | no | no |
+| List members | yes | yes | yes |
+| Add member | yes | no | no |
+| Change member role | yes | no | no |
+| Remove member | yes | no | no |
+| Create task | yes | yes | no |
+| Read task | yes | yes | yes |
+| Update task | yes | yes | no |
+| Delete task | yes | yes | no |
+
+Role checks alone will not implement the invariants that depend on current state. The membership
+write path must additionally prevent self-promotion and self-addition (TN-8) and must lock the
+workspace membership rows while checking that an administrator removal or demotion would not
+remove the last administrator (TN-9).
+
 ## 5. What this document does not yet decide
 
 Listed explicitly so nothing here is claimed as done before it is:
 
-- The exact role list and the operations each role permits (comes with the TN-3/TN-4
-  implementation commit, and fills in the `AUT-1` table).
 - The database schema for `workspaces` and `workspace_members` (comes with the TN-1/TN-2
   implementation commit).
 - The last-administrator guard mechanics (TN-9).
@@ -102,6 +126,18 @@ Listed explicitly so nothing here is claimed as done before it is:
 
 There is no running code to test yet, so verification here means checking the design itself is
 internally consistent and doesn't quietly reintroduce M1:
+
+The policy and AUT-1 table have one executable proof command:
+
+```bash
+npm run verify:authorization
+```
+
+This builds and tests `@todo/contracts`, then reads this Markdown table independently and compares
+all 33 decisions with the package's built public exports. Exact clean-clone steps, expected output,
+and a deliberate-failure check are recorded in `docs/testing.md`. This command proves the policy
+definition and its documentation agree; it does **not** prove endpoint enforcement or membership
+revocation, which are not implemented yet.
 
 1. Confirm no part of this design proposes putting `role` inside the access token — grep the
    codebase's JWT signing code (`apps/account-service/src/security/access-token.service.ts`) and

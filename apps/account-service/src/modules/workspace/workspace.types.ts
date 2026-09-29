@@ -9,25 +9,32 @@ export interface Workspace {
   readonly createdAt: string;
 }
 
-export interface CreateWorkspaceData {
+export interface WorkspaceEventMetadata {
+  readonly eventId: string;
+  readonly requestId: string;
+  readonly changedAt: Date;
+}
+
+export interface CreateWorkspaceData
+extends WorkspaceEventMetadata {
   readonly id: string;
   readonly name: string;
   readonly creatorId: string;
-  readonly createdAt: Date;
 }
 
-export interface AddWorkspaceMemberData {
+export interface AddWorkspaceMemberData
+extends WorkspaceEventMetadata {
   readonly workspaceId: string;
   readonly actorId: string;
   readonly userId: string;
   readonly role: WorkspaceRole;
-  readonly changedAt: Date;
 }
 
 export type ChangeWorkspaceMemberRoleData =
   AddWorkspaceMemberData;
 
-export interface RemoveWorkspaceMemberData {
+export interface RemoveWorkspaceMemberData
+extends WorkspaceEventMetadata {
   readonly workspaceId: string;
   readonly actorId: string;
   readonly userId: string;

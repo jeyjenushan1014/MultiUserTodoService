@@ -305,9 +305,41 @@ workflow progress, RabbitMQ transports events, and Redis holds shared short-live
 appropriate. If an existing component cannot meet a requirement, I will record the exact blocking
 requirement and rejected alternatives here before adding anything.
 
-## Daily update template
+## Activity 10 — How does membership authority reach other services?
 
-Add a new activity entry whenever work exposes a real question or obstacle:
+### Question
+
+How can Gateway and Todo Service learn membership changes without synchronous
+authorization calls?
+
+### Challenge
+
+Publishing after the membership transaction creates a crash window. Publishing
+before commit can expose a membership change that later rolls back.
+
+### What I considered
+
+1. Call each service synchronously.
+2. Publish directly to RabbitMQ inside the request.
+3. Insert a versioned event into Account Service's transactional outbox.
+
+### Resolution
+
+Account Service inserts `workspace.membership-changed` version 1 into
+`outbox_events` in the same transaction as the membership mutation. The
+existing outbox worker publishes it after commit. Removal uses `role: null`.
+
+### Remaining challenge
+
+Gateway and Todo Service consumers, idempotent projections, rebuild commands,
+and immediate-revocation proof are not implemented yet.
+
+### Learning
+
+A transactional outbox removes the database/broker dual-write gap, but it does
+not by itself prove authorization propagation or TN-7.
+
+
 
 ```markdown
 ## Activity N — Short title (requirement IDs)

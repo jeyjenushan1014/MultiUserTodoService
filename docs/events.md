@@ -28,6 +28,28 @@ Published by Account Service after a user row and outbox row commit. Consumed by
 
 Published after the account email changes and the outbox row commits. Consumed by Todo owner projection. Payload: `userId: UUID`, `email: string`. The consumer updates the local email projection. During propagation, TODO responses may briefly show the previous email, but authorization uses stable user IDs.
 
+### `workspace.membership-changed` version 1
+
+Published by Account Service in the same PostgreSQL transaction as
+workspace-membership creation, role change, or removal.
+
+Payload:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `workspaceId` | UUID | Workspace whose membership changed |
+| `userId` | UUID | Account whose membership changed |
+| `role` | `administrator`, `editor`, `viewer`, or `null` | Current role; `null` means removed |
+| `changedAt` | ISO-8601 datetime | Time the membership authority changed |
+
+Initial workspace creation publishes the creator's administrator membership.
+
+Planned consumers are Gateway and Todo Service local membership projections.
+Those consumers are not implemented in this commit.
+
+Version 1 field meanings are immutable. Unknown additive fields must be ignored
+by future consumers.
+
 ## 4. TODO events
 
 All are produced by Todo Service after the related TODO/share mutation and outbox insertion commit. All are consumed by Todo history worker.

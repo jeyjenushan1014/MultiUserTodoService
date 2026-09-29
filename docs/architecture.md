@@ -35,9 +35,46 @@ The projection is eventually consistent. A newly registered account can briefly 
 
 ## 5. Transaction and event guarantees
 
-Each service writes its domain mutation and outbox row in one PostgreSQL transaction. Workers publish outbox rows to RabbitMQ with persistent messages and publisher confirms. Consumers use durable queues, manual acknowledgements, deduplication, retry/DLQ policies, and durable state.
+Each service writes its domain mutation and outbox row in one PostgreSQL
+transaction. Workers publish outbox rows to RabbitMQ with persistent messages
+and publisher confirms. Consumers use durable queues, manual acknowledgements,
+deduplication, retry/DLQ policies, and durable state.
 
-This transactional-outbox pattern means a crash can delay publication, but cannot publish an event for a rolled-back mutation or commit a mutation without leaving a publishable outbox row.
+This transactional-outbox pattern means a crash can delay publication, but
+cannot publish an event for a rolled-back mutation or commit a mutation without
+leaving a publishable outbox row.
+
+### 5.1 Workspace membership propagation
+
+Account Service is the source of truth for workspace membership. Creating an
+initial administrator, adding a member, changing a member's role, or removing a
+member writes a `workspace.membership-changed` version 1 outbox row in the same
+PostgreSQL transaction as the membership mutation.
+
+The event payload contains only:
+
+- `workspaceId`;
+- `userId`;
+- the member's current `role`, or `null` when the membership was removed; and
+- `changedAt`.
+
+The event does not contain an email address, name, workspace name, JWT, session
+credential, or task content.
+
+The Account outbox worker publishes committed membership events to RabbitMQ.
+A workspace request does not wait for RabbitMQ and does not wait for another
+service to process the event. If RabbitMQ is unavailable, the membership
+mutation and its outbox row remain committed, and publication resumes through
+the existing bounded outbox retry process.
+
+The workspace repository serializes membership mutations for one workspace by
+locking the workspace row before evaluating actor authority or the
+last-administrator invariant. The outbox row is inserted before `COMMIT`. If
+the outbox insertion fails, the membership mutation is rolled back.
+
+Gateway and Todo Service membership projections are not implemented in this
+commit. Consequently, this commit does not yet satisfy TN-6 or TN-7 and does
+not claim that role changes have propagated to every authorizing service.
 
 ## 6. Cache and consistency
 

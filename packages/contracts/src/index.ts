@@ -82,3 +82,5 @@ export type {
   ResolveAccountRequest,
   ResolveAccountResponse,
 } from "./account/index.js"
+
+export * from "./workspace/index.js";

@@ -93,6 +93,25 @@ write path must additionally prevent self-promotion and self-addition (TN-8) and
 workspace membership rows while checking that an administrator removal or demotion would not
 remove the last administrator (TN-9).
 
+## 4.1 Independent authorization documentation checks (AUT-2 to AUT-5)
+
+The command `npm run verify:authorization` independently reads this document, the built public
+contracts package, and the enforcement source files. It fails when any of the following claims
+drift from the implementation:
+
+- **AUT-2:** `packages/contracts/src/authorization/workspace-authorization.ts` is the single
+  permission source. Gateway and Todo Service `authorizeWorkspace` middleware call
+  `canPerform(role, action)` rather than defining role decisions locally.
+- **AUT-3:** rules outside the permission matrix are explicit: the last administrator cannot be
+  removed or demoted, a person in no workspace can still use owner-only personal tasks, and legacy
+  tasks with no workspace remain owner-accessible.
+- **AUT-4:** membership projection changes have a maximum authorization propagation bound of 15
+  seconds in the live acceptance test. The observed latency is recorded separately and is normally
+  much lower; a run exceeding 15 seconds fails the E2E check.
+- **AUT-5:** refused workspace actions return `403 WORKSPACE_ACTION_FORBIDDEN`; hidden TODOs use
+  the same `404 TODO_NOT_FOUND` response as missing TODOs, and the response does not reveal whether
+  the resource exists.
+
 ## 5. Operational status and remaining independent gaps
 
 Listed explicitly so nothing here is claimed as done before it is:
@@ -119,17 +138,18 @@ The following steps were executed against the live `docker-compose` stack and ve
 tests below include both manual steps and automated unit/integration checks. Automated test
 commands are listed in `docs/testing.md`.
 
-The policy and AUT-1 table have one executable proof command:
+The policy and AUT-1 through AUT-5 documentation have one executable proof command:
 
 ```bash
 npm run verify:authorization
 ```
 
 This builds and tests `@todo/contracts`, then reads this Markdown table independently and compares
-all 33 decisions with the package's built public exports. Exact clean-clone steps, expected output,
-and a deliberate-failure check are recorded in `docs/testing.md`. This command proves the policy
-definition and its documentation agree; it does **not** replace the consumer, middleware, or live
-Docker Compose evidence listed in `docs/testing.md`.
+all 33 decisions with the package's built public exports. It also checks the AUT-2 source anchors,
+AUT-3 invariant anchors, AUT-4 15-second bound, and AUT-5 refusal/non-disclosure statements.
+Exact clean-clone steps, expected output, and a deliberate-failure check are recorded in
+`docs/testing.md`. This command does not replace the consumer, middleware, or live Docker Compose
+evidence listed there.
 
 1. Confirm no part of this design proposes putting `role` inside the access token — grep the
    codebase's JWT signing code (`apps/account-service/src/security/access-token.service.ts`) and

@@ -10,6 +10,10 @@ by TRC-2.
 | Requirement | Status | Automated check | What the check proves |
 |---|---|---|---|
 | AUT-1 | Covered | `npm run verify:authorization` | The canonical permission table in `packages/contracts/src/authorization/workspace-authorization.ts` matches the documented AUT-1 table in `docs/authorization.md`. |
+| AUT-2 | Covered | `npm run verify:authorization` | The verifier checks the single contracts policy source and confirms Gateway and Todo Service enforcement middleware call `canPerform`. |
+| AUT-3 | Covered | `npm run verify:authorization` | The verifier checks documented and source anchors for the last-administrator, no-workspace, and legacy-task rules. |
+| AUT-4 | Covered | `npm run verify:authorization` plus the live TN-7 E2E test | The verifier checks the documented 15-second propagation bound; the live test measures actual role/removal propagation. |
+| AUT-5 | Covered | `npm run verify:authorization` plus the live hidden-resource E2E test | The verifier checks refusal and non-disclosure wording/source anchors; the live test checks identical missing and inaccessible TODO responses and timing. |
 | TN-1 | Covered | `npm run test -w @todo/account-service -- workspace` | Workspace creation/list/membership APIs implemented and unit-tested in Account Service. Evidence: `apps/account-service/src/modules/workspace/*` tests and routes. |
 | TN-2 | Covered | `npm run test -w @todo/account-service -- workspace.repository.test.ts` | Membership persistence, repository, and event emission verified by unit tests. Evidence: `apps/account-service/src/modules/workspace/workspace.repository.ts` and related tests. |
 | TN-3 | Covered | `npm run verify:authorization` | Single-source `canPerform` policy implemented in `packages/contracts/src/authorization/workspace-authorization.ts`. |

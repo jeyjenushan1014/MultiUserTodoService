@@ -24,7 +24,8 @@
     "test:e2e": "npm run test:e2e -w @todo/gateway",
     "test:docs": "node scripts/verify-api-docs.mjs",
     "start:outbox-worker": "node dist/src/workers/outbox-worker.js",
-    "verify:authorization": "npm run clean -w @todo/contracts && npm run build -w @todo/contracts && npm run test -w @todo/contracts && node scripts/verify-authorization-docs.mjs"
+      "verify:day4": "node scripts/verify-day4.mjs",
+      "verify:authorization": "npm run clean -w @todo/contracts && npm run build -w @todo/contracts && npm run test -w @todo/contracts && node scripts/verify-authorization-docs.mjs"
      
 
   },

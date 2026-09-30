@@ -28,6 +28,11 @@ const authorizationDocument = await readFile(
   "utf8",
 );
 
+async function assertSourceContains(relativePath, text, requirement) {
+  const source = await readFile(new URL(`../${relativePath}`, import.meta.url), "utf8");
+  assert.ok(source.includes(text), `${requirement} source anchor is missing: ${relativePath}`);
+}
+
 const tableLines = authorizationDocument
   .split("\n")
   .filter((line) => line.startsWith("|"));
@@ -77,6 +82,66 @@ for (const [operation, action] of documentedActions) {
   }
 }
 
+assert.ok(
+  authorizationDocument.includes("packages/contracts/src/authorization/workspace-authorization.ts") &&
+    authorizationDocument.includes("canPerform(role, action)") &&
+    authorizationDocument.includes("authorizeWorkspace"),
+  "AUT-2 must identify one canonical policy source and its enforcement path",
+);
+await assertSourceContains(
+  "packages/contracts/src/authorization/workspace-authorization.ts",
+  "canPerform",
+  "AUT-2",
+);
+await assertSourceContains(
+  "apps/gateway/src/middleware/authorize-workspace.middleware.ts",
+  "canPerform(role, action)",
+  "AUT-2",
+);
+await assertSourceContains(
+  "apps/todo-service/src/middleware/authorize-workspace.middleware.ts",
+  "canPerform(role, action)",
+  "AUT-2",
+);
+
+for (const requiredPhrase of [
+  "last administrator",
+  "person in no workspace",
+  "legacy",
+]) {
+  assert.ok(
+    authorizationDocument.toLowerCase().includes(requiredPhrase),
+    `AUT-3 documentation must describe: ${requiredPhrase}`,
+  );
+}
+await assertSourceContains(
+  "apps/account-service/src/modules/workspace/workspace.repository.ts",
+  "hasAnotherAdministrator",
+  "AUT-3",
+);
+await assertSourceContains(
+  "apps/todo-service/migrations/20260925170000_add_workspace_id_to_todos.cjs",
+  "workspace_id",
+  "AUT-3",
+);
+
+assert.match(
+  authorizationDocument,
+  /maximum[\s\S]*?15\s+seconds/i,
+  "AUT-4 must document the maximum authorization propagation time",
+);
+assert.ok(
+  authorizationDocument.includes("WORKSPACE_ACTION_FORBIDDEN") &&
+    authorizationDocument.includes("404") &&
+    /reveals nothing|cannot learn|not inferable/i.test(authorizationDocument),
+  "AUT-5 must document refusal status, error shape, and non-disclosure behavior",
+);
+await assertSourceContains(
+  "apps/gateway/src/middleware/authorize-workspace.middleware.ts",
+  "WORKSPACE_ACTION_FORBIDDEN",
+  "AUT-5",
+);
+
 console.log(
-  `Authorization proof passed: ${WORKSPACE_ROLES.length} roles x ${WORKSPACE_ACTIONS.length} actions; AUT-1 matches the built public contract.`,
+  `Authorization proof passed: AUT-1 through AUT-5; ${WORKSPACE_ROLES.length} roles x ${WORKSPACE_ACTIONS.length} actions match the built public contract and documented enforcement rules.`,
 );

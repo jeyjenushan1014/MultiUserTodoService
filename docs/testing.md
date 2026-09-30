@@ -76,6 +76,17 @@ denied with `403 WORKSPACE_ACTION_FORBIDDEN` after re-add. It
 requires the complete stack because Account Service persists the change and publishes the event,
 RabbitMQ delivers it, and Gateway applies it to Redis.
 
+## AUT-2 to AUT-5 verification
+
+```powershell
+npm run verify:authorization
+```
+
+This command independently checks the canonical policy source and enforcement middleware (AUT-2),
+the documented non-matrix invariants and source anchors (AUT-3), the documented 15-second
+propagation bound (AUT-4), and refusal/non-disclosure semantics (AUT-5). It fails when the
+authorization document or the anchored implementation paths drift.
+
 Backfill dry-run
 
 ```bash

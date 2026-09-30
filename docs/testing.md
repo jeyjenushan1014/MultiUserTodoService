@@ -38,6 +38,33 @@ one `yes` to `no` in the AUT-1 permission table and rerun the command. It must e
 `AUT-1 disagrees with the executable policy` assertion. Restore the document and rerun; it must
 pass. Do not commit the deliberate breakage.
 
+## How to run the new integration-style authorization checks locally
+
+These tests run without starting the full Docker stack by mocking external services and the
+membership projection. They verify `authorizeWorkspace` behavior end-to-end inside the
+Todo Service process.
+
+From workspace root:
+
+```bash
+# run only the Todo Service tests that include the new auth checks
+npm run test -w @todo/todo-service -- src/modules/todo/__tests__/workspace-authorization.e2e.test.ts
+```
+
+To run the full cross-service e2e suite (requires Docker Compose with Postgres, Redis, and RabbitMQ):
+
+```bash
+docker compose up -d --build account-service gateway todo-service
+npm run test:e2e
+```
+
+Backfill dry-run
+
+```bash
+node apps/todo-service/scripts/backfill-workspaces.mjs --dry-run
+node apps/todo-service/scripts/backfill-workspaces.mjs --apply   # to perform updates
+```
+
 For code-level inspection, verify that endpoints will import the public function rather than role
 strings once enforcement is implemented:
 

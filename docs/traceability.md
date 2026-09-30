@@ -14,6 +14,10 @@ by TRC-2.
 | TN-8 | Covered | `npm run test -w @todo/account-service -- workspace.service.test.ts` (self-change → 403) plus the live manual check in `docs/authorization.md` §7 item 2 | A caller cannot add or change their own workspace membership through the membership-mutation endpoints, verified both at the unit level and against the running stack. |
 | TN-12 | Covered | Live manual check in `docs/authorization.md` §7 item 4 | A removed member receives the identical `404 WORKSPACE_NOT_FOUND` response a non-existent workspace would return, so membership or workspace existence cannot be inferred from the response. |
 
+| TN-6 | Partially Covered | Unit tests + integration-style mocks (`apps/todo-service` tests) | Local projection lookup and middleware enforcement exist in the Gateway and Todo Service, verified by unit and integration-style tests. Full e2e propagation latency measurement (ARC-8) is pending. |
+
+| TN-7 | Partially Covered | Unit tests + integration-style mocks (`apps/todo-service` tests) | Revocation `revoked-before` semantics are implemented and tested locally; cross-service verification under real delivery latency is pending. |
+
 ## Coverage gaps — no evidence claimed
 
 TN-2 through TN-7 (TN-6/TN-7 designed but not enforced by any service other than Account Service

@@ -101,8 +101,9 @@ Listed explicitly so nothing here is claimed as done before it is:
 - The workspace HTTP API surface (done — `docs/api.md` §5a; live-verified through the Gateway,
   not just unit-tested).
 -- Local membership projections outside Account Service (Gateway, Todo Service) so TN-6 holds for
-  every service, not only the one that owns the data. (IMPLEMENTED: Gateway and Todo Service now
-  consume `workspace.membership-changed` and maintain a Redis-based projection.)
+  every service, not only the one that owns the data. Gateway and Todo Service consume
+  `workspace.membership-changed` and maintain a Redis-based projection. The projection keys and
+  behavior are documented in `docs/workspace-membership-projection.md`.
 - The backfill migration moving existing ownerless tasks into the "no workspace" path (TN-10,
   TN-11) — Todo Service has not been touched yet.
 - The measured propagation latency number for `workspace.membership-changed` (comes once a
@@ -121,10 +122,11 @@ membership on someone else's behalf — for example account deletion cascading a
 planned) — where the normal actor/self-change rules do not apply. This is recorded here rather than
 silently left implied, per the project's rule that an unproven claim is worse than a stated gap.
 
-## 6. Manual verification of this document (design-stage proof)
+## 7. Manual verification of this document (empirical proof)
 
-There is no running code to test yet, so verification here means checking the design itself is
-internally consistent and doesn't quietly reintroduce M1:
+The following steps were executed against the live `docker-compose` stack and verified. The
+tests below include both manual steps and automated unit/integration checks. Automated test
+commands are listed in `docs/testing.md`.
 
 The policy and AUT-1 table have one executable proof command:
 

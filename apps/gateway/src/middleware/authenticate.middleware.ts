@@ -27,6 +27,10 @@ export interface AuthenticationLocals {
   accessTokenIssuedAt?: number;
 }
 
+export interface AuthenticatedCallerIdentity extends CallerIdentity {
+  readonly accessTokenIssuedAt: number;
+}
+
 /*
  * Authorization no longer requires a synchronous call to Account
  * Service: revocation is learned asynchronously via
@@ -98,7 +102,7 @@ export const authenticateTodoRead =
 
 export function getCallerIdentity(
   response: Response,
-): CallerIdentity {
+): AuthenticatedCallerIdentity {
   const locals =
     response.locals as Record<
       string,
@@ -134,9 +138,20 @@ export function getCallerIdentity(
     );
   }
 
+  const accessTokenIssuedAt = locals.accessTokenIssuedAt;
+
+  if (typeof accessTokenIssuedAt !== "number" || !Number.isInteger(accessTokenIssuedAt)) {
+    throw new AppError(
+      500,
+      "AUTHENTICATION_CONTEXT_INVALID",
+      "Authentication context is invalid",
+    );
+  }
+
   return {
     userId: identity.userId,
     sessionId: identity.sessionId,
     email: identity.email,
+    accessTokenIssuedAt,
   };
 }

@@ -10,8 +10,7 @@ import type {
 } from "express";
 
 vi.mock("../../../security/workspace-membership.cache.js", () => ({
-  getMembershipRole: vi.fn(),
-  getRevokedBefore: vi.fn(),
+  getWorkspaceAuthorization: vi.fn(),
 }));
 
 import { authorizeWorkspace } from "../../../middleware/authorize-workspace.middleware.js";
@@ -43,16 +42,11 @@ describe("authorizeWorkspace e2e-style tests", () => {
   });
 
   it("allows when membership role permits the action", async () => {
-    const getRoleMock = vi.mocked(
-      membershipCache.getMembershipRole,
+    const getAuthorizationMock = vi.mocked(
+      membershipCache.getWorkspaceAuthorization,
     );
 
-    const getRevokedMock = vi.mocked(
-      membershipCache.getRevokedBefore,
-    );
-
-    getRoleMock.mockResolvedValueOnce("editor");
-    getRevokedMock.mockResolvedValueOnce(null);
+    getAuthorizationMock.mockResolvedValueOnce({ role: "editor", revokedBefore: null });
 
     const req = makeReq(
       { workspaceId: "w-1" },
@@ -75,7 +69,7 @@ describe("authorizeWorkspace e2e-style tests", () => {
 
     await mw(req, res, next);
 
-    expect(getRoleMock).toHaveBeenCalledWith(
+    expect(getAuthorizationMock).toHaveBeenCalledWith(
       "user-1",
       "w-1",
     );
@@ -86,16 +80,11 @@ describe("authorizeWorkspace e2e-style tests", () => {
   });
 
   it("denies when no membership exists", async () => {
-    const getRoleMock = vi.mocked(
-      membershipCache.getMembershipRole,
+    const getAuthorizationMock = vi.mocked(
+      membershipCache.getWorkspaceAuthorization,
     );
 
-    const getRevokedMock = vi.mocked(
-      membershipCache.getRevokedBefore,
-    );
-
-    getRoleMock.mockResolvedValueOnce(null);
-    getRevokedMock.mockResolvedValueOnce(null);
+    getAuthorizationMock.mockResolvedValueOnce({ role: null, revokedBefore: null });
 
     const req = makeReq({
       workspaceId: "w-1",
@@ -117,7 +106,7 @@ describe("authorizeWorkspace e2e-style tests", () => {
 
     await mw(req, res, next);
 
-    expect(getRoleMock).toHaveBeenCalledWith(
+    expect(getAuthorizationMock).toHaveBeenCalledWith(
       "user-2",
       "w-1",
     );
@@ -137,20 +126,12 @@ describe("authorizeWorkspace e2e-style tests", () => {
   });
 
   it("denies when token was issued before membership revocation", async () => {
-    const getRoleMock = vi.mocked(
-      membershipCache.getMembershipRole,
+    const getAuthorizationMock = vi.mocked(
+      membershipCache.getWorkspaceAuthorization,
     );
 
-    const getRevokedMock = vi.mocked(
-      membershipCache.getRevokedBefore,
-    );
-
-    getRoleMock.mockResolvedValueOnce("editor");
-
-    const revokedAt =
-      Math.floor(Date.now() / 1000) + 10;
-
-    getRevokedMock.mockResolvedValueOnce(revokedAt);
+    const revokedAt = Math.floor(Date.now() / 1000) + 10;
+    getAuthorizationMock.mockResolvedValueOnce({ role: "editor", revokedBefore: revokedAt });
 
     const issuedAt = Math.floor(Date.now() / 1000);
 
@@ -174,12 +155,7 @@ describe("authorizeWorkspace e2e-style tests", () => {
 
     await mw(req, res, next);
 
-    expect(getRoleMock).toHaveBeenCalledWith(
-      "user-3",
-      "w-1",
-    );
-
-    expect(getRevokedMock).toHaveBeenCalledWith(
+    expect(getAuthorizationMock).toHaveBeenCalledWith(
       "user-3",
       "w-1",
     );

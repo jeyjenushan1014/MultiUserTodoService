@@ -17,6 +17,9 @@ export interface CallerIdentity {
   readonly sessionId: string;
 
   readonly email: string;
+
+  /** Original access-token issued-at time in Unix seconds, when available. */
+  readonly accessTokenIssuedAt?: number;
 }
 
 export interface InternalIdentityEnvelope

@@ -163,6 +163,9 @@ describe(
           sessionId: "session-1",
           email: "user@example.com",
         });
+        expect(response.locals.accessTokenIssuedAt).toEqual(
+          expect.any(Number),
+        );
       },
     );
 

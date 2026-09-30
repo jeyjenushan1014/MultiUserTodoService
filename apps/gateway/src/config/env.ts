@@ -112,6 +112,19 @@ PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:
     .positive()
     .default(900),
 
+  WORKSPACE_MEMBERSHIP_CACHE_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(3_600)
+    .max(86_400)
+    .default(3_600),
+
+  /** Temporary backfill escape hatch; keep false in steady-state and production. */
+  WORKSPACE_PROJECTION_FAIL_OPEN: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+
   MAILPIT_URL: z
     .url()
     .default("http://mailpit:8025"),

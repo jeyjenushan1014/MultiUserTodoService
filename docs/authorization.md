@@ -1,20 +1,13 @@
 # Authorization Design — Tenancy & Roles (Day 4)
 
-**Status: design only.** No workspace or role code exists yet. This document is written and
-committed before any implementation, per the rule that the TN-6/TN-7 tension has to be resolved
-on paper first — changing where authorization state lives after code depends on it means
-rewriting every service's assumption about the caller twice instead of once.
-**Status: permission policy, persistence, and the workspace HTTP API are implemented; local
-membership projections in Gateway/Todo Service and endpoint enforcement outside Account Service
-are pending.** This document was written before implementation so that the TN-6/TN-7 tension was
-resolved on paper first. The role/action policy exists in `@todo/contracts`, workspace and
-membership mutations are reachable through `POST/GET/PATCH/DELETE /api/v1/workspaces...`
-(Account Service is the source of truth and enforces `canPerform` directly against its own
-database), and every mutation's `self-change`/`forbidden`/`last-administrator`/`not-found` outcome
-is verified live through the Gateway, not just at the repository layer. TN-6 is not yet fully
-satisfied end-to-end: Gateway and Todo Service do not yet hold a local projection of membership, so
-no *other* service can make an authorization decision without asking Account Service — this is the
-next section to build.
+**Status: implemented, with live-stack verification in `docs/testing.md`.** Account Service is the
+source of truth for membership changes. Gateway and Todo Service consume its transactional
+`workspace.membership-changed` events into local Redis projections. Request-path authorization
+uses those local projections and never synchronously calls Account Service (TN-6). Role changes are
+applied against every request, and removal records a revoked-before watermark checked against the
+validated original JWT `iat`, including after a later re-add (TN-7). Redis failure fails closed with
+`503`; missing membership is denied by default. See `docs/workspace-membership-projection.md` for
+operations, backfill controls, and exact verification commands.
 
 ## 1. The problem this document exists to resolve
 
@@ -40,20 +33,28 @@ The fix, already implemented and tested:
 1. Account Service publishes `account.session-revoked` (`{ userId, sessionId | null, revokedAt }`)
    transactionally, in the same commit as the session-revocation write, whenever a session is
    revoked (logout, refresh-token reuse, email change, password reset).
-@@ -62,57 +63,92 @@ Source: `apps/account-service/src/outbox/session-revoked-event.ts`,
-  new mechanism.
-- **TN-6 satisfied**: every authorization check reads the local projection. No service calls
-  another service to answer "is this caller allowed to do this."
-- **TN-7 satisfied for removal**: when a person is removed, the projection is deleted for that
-  pair and a `revoked-before` timestamp is recorded per `(userId, workspaceId)`, exactly like
-  `account-revoked:{userId}` — a request already in flight, or a token issued a second earlier, is
-  checked against that timestamp and rejected, not against a role that no longer exists.
-- **TN-7 satisfied for role change**: the projection is overwritten in place; the next request
-  reads the new role. There is no token-side role to go stale, because the token never carries a
-  role — only identity.
-- **Propagation latency**: bounded by event delivery time (observed to be well under one second
-  in this stack's RabbitMQ setup), the same bound already true for session revocation. This number
-  is what `ARC-8` and `AUT-4` will report once measured end-to-end.
+Source: `apps/account-service/src/modules/workspace/workspace-membership-event.ts`,
+`apps/gateway/src/security/workspace-membership.consumer.ts`,
+`apps/todo-service/src/events/workspace-membership.consumer.ts`, and
+`apps/gateway/src/__tests__/todo.e2e.test.ts`.
+
+- **TN-6**: middleware reads one local Redis snapshot. Account Service HTTP calls used to execute
+  authentication, profile, or workspace-management operations remain valid business operations;
+  they are not per-request remote authorization checks. Protected workspace endpoints authorize
+  locally before proxying any permitted operation.
+- **TN-7, role change**: every event atomically updates the role projection. `canPerform` evaluates
+  the current projected role regardless of how long ago the bearer token was issued.
+- **TN-7, removal**: one atomic Redis script deletes the role and stores the event timestamp as the
+  revoked-before watermark. Gateway passes the validated original JWT `iat` in the signed internal
+  identity envelope to Todo Service. Both services deny when `iat <= revokedBefore`. Re-adding a
+  user preserves the watermark, so an old unexpired token stays revoked; a newly issued token after
+  re-add may be authorized.
+- **Delivery and failures**: consumers acknowledge only after the atomic projection write resolves;
+  failed writes are nacked for redelivery. Older out-of-order events are ignored using their
+  `changedAt` version. Redis outages return `503`, not an authorization bypass.
+- **Propagation latency**: measured by the Docker Compose e2e test and printed per role change and
+  removal. Treat it as an observation, not an SLA, until repeated runs establish an operational
+  target.
 
 ## 4. Where the permission table lives (TN-3, TN-4, TN-5)
 
@@ -92,7 +93,7 @@ write path must additionally prevent self-promotion and self-addition (TN-8) and
 workspace membership rows while checking that an administrator removal or demotion would not
 remove the last administrator (TN-9).
 
-## 5. What this document does not yet decide
+## 5. Operational status and remaining independent gaps
 
 Listed explicitly so nothing here is claimed as done before it is:
 
@@ -100,14 +101,11 @@ Listed explicitly so nothing here is claimed as done before it is:
   `009_create_workspaces_and_memberships.cjs`).
 - The workspace HTTP API surface (done — `docs/api.md` §5a; live-verified through the Gateway,
   not just unit-tested).
--- Local membership projections outside Account Service (Gateway, Todo Service) so TN-6 holds for
-  every service, not only the one that owns the data. Gateway and Todo Service consume
-  `workspace.membership-changed` and maintain a Redis-based projection. The projection keys and
-  behavior are documented in `docs/workspace-membership-projection.md`.
+- Local membership projections outside Account Service: implemented by Gateway and Todo Service;
+  contract and operational procedure are in `docs/workspace-membership-projection.md`.
 - The backfill migration moving existing ownerless tasks into the "no workspace" path (TN-10,
   TN-11) — Todo Service has not been touched yet.
-- The measured propagation latency number for `workspace.membership-changed` (comes once a
-  projection consumer exists; will be recorded here and in `docs/architecture.md` ARC-8).
+- Repeated production-representative propagation measurements needed to set an ARC-8 latency SLA.
 - A real PostgreSQL concurrency proof for the workspace-row lock used by the last-administrator
   guard (TN-9) under two concurrent requests, rather than serial unit tests.
 
@@ -137,8 +135,8 @@ npm run verify:authorization
 This builds and tests `@todo/contracts`, then reads this Markdown table independently and compares
 all 33 decisions with the package's built public exports. Exact clean-clone steps, expected output,
 and a deliberate-failure check are recorded in `docs/testing.md`. This command proves the policy
-definition and its documentation agree; it does **not** prove endpoint enforcement or membership
-revocation, which are not implemented yet.
+definition and its documentation agree; it does **not** replace the consumer, middleware, or live
+Docker Compose evidence listed in `docs/testing.md`.
 
 1. Confirm no part of this design proposes putting `role` inside the access token — grep the
    codebase's JWT signing code (`apps/account-service/src/security/access-token.service.ts`) and
@@ -148,11 +146,10 @@ revocation, which are not implemented yet.
    `apps/gateway/src/middleware/__tests__/authenticate.middleware.test.ts` and re-read
    `apps/gateway/src/security/session-revocation.cache.ts` — the pattern being extended to roles
    must already work for sessions before it's trusted for roles.
-3. When the workspace/role implementation commit lands, confirm it reuses
-   `insertSessionRevokedOutboxEvent`'s shape (one shared outbox-insert helper called from every
-   place membership changes) rather than duplicating the INSERT in four repositories — the
-   session-revocation commit did this once already; the role commit should not regress to
-   duplicating it.
+3. Run the focused TN-6/TN-7 command block in `docs/testing.md`, then run the Docker Compose
+  scenario that proves role downgrade and removal against an already-issued token. The scenario
+  records measured event-propagation latency and proves a re-added member needs a newly issued
+  token.
 
 ## 7. Manual verification performed for the workspace HTTP API (this commit)
 

@@ -252,9 +252,15 @@ TODO_HISTORY_DLQ:
     WORKSPACE_MEMBERSHIP_CACHE_TTL_SECONDS: z.coerce
       .number()
       .int()
-      .min(10)
+      .min(3_600)
       .max(86_400)
-      .default(900),
+      .default(3_600),
+
+    /** Temporary backfill escape hatch; keep false in steady-state and production. */
+    WORKSPACE_PROJECTION_FAIL_OPEN: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
 
     /** Queue name for workspace membership events consumed by TODO Service */
     TODO_WORKSPACE_MEMBERSHIP_QUEUE: z

@@ -54,6 +54,7 @@ const INTERNAL_SIGNATURE_HEADER =
 export interface InternalIdentityLocals {
   callerIdentity?:
     CallerIdentity;
+  accessTokenIssuedAt?: number;
 }
 
 type IdentityResponse<
@@ -302,6 +303,11 @@ export function requireInternalIdentity(
         email:
           identity.email,
       };
+
+    if (identity.accessTokenIssuedAt !== undefined) {
+      response.locals.accessTokenIssuedAt =
+        identity.accessTokenIssuedAt;
+    }
 
     next();
   } catch (error) {

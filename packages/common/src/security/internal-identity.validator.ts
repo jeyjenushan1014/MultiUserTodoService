@@ -69,6 +69,15 @@ export function isInternalIdentityEnvelope(
       "string" &&
 
     typeof value.sessionId ===
-      "string"
+      "string" &&
+
+    (
+      value.accessTokenIssuedAt === undefined ||
+      (
+        typeof value.accessTokenIssuedAt === "number" &&
+        Number.isInteger(value.accessTokenIssuedAt) &&
+        value.accessTokenIssuedAt >= 0
+      )
+    )
   );
 }

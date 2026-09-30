@@ -4,6 +4,7 @@ import {
   expect,
   it,
 } from "vitest";
+import { decodeJwt } from "jose";
 
 interface ApiResult {
   readonly status: number;
@@ -13,6 +14,7 @@ interface ApiResult {
 }
 
 interface TestUser {
+  readonly userId: string;
   readonly email: string;
   readonly password: string;
   readonly accessToken: string;
@@ -223,6 +225,16 @@ function getAccessToken(
   }
 
   return accessToken;
+}
+
+function getUserId(
+  responseBody: unknown,
+): string {
+  if (!isRecord(responseBody) || !isRecord(responseBody.data) || !isRecord(responseBody.data.user)) {
+    throw new Error("Login response does not contain data.user.id");
+  }
+
+  return getString(responseBody.data.user.id, "user id");
 }
 
 function getErrorCode(
@@ -483,7 +495,14 @@ async function registerAndLogin(
     registration.status,
   ).toBe(201);
 
-  const login =
+  return login(email);
+}
+
+async function login(
+  email: string,
+): Promise<TestUser> {
+
+  const loginResponse =
     await request(
       "/api/v1/auth/login",
       {
@@ -497,16 +516,19 @@ async function registerAndLogin(
       },
     );
 
-  expect(login.status).toBe(
+  expect(loginResponse.status).toBe(
     200,
   );
 
   return {
+    userId:
+      getUserId(loginResponse.body),
+
     email,
     password,
     accessToken:
       getAccessToken(
-        login.body,
+        loginResponse.body,
       ),
   };
 }
@@ -811,6 +833,120 @@ describe.skipIf(
           "INVALID_ACCESS_TOKEN",
         );
       },
+    );
+
+    it(
+      "revokes a prior token after workspace membership removal and measures propagation latency",
+      async () => {
+        const originalTokenIssuedAt = decodeJwt(userB.accessToken).iat;
+        expect(originalTokenIssuedAt).toBeTypeOf("number");
+        await wait(1_100);
+        const uniqueValue = `${Date.now()}-${crypto.randomUUID()}`;
+        const workspaceResponse = await request("/api/v1/workspaces", {
+          method: "POST",
+          accessToken: userA.accessToken,
+          body: { name: `TN-7 ${uniqueValue}` },
+        });
+        expect(workspaceResponse.status).toBe(201);
+        if (!isRecord(workspaceResponse.body) || !isRecord(workspaceResponse.body.data) || !isRecord(workspaceResponse.body.data.workspace)) {
+          throw new Error("Workspace response does not contain data.workspace");
+        }
+        const workspaceId = getString(workspaceResponse.body.data.workspace.id, "workspace id");
+
+        let ownerProjection: ApiResult | undefined;
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          ownerProjection = await request(`/api/v1/workspaces/${workspaceId}`, { accessToken: userA.accessToken });
+          if (ownerProjection.status === 200) break;
+          await wait(100);
+        }
+        expect(ownerProjection?.status).toBe(200);
+
+        const addResponse = await request(`/api/v1/workspaces/${workspaceId}/members`, {
+          method: "POST",
+          accessToken: userA.accessToken,
+          body: { userId: userB.userId, role: "administrator" },
+        });
+        expect(addResponse.status).toBe(204);
+
+        let initialAccess: ApiResult | undefined;
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          initialAccess = await request(`/api/v1/workspaces/${workspaceId}`, { accessToken: userB.accessToken });
+          if (initialAccess.status === 200) break;
+          await wait(100);
+        }
+        expect(initialAccess?.status).toBe(200);
+
+        const adminAction = await request(`/api/v1/workspaces/${workspaceId}/members`, {
+          method: "POST",
+          accessToken: userB.accessToken,
+          body: { userId: userA.userId, role: "viewer" },
+        });
+        expect(adminAction.status).toBe(404);
+
+        const roleChange = await request(`/api/v1/workspaces/${workspaceId}/members/${userB.userId}`, {
+          method: "PATCH",
+          accessToken: userA.accessToken,
+          body: { role: "viewer" },
+        });
+        expect(roleChange.status).toBe(204);
+
+        const roleChangeStartedAt = Date.now();
+        let downgradedAction: ApiResult | undefined;
+        while (Date.now() - roleChangeStartedAt < 15_000) {
+          downgradedAction = await request(`/api/v1/workspaces/${workspaceId}/members`, {
+            method: "POST",
+            accessToken: userB.accessToken,
+            body: { userId: userA.userId, role: "viewer" },
+          });
+          if (downgradedAction.status === 403) break;
+          await wait(100);
+        }
+        const roleChangeLatencyMs = Date.now() - roleChangeStartedAt;
+        expect(downgradedAction?.status).toBe(403);
+        expect(getErrorCode(downgradedAction?.body)).toBe("WORKSPACE_ACTION_FORBIDDEN");
+        console.info(`TN-7 role-change propagation: ${roleChangeLatencyMs}ms`);
+
+        const removal = await request(`/api/v1/workspaces/${workspaceId}/members/${userB.userId}`, {
+          method: "DELETE",
+          accessToken: userA.accessToken,
+        });
+        expect(removal.status).toBe(204);
+
+        const propagationStartedAt = Date.now();
+        let deniedAccess: ApiResult | undefined;
+        while (Date.now() - propagationStartedAt < 15_000) {
+          deniedAccess = await request(`/api/v1/workspaces/${workspaceId}`, { accessToken: userB.accessToken });
+          if (deniedAccess.status === 404) break;
+          await wait(100);
+        }
+        const propagationLatencyMs = Date.now() - propagationStartedAt;
+        expect(deniedAccess?.status).toBe(404);
+        expect(getErrorCode(deniedAccess?.body)).toBe("WORKSPACE_NOT_FOUND");
+        expect(propagationLatencyMs).toBeLessThan(15_000);
+        console.info(`TN-7 workspace revocation propagation: ${propagationLatencyMs}ms`);
+        console.info(`TN-7 original access-token iat: ${originalTokenIssuedAt}`);
+
+        const readd = await request(`/api/v1/workspaces/${workspaceId}/members`, {
+          method: "POST",
+          accessToken: userA.accessToken,
+          body: { userId: userB.userId, role: "viewer" },
+        });
+        expect(readd.status).toBe(204);
+
+        const oldTokenAfterReadd = await request(`/api/v1/workspaces/${workspaceId}`, { accessToken: userB.accessToken });
+        expect(oldTokenAfterReadd.status).toBe(404);
+
+        await wait(1_100);
+        const freshUserB = await login(userB.email);
+        let freshAccess: ApiResult | undefined;
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          freshAccess = await request(`/api/v1/workspaces/${workspaceId}`, { accessToken: freshUserB.accessToken });
+          if (freshAccess.status === 200) break;
+          await wait(100);
+        }
+        expect(freshAccess?.status).toBe(200);
+      },
+      60_000,
     );
 
     it(

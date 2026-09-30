@@ -10,17 +10,13 @@ npm run verify:authorization
 
 `npm run check` runs lint, TypeScript builds, and unit tests without requiring manually started infrastructure. `npm run test:e2e` exercises the public Gateway path against the Docker stack.
 
-`npm run verify:authorization` is the reproducible proof for the currently implemented Day 4
-authorization-policy scope. It builds the public `@todo/contracts` artifact, runs the policy unit
-tests, imports the built artifact as a consumer would, and fails if the AUT-1 table in
-`docs/authorization.md` differs from any executable role/action decision. A successful run prints
-the number of roles and actions verified. It does not prove workspace persistence or endpoint
-enforcement; those remain explicitly uncovered.
+`npm run verify:authorization` proves the AUT-1 role/action table matches the built public contract.
+It does not replace the workspace projection tests. The TN-6/TN-7 proof also runs middleware,
+consumer, cache, signed-identity propagation, and Docker Compose end-to-end checks below.
 
-## Manual authorization verification
+## Policy verification
 
-Run these steps from a clean clone. No database, broker, Redis instance, or application process is
-needed for the current policy-only scope.
+Run the policy check from a clean clone. It does not require the service stack.
 
 ```bash
 npm ci
@@ -51,12 +47,33 @@ From workspace root:
 npm run test -w @todo/todo-service -- src/modules/todo/__tests__/workspace-authorization.e2e.test.ts
 ```
 
+## TN-6/TN-7 verification
+
+From PowerShell at the repository root, run unit/build checks first:
+
+```powershell
+npm run build:packages
+npm run build -w @todo/gateway
+npm run build -w @todo/todo-service
+npm run test -w @todo/gateway -- src/security/__tests__/workspace-membership.consumer.test.ts src/security/__tests__/workspace-membership.cache.test.ts src/clients/__tests__/todo-service.client.test.ts src/middleware/__tests__/authenticate.middleware.test.ts
+npm run test -w @todo/todo-service -- src/events/__tests__/workspace-membership.consumer.test.ts src/security/__tests__/workspace-membership.cache.test.ts src/middleware/__tests__/authorize-workspace.middleware.test.ts src/modules/todo/__tests__/workspace-authorization.e2e.test.ts
+```
+
+These checks prove the request path uses local projections, the original JWT `iat` is carried in
+the signed Gateway-to-Todo identity, Redis writes are atomic/versioned, consumer ack follows writes,
+prior tokens are denied, fresh tokens can be authorized, and Redis failure fails closed.
+
 To run the full cross-service e2e suite (requires Docker Compose with Postgres, Redis, and RabbitMQ):
 
 ```bash
-docker compose up -d --build account-service gateway todo-service
-npm run test:e2e
+docker compose up -d --build
+npm run test:e2e -w @todo/gateway -- --testNamePattern="revokes a prior token after workspace membership removal"
 ```
+
+The TN-7 scenario logs observed propagation latency for role downgrade and membership removal,
+then verifies the same token remains denied after re-add and a freshly issued token succeeds. It
+requires the complete stack because Account Service persists the change and publishes the event,
+RabbitMQ delivers it, and Gateway applies it to Redis.
 
 Backfill dry-run
 
@@ -104,7 +121,7 @@ The distributed requirements also need container-level checks. Stop and restart 
 
 | Failure | Expected observation |
 |---|---|
-| Redis | TODO remains correct and available; reads fall back to PostgreSQL |
+| Redis | Non-authorization TODO behavior follows its documented fallback; workspace authorization returns `503` and never fails open |
 | Todo PostgreSQL | Todo process stays alive, readiness becomes unhealthy, recovery occurs after PostgreSQL returns |
 | Account Service | Existing projected TODO reads continue; dependent calls return `503`/`504` |
 | History worker | TODO mutations continue; history catches up after restart |

@@ -25,11 +25,15 @@ const workspaceMembershipEventSchema = z.object({
 let shutdownStarted = false;
 let activeConnection: ChannelModel | undefined;
 
-function toEpochSeconds(isoTimestamp: string): number {
-  return Math.floor(new Date(isoTimestamp).getTime() / 1000);
+function toEpochMilliseconds(isoTimestamp: string): number {
+  const changedAt = Date.parse(isoTimestamp);
+  if (!Number.isSafeInteger(changedAt) || changedAt < 0) {
+    throw new Error("Workspace membership event has an invalid changedAt timestamp");
+  }
+  return changedAt;
 }
 
-async function handleMessage(channel: Channel, message: ConsumeMessage): Promise<void> {
+export async function handleWorkspaceMembershipMessage(channel: Channel, message: ConsumeMessage): Promise<void> {
   try {
     const parsed = JSON.parse(message.content.toString("utf8")) as unknown;
 
@@ -51,13 +55,15 @@ export async function processWorkspaceMembershipEventObject(obj: unknown): Promi
 
   const { workspaceId, userId, role, changedAt } = parsed.payload;
 
-  const changedAtEpoch = toEpochSeconds(changedAt);
+  const changedAtEpochMilliseconds = toEpochMilliseconds(changedAt);
 
   if (role === null) {
-    await removeMembership(userId, workspaceId, changedAtEpoch);
+    await removeMembership(userId, workspaceId, Math.floor(changedAtEpochMilliseconds / 1000), changedAtEpochMilliseconds);
   } else {
-    await cacheMembership(userId, workspaceId, role);
+    await cacheMembership(userId, workspaceId, role, changedAtEpochMilliseconds);
   }
+
+  logger.info({ userId, workspaceId, role, changedAt, projectionLagMs: Math.max(0, Date.now() - changedAtEpochMilliseconds) }, "Workspace membership projection applied");
 }
 
 async function run(): Promise<void> {
@@ -87,7 +93,7 @@ async function run(): Promise<void> {
 
       await channel.consume(env.GATEWAY_WORKSPACE_MEMBERSHIP_QUEUE, (message) => {
         if (message === null) return;
-        void handleMessage(channel, message);
+        void handleWorkspaceMembershipMessage(channel, message);
       });
 
       logger.info("Gateway workspace-membership consumer started");

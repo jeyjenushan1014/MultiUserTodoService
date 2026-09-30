@@ -1,8 +1,9 @@
 import type { RequestHandler } from "express";
 
 import { AppError } from "@todo/common";
-import { getMembershipRole, getRevokedBefore } from "../security/workspace-membership.cache.js";
+import { getWorkspaceAuthorization } from "../security/workspace-membership.cache.js";
 import { canPerform } from "@todo/contracts";
+import { env } from "../config/env.js";
 
 import type { WorkspaceAction, WorkspaceRole } from "@todo/contracts";
 
@@ -21,17 +22,33 @@ export function authorizeWorkspace(action: WorkspaceAction, paramName = "workspa
         throw new AppError(400, "INVALID_WORKSPACE_ID", "Workspace id is required");
       }
 
-      const role = await getMembershipRole(caller.userId, workspaceId) as WorkspaceRole | null;
-
-      const issuedAt = (response.locals as Record<string, unknown>).accessTokenIssuedAt as number | undefined;
-      if (issuedAt !== undefined) {
-        const revokedBefore = await getRevokedBefore(caller.userId, workspaceId);
-        if (revokedBefore !== null && issuedAt <= revokedBefore) {
-          throw new AppError(403, "WORKSPACE_ACTION_FORBIDDEN", "You do not have permission to perform this action");
-        }
+      const issuedAt = (response.locals as Record<string, unknown>).accessTokenIssuedAt;
+      if (typeof issuedAt !== "number" || !Number.isInteger(issuedAt)) {
+        throw new AppError(500, "AUTHENTICATION_CONTEXT_INVALID", "Authentication context is invalid");
       }
 
-      if (role === null || !canPerform(role, action)) {
+      const { role, revokedBefore } = await getWorkspaceAuthorization(caller.userId, workspaceId) as {
+        role: WorkspaceRole | null;
+        revokedBefore: number | null;
+      };
+      if (revokedBefore !== null && issuedAt <= revokedBefore) {
+        throw new AppError(403, "WORKSPACE_ACTION_FORBIDDEN", "You do not have permission to perform this action");
+      }
+
+     if (role === null) {
+  if (env.WORKSPACE_PROJECTION_FAIL_OPEN && revokedBefore === null) {
+    next();
+    return;
+  }
+
+  throw new AppError(
+    403,
+    "WORKSPACE_ACTION_FORBIDDEN",
+    "You do not have permission to perform this action",
+  );
+}
+
+      if (!canPerform(role, action)) {
         throw new AppError(403, "WORKSPACE_ACTION_FORBIDDEN", "You do not have permission to perform this action");
       }
 

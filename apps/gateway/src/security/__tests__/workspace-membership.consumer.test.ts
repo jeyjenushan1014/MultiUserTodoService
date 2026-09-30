@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Channel, ConsumeMessage } from "amqplib";
 
-import { processWorkspaceMembershipEventObject } from "../workspace-membership.consumer.js";
+import {
+  handleWorkspaceMembershipMessage,
+  processWorkspaceMembershipEventObject,
+} from "../workspace-membership.consumer.js";
 
 vi.mock("../workspace-membership.cache.js", () => ({
   cacheMembership: vi.fn(),
@@ -34,24 +38,38 @@ describe("workspace-membership consumer (gateway)", () => {
       "u1",
       "w1",
       "editor",
+      Date.parse(payload.payload.changedAt),
     );
+
     expect(removeMembership).not.toHaveBeenCalled();
   });
 
-    it("removes membership when role is null", async () => {
+  it("removes membership when role is null", async () => {
+    const changedAt = "2026-09-30T12:00:00.000Z";
+
     const payload = {
       eventType: "workspace.membership-changed",
       payload: {
         workspaceId: "w2",
         userId: "u2",
         role: null,
-        changedAt: new Date().toISOString(),
+        changedAt,
       },
     };
 
     await processWorkspaceMembershipEventObject(payload);
 
-      expect(removeMembership).toHaveBeenCalledWith("u2", "w2", expect.any(Number));
+    const expectedEpoch = Math.floor(
+      new Date(changedAt).getTime() / 1000,
+    );
+
+    expect(removeMembership).toHaveBeenCalledWith(
+      "u2",
+      "w2",
+      expectedEpoch,
+      Date.parse(changedAt),
+    );
+
     expect(cacheMembership).not.toHaveBeenCalled();
   });
 
@@ -59,5 +77,82 @@ describe("workspace-membership consumer (gateway)", () => {
     await expect(
       processWorkspaceMembershipEventObject({}),
     ).rejects.toBeDefined();
+  });
+
+  it("acks only after the projection write resolves", async () => {
+    const order: string[] = [];
+
+    vi.mocked(cacheMembership).mockImplementationOnce(() => {
+      order.push("write");
+      return Promise.resolve();
+    });
+
+    const message = {
+      content: Buffer.from(
+        JSON.stringify({
+          eventType: "workspace.membership-changed",
+          payload: {
+            workspaceId: "w1",
+            userId: "u1",
+            role: "editor",
+            changedAt: "2026-09-30T12:00:00.000Z",
+          },
+        }),
+      ),
+    } as ConsumeMessage;
+
+    const ackMock = vi.fn(() => {
+      order.push("ack");
+    });
+
+    const nackMock = vi.fn();
+
+    const channel = {
+      ack: ackMock,
+      nack: nackMock,
+    } as unknown as Channel;
+
+    await handleWorkspaceMembershipMessage(channel, message);
+
+    expect(order).toEqual(["write", "ack"]);
+    expect(nackMock).not.toHaveBeenCalled();
+  });
+
+  it("requeues when a projection write fails and never acks", async () => {
+    vi.mocked(cacheMembership).mockRejectedValueOnce(
+      new Error("Redis unavailable"),
+    );
+
+    const message = {
+      content: Buffer.from(
+        JSON.stringify({
+          eventType: "workspace.membership-changed",
+          payload: {
+            workspaceId: "w1",
+            userId: "u1",
+            role: "editor",
+            changedAt: "2026-09-30T12:00:00.000Z",
+          },
+        }),
+      ),
+    } as ConsumeMessage;
+
+    const ackMock = vi.fn();
+    const nackMock = vi.fn();
+
+    const channel = {
+      ack: ackMock,
+      nack: nackMock,
+    } as unknown as Channel;
+
+    await handleWorkspaceMembershipMessage(channel, message);
+
+    expect(ackMock).not.toHaveBeenCalled();
+
+    expect(nackMock).toHaveBeenCalledWith(
+      message,
+      false,
+      true,
+    );
   });
 });

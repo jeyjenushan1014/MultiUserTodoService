@@ -165,6 +165,10 @@ function createIdentityHeaders(
 
       email:
         identity.email,
+
+      ...(identity.accessTokenIssuedAt === undefined
+        ? {}
+        : { accessTokenIssuedAt: identity.accessTokenIssuedAt }),
     };
 
   const encodedIdentity =

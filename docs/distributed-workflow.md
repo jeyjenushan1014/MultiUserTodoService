@@ -90,3 +90,58 @@ Automated unit checks replace the orchestrator instance while retaining durable-
 inject participant failures. They prove the state-machine decisions. The Docker commands above are
 the manual process-level verification; a future destructive CI job should automate actual
 container stops before claiming PR-4 for this workflow.
+
+## Live proof recorded
+
+The live Compose workflow proof was executed on 2026-09-30. An authenticated request created a
+workspace-provisioning workflow; repeating the same `Idempotency-Key` returned the same workflow
+ID. A subsequent status read showed `completed` with these applied steps:
+
+```text
+account-reservation: applied
+todo-reservation: applied
+gateway-publication: applied
+```
+
+The internal `/health/workflows` endpoint also responded successfully from inside Account Service.
+This proves WF-1, WF-2, WF-6, WF-7, and the durable workflow state path. The additional live
+compensation, boundary, and correlation proofs below cover WF-4, WF-5, WF-8, WF-9, and WF-10.
+
+The WF-2 proof is automated by `npm run verify:workflow:wf2`. It stops Todo Service before
+starting a workflow, confirms the workflow remains non-terminal, restores Todo Service with its
+readiness gate, and confirms the same workflow reaches `completed` from durable state.
+
+The WF-3 process-stop proof is automated by `npm run verify:workflow:wf3`. The Day 4 Compose
+override pauses a claimed workflow before its first step, the proof stops both workflow workers
+past the 30-second lease, restarts them, and verifies the same workflow reaches `completed`
+without a caller retry.
+
+Live WF-3 proof passed on 2026-09-30: both workflow workers were force-stopped during an active
+step, replacement workers reclaimed the expired lease, and the workflow completed successfully.
+
+Additional proofs:
+
+```powershell
+npm run verify:workflow:compensation
+npm run verify:workflow:boundaries
+npm run verify:workflow:correlation
+```
+
+`verify:workflow:compensation` stops Todo Service, verifies bounded retry and compensation,
+checks the stuck-workflow health response, restores Todo Service, and verifies compensation
+completion. `verify:workflow:boundaries` checks that local commits complete before participant
+HTTP calls and that worker ownership uses `FOR UPDATE SKIP LOCKED`. The correlation proof checks
+the request correlation ID across Account, Todo, Gateway, and workflow-worker logs.
+
+## WF-2 failure-boundary proof
+
+Run the live proof with:
+
+```powershell
+npm run verify:workflow:wf2
+```
+
+The proof stops Todo Service before triggering workspace provisioning, verifies that the workflow
+remains `running` and no public workspace is visible, restarts Todo Service with its readiness
+check, and verifies that the same durable workflow reaches `completed`. It fails if a half-applied
+workspace becomes visible or if the workflow cannot resume after the participant returns.

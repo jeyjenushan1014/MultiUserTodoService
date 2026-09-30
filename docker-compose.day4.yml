@@ -5,3 +5,13 @@ services:
       GENERAL_RATE_LIMIT_MAX: "1000"
       AUTH_RATE_LIMIT_MAX: "100"
       PASSWORD_RESET_RATE_LIMIT_MAX: "20"
+
+  workflow-worker:
+    environment:
+      WORKFLOW_STEP_DELAY_MS: "5000"
+      WORKFLOW_COMPENSATION_STUCK_MS: "1000"
+    restart: "no"
+
+  account-service:
+    environment:
+      WORKFLOW_COMPENSATION_STUCK_MS: "1000"

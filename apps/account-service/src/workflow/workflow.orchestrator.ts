@@ -6,6 +6,10 @@ import {
   logger,
 } from "../config/logger.js";
 
+import {
+  env,
+} from "../config/env.js";
+
 import type {
   WorkflowParticipant,
   WorkflowRecord,
@@ -22,6 +26,13 @@ const STEP_ORDER: readonly WorkflowStepName[] = [
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown participant failure";
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, milliseconds);
+    timer.unref();
+  });
 }
 
 export class WorkflowOrchestrator {
@@ -49,6 +60,9 @@ export class WorkflowOrchestrator {
 
       await this.repository.beginStep(workflow.id, step, false);
       try {
+        if (env.WORKFLOW_STEP_DELAY_MS > 0) {
+          await wait(env.WORKFLOW_STEP_DELAY_MS);
+        }
         await this.participants[step].apply(workflow);
         await this.repository.finishStep(workflow.id, step, false);
         logger.info({ workflowId: workflow.id, correlationId: workflow.correlationId, workflowStep: step }, "Workflow step applied");

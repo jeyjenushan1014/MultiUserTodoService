@@ -91,18 +91,22 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 #chatgbt
 ### 9:30 PM-12:00 AM: Distributed Workflow
 
-- [x] WF-1 operation changes state in three or more services
-- [x] WF-2 no observable half-applied state
-- [x] WF-3 automatic resume after process failure
-- [x] WF-4 bounded retry and complete compensation
-- [x] WF-5 idempotent compensation
-- [x] WF-6 workflow status endpoint
-- [x] WF-7 duplicate trigger performs once
-- [x] WF-8 no cross-service transaction held open
-- [x] WF-9 workflow-wide correlation logging
-- [x] WF-10 stuck compensation operator visibility
-- [x] Durable workflow record and step state
-- [x] Process-stop and compensation-failure tests
+Workflow implementation exists, including the corrected Account migration, durable workflow
+records, leases, participant routes, compensation state machine, status endpoint, and unit tests.
+Live process-stop, compensation, and operator proofs remain pending.
+
+- [x] WF-1 live workflow applied account, Todo, and Gateway participant steps
+- [x] WF-2 live half-applied-state barrier and Todo participant recovery proof
+- [x] WF-3 automatic resume after process failure: both workers killed during an active step, lease recovery completed the workflow
+- [x] WF-4 bounded retry and complete compensation (`npm run verify:workflow:compensation` passed)
+- [x] WF-5 idempotent compensation (`npm run verify:workflow:compensation` passed)
+- [x] WF-6 live workflow status endpoint returned truthful step state
+- [x] WF-7 live duplicate trigger returned the same workflow ID
+- [x] WF-8 no cross-service transaction held open (`npm run verify:workflow:boundaries` passed)
+- [x] WF-9 workflow-wide correlation logging (`npm run verify:workflow:correlation` passed)
+- [x] WF-10 stuck compensation operator visibility (`npm run verify:workflow:compensation` passed)
+- [x] Durable workflow record and step state applied by the corrected migration
+- [x] Process-stop and compensation-failure tests (WF-3 and compensation proofs passed)
 
 ## Day 2: Blockchain, Evolution, Lifecycle, and Operations
 

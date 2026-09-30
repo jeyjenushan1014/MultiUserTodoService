@@ -306,6 +306,39 @@ services:
 
     restart: unless-stopped
 
+  workflow-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: account-service-runtime
+    command:
+      - node
+      - apps/account-service/dist/worker/workflow.worker.js
+    environment:
+      NODE_ENV: production
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      TODO_SERVICE_URL: ${TODO_SERVICE_URL:-http://todo-service:3002}
+      GATEWAY_URL: ${GATEWAY_URL:-http://gateway:3000}
+      WORKFLOW_WORKER_ID: ${WORKFLOW_WORKER_ID:-workflow-worker}
+      WORKFLOW_POLL_INTERVAL_MS: ${WORKFLOW_POLL_INTERVAL_MS:-500}
+      WORKFLOW_LEASE_MS: ${WORKFLOW_LEASE_MS:-30000}
+      WORKFLOW_COMPENSATION_STUCK_MS: ${WORKFLOW_COMPENSATION_STUCK_MS:-300000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      account-migrations:
+        condition: service_completed_successfully
+      todo-service:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+      
+
   account-cleanup-worker:
     build:
       context: .

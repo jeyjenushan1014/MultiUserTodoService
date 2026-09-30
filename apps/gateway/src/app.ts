@@ -1,6 +1,8 @@
 
 import express from "express";
 import helmet from "helmet";
+import { workflowParticipantRouter } from "./workflow/workflow-participant.routes.js";
+import { workflowRouter } from "./modules/workflow/workflow.routes.js";
 
 import {
   errorHandlerMiddleware,
@@ -100,6 +102,11 @@ app.use(
 );
 
 app.use(
+  "/internal/v1/workflow-participations",
+  workflowParticipantRouter,
+);
+
+app.use(
   "/api/v1",
   generalApiRateLimit,
 );
@@ -148,6 +155,10 @@ app.use(
 app.use(
   "/api/v1/workspaces",
   workspaceRouter,
+);
+app.use(
+  "/api/v1/workflows",
+  workflowRouter,
 );
 
 app.use(

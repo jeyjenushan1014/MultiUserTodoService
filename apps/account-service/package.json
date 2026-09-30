@@ -16,7 +16,8 @@
   "migrate:create": "node-pg-migrate create -m migrations",
   "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
   "start:notification-consumer": "node dist/worker/notification.worker.js"
-  ,"start:owner-projection-rebuild": "node dist/maintenance/owner-projection-rebuild.worker.js"
+  ,"start:owner-projection-rebuild": "node dist/maintenance/owner-projection-rebuild.worker.js",
+   "start:workflow": "node dist/worker/workflow.worker.js"
 },
   "dependencies": {
     "@todo/common": "*",

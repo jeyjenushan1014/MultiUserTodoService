@@ -91,18 +91,18 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 #chatgbt
 ### 9:30 PM-12:00 AM: Distributed Workflow
 
-- [ ] WF-1 operation changes state in three or more services
-- [ ] WF-2 no observable half-applied state
-- [ ] WF-3 automatic resume after process failure
-- [ ] WF-4 bounded retry and complete compensation
-- [ ] WF-5 idempotent compensation
-- [ ] WF-6 workflow status endpoint
-- [ ] WF-7 duplicate trigger performs once
-- [ ] WF-8 no cross-service transaction held open
-- [ ] WF-9 workflow-wide correlation logging
-- [ ] WF-10 stuck compensation operator visibility
-- [ ] Durable workflow record and step state
-- [ ] Process-stop and compensation-failure tests
+- [x] WF-1 operation changes state in three or more services
+- [x] WF-2 no observable half-applied state
+- [x] WF-3 automatic resume after process failure
+- [x] WF-4 bounded retry and complete compensation
+- [x] WF-5 idempotent compensation
+- [x] WF-6 workflow status endpoint
+- [x] WF-7 duplicate trigger performs once
+- [x] WF-8 no cross-service transaction held open
+- [x] WF-9 workflow-wide correlation logging
+- [x] WF-10 stuck compensation operator visibility
+- [x] Durable workflow record and step state
+- [x] Process-stop and compensation-failure tests
 
 ## Day 2: Blockchain, Evolution, Lifecycle, and Operations
 

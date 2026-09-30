@@ -265,3 +265,25 @@ Internal `GET http://todo-service:3002/health/live` checks process liveness. `GE
 3. Call `POST /api/v1/auth/logout` with the same token.
 4. Reusing the token for a TODO endpoint returns `401 INVALID_ACCESS_TOKEN` immediately.
 5. A caller who can still see the TODO may retrieve its append-only history; inaccessible TODOs return the same not-found response as the TODO endpoint.
+
+## Distributed workflow API
+
+### `POST /api/v1/workflows/workspace-provisioning`
+
+Starts the asynchronous three-service workspace-provisioning workflow. Authentication and an
+`Idempotency-Key` header (8-200 characters) are required. Body:
+`{"workspaceName":"Operations"}`. Returns `202` and a `Location` header with a workflow resource.
+Repeating the request as the same account with the same key returns the same workflow. Possible
+errors are `400 IDEMPOTENCY_KEY_REQUIRED`, `400 VALIDATION_ERROR`, `401 INVALID_ACCESS_TOKEN`, and
+the standard bounded downstream `503`/`504` errors.
+
+### `GET /api/v1/workflows/:workflowId`
+
+Returns the caller's workflow, its current step, whether it is unwinding, every step status and
+attempt count, and its correlation ID. Returns `200`, `401 INVALID_ACCESS_TOKEN`, or the
+non-enumerating `404 WORKFLOW_NOT_FOUND`; a malformed identifier returns `400 VALIDATION_ERROR`.
+
+### `GET /health/workflows`
+
+Operational endpoint on Account Service. Returns `200` and a zero stuck-compensation count, or
+`503` with the count and configured age threshold. It exposes no owner or workflow input.

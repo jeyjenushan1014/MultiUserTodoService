@@ -57,6 +57,8 @@ import {
   internalWorkspaceRouter,
 } from "./modules/workspace/workspace.routes.js";
 
+import { workflowHealthRouter, workflowRouter } from "./workflow/workflow.routes.js";
+
 export const app =
   express();
 
@@ -114,6 +116,11 @@ app.use(
 );
 
 app.use(
+  "/health",
+  workflowHealthRouter,
+);
+
+app.use(
   "/internal/v1/accounts",
   internalEmailChangeRouter,
 );
@@ -123,6 +130,12 @@ app.use(
   "/internal/v1/workspaces",
   internalWorkspaceRouter,
 );
+
+app.use(
+  "/internal/v1/workflows",
+  workflowRouter,
+);
+
 app.use(
   "/internal/v1/accounts",
   accountLookupRouter,

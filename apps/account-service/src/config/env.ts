@@ -180,6 +180,21 @@ ACCOUNT_OUTBOX_WORKER_ID:
       z.url()
         .default("http://todo-service:3002"),
 
+    GATEWAY_URL:
+      z.url().default("http://gateway:3000"),
+
+    WORKFLOW_WORKER_ID:
+      z.string().min(1).default("workflow-worker"),
+
+    WORKFLOW_POLL_INTERVAL_MS:
+      z.coerce.number().int().min(50).max(60_000).default(500),
+
+    WORKFLOW_LEASE_MS:
+      z.coerce.number().int().min(1_000).max(300_000).default(30_000),
+
+    WORKFLOW_COMPENSATION_STUCK_MS:
+      z.coerce.number().int().min(1_000).max(86_400_000).default(300_000),
+
     OWNER_PROJECTION_REBUILD_BATCH_SIZE:
       z.coerce
         .number()

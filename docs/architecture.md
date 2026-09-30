@@ -133,3 +133,12 @@ bounds from the configured values rather than treating library defaults as capac
 ## 10. Observability
 
 Every request has a generated request ID. It is carried through Gateway logs, downstream requests, service logs, and event envelopes. Every log identifies its service and redacts passwords, tokens, reset credentials, and database secrets. Event IDs make asynchronous processing traceable and history deduplicable.
+
+## Durable distributed workflow
+
+Workspace provisioning uses the persisted saga described in
+[`distributed-workflow.md`](distributed-workflow.md). Account Service owns workflow and step state;
+Todo Service owns its reservation; Gateway owns a Redis publication record. Two workers safely
+share work through expiring PostgreSQL leases and `SKIP LOCKED`. All ordinary state remains hidden
+until the workflow is terminal, and every remote call occurs after the preceding local transaction
+has closed.

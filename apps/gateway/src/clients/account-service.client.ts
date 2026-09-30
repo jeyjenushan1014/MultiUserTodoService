@@ -28,6 +28,8 @@ import type {
   CreateWorkspaceRequest,
   ListWorkspaceMembersResponse,
   WorkspaceResponse,
+  StartWorkspaceProvisioningRequest,
+  WorkflowResponse,
 } from "@todo/contracts";
 
 import {
@@ -224,6 +226,8 @@ interface AccountRequestOptions {
 
   readonly requiresServiceKey?:
     boolean;
+
+   readonly idempotencyKey?: string;
 }
 
 /*
@@ -264,6 +268,10 @@ function createRequestHeaders(
   if (options.body !== undefined) {
     headers["content-type"] =
       "application/json";
+  }
+
+    if (options.idempotencyKey !== undefined) {
+    headers["idempotency-key"] = options.idempotencyKey;
   }
 
   if (
@@ -1009,5 +1017,39 @@ export async function resolveAccountByEmail(
     );
   }
 
+  return result;
+}
+
+
+export async function startWorkspaceProvisioning(
+  identity: CallerIdentity,
+  request: StartWorkspaceProvisioningRequest,
+  idempotencyKey: string,
+  requestId: string,
+): Promise<WorkflowResponse> {
+  const result = await sendAccountRequest<WorkflowResponse>({
+    method: "POST",
+    path: "/internal/v1/workflows/workspace-provisioning",
+    requestId,
+    identity,
+    idempotencyKey,
+    body: request,
+  });
+  if (result === undefined) throw new AppError(502, "INVALID_DOWNSTREAM_RESPONSE", "Account service returned an invalid response");
+  return result;
+}
+
+export async function getWorkflow(
+  identity: CallerIdentity,
+  workflowId: string,
+  requestId: string,
+): Promise<WorkflowResponse> {
+  const result = await sendAccountRequest<WorkflowResponse>({
+    method: "GET",
+    path: `/internal/v1/workflows/${workflowId}`,
+    requestId,
+    identity,
+  });
+  if (result === undefined) throw new AppError(502, "INVALID_DOWNSTREAM_RESPONSE", "Account service returned an invalid response");
   return result;
 }

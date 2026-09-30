@@ -90,3 +90,11 @@ Existing event versions are immutable. Additive fields may be introduced only wh
 | TODO shared | Account notification consumer processes `todo.shared` | Recipient's current account email at send time; identifies the shared TODO and owner, but grants no continued access |
 
 Mailpit is the local SMTP sink. It captures every message at `http://localhost:8025`; no message leaves the developer machine. Failed delivery is retried and then dead-lettered for inspection.
+
+# Workflow transport note
+
+Workspace provisioning does not add a broker event. Its Account, Todo, and Gateway participant
+commands are authenticated internal HTTP requests carrying the immutable workflow correlation ID.
+Their durable retry source is the Account Service workflow table, rather than a transient HTTP
+request or a second message contract. This distinction is intentional and documented here so the
+commands are not mistaken for uncatalogued events.

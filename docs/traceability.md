@@ -32,7 +32,11 @@ by TRC-2.
 
 ## Coverage gaps — no evidence claimed
 
-The following remain outside Day 4 evidence: full ARC-8 propagation latency numbers, some operational failure-mode proofs flagged in `docs/testing.md` (stop/restart dependency scenarios), and several unrelated requirement groups (WF-*, BC-*, EV-*, PF-*, DG-*, OP-*, PR-*, ML-*, DOC-*, EVT-*, ONC-*, OPS-*, TRC-* listed previously). These gaps are documented and tracked; they are not claimed as covered by this commit.
+The following remain outside Day 4 evidence: full ARC-8 propagation latency numbers, real-container
+workflow stop/restart automation required by PR-4, workflow database/HTTP integration assertions
+called out in the workflow table below, and several unrelated requirement groups (BC-*, EV-*,
+remaining PF-*, DG-*, OP-*, PR-*, ML-*, DOC-*, EVT-*, ONC-*, OPS-*, and TRC-*). These gaps are
+documented and tracked; they are not claimed as covered by this commit
 
 ## Evidence file and test pointers
 
@@ -57,3 +61,22 @@ Only when a requirement is completely finished may a future feature commit move 
 A requirement with any remaining implementation gap stays entirely outside the evidence table. A
 commit is not allowed to mark it covered based only on a document, manual inspection, or a test
 fixture defined from the consumer under test.
+
+fixture defined from the consumer under test.
+## Distributed workflow evidence (2026-09-30)
+
+| Requirement | Automated check / evidence |
+|---|---|
+| WF-1, WF-2, WF-8 | `npm run build`; participant routes plus private reservation design review in `docs/distributed-workflow.md` |
+| WF-3 | `workflow.orchestrator.test.ts` — “resumes after a process stop…” |
+| WF-4, WF-5 | `workflow.orchestrator.test.ts` — bounded retry/reverse undo and no-op participant DELETE contracts |
+| WF-6 | Account/Gateway workflow route compilation plus shared `WorkflowResponse` contract |
+| WF-7 | migration unique constraint `(owner_id, idempotency_key)`; database-level integration check is not yet present |
+| WF-9 | structured orchestrator log fields and propagated `x-request-id`; log aggregation assertion is not yet present |
+| WF-10 | `countStuckCompensations` and `/health/workflows`; HTTP integration check is not yet present |
+| Durable record/step state | reversible migrations `010_create_workspace_provisioning_workflows.cjs` and orchestrator unit suite |
+| Process-stop/compensation failure | `workflow.orchestrator.test.ts` restart-shaped state and terminal compensation-failure tests |
+
+The table distinguishes compiled/design evidence from a behavioral check. WF-7, WF-9, WF-10 and
+the real container-stop portion of PR-4 need integration automation before the broader Day 4
+traceability claim is complete.

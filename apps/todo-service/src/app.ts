@@ -34,6 +34,7 @@ import {
   ownerProjectionRebuildRouter,
 } from "./messaging/owner-projection-rebuild.routes.js";
 
+import { workflowParticipantRouter } from "./workflow/workflow-participant.routes.js";
 
 export const app =
   express();
@@ -75,6 +76,11 @@ app.use(
   "/internal/v1/owner-projection-rebuilds",
   ownerProjectionRebuildRouter,
 );
+
+app.use(
+  "/internal/v1/workflow-participations",
+  workflowParticipantRouter,
+)
 
 
 app.use(

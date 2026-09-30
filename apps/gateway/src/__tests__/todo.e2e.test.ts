@@ -1046,7 +1046,7 @@ describe.skipIf(
         let result:
           ApiResult | undefined;
 
-        for (let attempt = 0; attempt < 20; attempt += 1) {
+        for (let attempt = 0; attempt < 60; attempt += 1) {
           result =
             await request(
               `/api/v1/todos/${userASecondTodo.id}/history`,

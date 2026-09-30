@@ -80,7 +80,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [x] PF-1 two history consumers
 - [x] Shared queues and competing-consumer verification
 - [x] Duplicate event/idempotency behavior under two replicas
-- [ ] Worker restart and reconnect verification
+- [x] Worker restart and reconnect verification: health-gated RabbitMQ recovery, coordinated worker restart, and 27/27 E2E passed
 - [ ] PF-7 slow dependency isolation
 - [ ] PF-8 pool, prefetch, and concurrency calculations
 - [ ] PF-9 per-caller resource protection

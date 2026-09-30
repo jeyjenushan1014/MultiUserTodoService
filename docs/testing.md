@@ -94,7 +94,7 @@ owned by the Nginx `edge` service; Gateway replicas are internal workers behind 
 Run this proof manually:
 
 ```powershell
-docker compose up -d --build --scale gateway=2 --scale account-service=2 --scale todo-service=2 --scale todo-outbox-worker=2 --scale account-outbox-worker=2 --scale account-cleanup-worker=2 --scale todo-cleanup-worker=2 --scale todo-owner-consumer=2 --scale account-notification-consumer=2 --scale todo-history-worker=2
+docker compose -f docker-compose.yml -f docker-compose.day4.yml up -d --build --scale gateway=2 --scale account-service=2 --scale todo-service=2 --scale todo-outbox-worker=2 --scale account-outbox-worker=2 --scale account-cleanup-worker=2 --scale todo-cleanup-worker=2 --scale todo-owner-consumer=2 --scale account-notification-consumer=2 --scale todo-history-worker=2
 docker compose ps
 npm run test:e2e -w @todo/gateway
 docker compose down -v
@@ -102,6 +102,34 @@ docker compose down -v
 
 The proof passes only when both replicas of every named stateless process remain healthy and the
 E2E suite produces the same result with competing workers.
+
+## Worker restart and reconnect verification
+
+Run these commands while the scaled stack is running:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.day4.yml restart todo-owner-consumer todo-history-worker account-notification-consumer todo-outbox-worker account-outbox-worker
+docker compose -f docker-compose.yml -f docker-compose.day4.yml ps
+docker compose -f docker-compose.yml -f docker-compose.day4.yml logs --since 2m todo-owner-consumer todo-history-worker account-notification-consumer todo-outbox-worker account-outbox-worker
+npm run test:e2e -w @todo/gateway
+```
+
+Then verify broker reconnect behavior:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.day4.yml stop rabbitmq
+docker compose -f docker-compose.yml -f docker-compose.day4.yml ps
+docker compose -f docker-compose.yml -f docker-compose.day4.yml up -d --wait rabbitmq
+docker compose -f docker-compose.yml -f docker-compose.day4.yml restart todo-owner-consumer todo-history-worker account-notification-consumer todo-outbox-worker account-outbox-worker
+docker compose -f docker-compose.yml -f docker-compose.day4.yml ps
+docker compose -f docker-compose.yml -f docker-compose.day4.yml logs --since 2m todo-owner-consumer todo-history-worker account-notification-consumer todo-outbox-worker account-outbox-worker
+npm run test:e2e -w @todo/gateway
+```
+
+The proof passes only when restarted workers return to `Up`, RabbitMQ reports healthy before
+workers reconnect, consumers reconnect after RabbitMQ returns, outbox rows are not lost, and
+E2E passes after recovery. The Day 4 override file raises only verification rate limits so the
+full scaled E2E client does not become its own rate-limit failure.
 
 Backfill dry-run
 

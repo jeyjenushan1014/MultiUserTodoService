@@ -1,0 +1,7 @@
+services:
+  gateway:
+    environment:
+      # The full scaled E2E suite is a verification client, not a production caller.
+      GENERAL_RATE_LIMIT_MAX: "1000"
+      AUTH_RATE_LIMIT_MAX: "100"
+      PASSWORD_RESET_RATE_LIMIT_MAX: "20"

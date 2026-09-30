@@ -126,6 +126,10 @@ client-facing edge, and the same E2E result as the single-replica run. Queue wor
 queues and database/outbox idempotency so increasing replica count cannot duplicate accepted
 business state.
 
+Capacity calculations and caller-isolation controls are recorded in `docs/capacity.md` and checked
+by `npm run verify:capacity`. The document derives pool, prefetch, batch, rate-limit, and replica
+bounds from the configured values rather than treating library defaults as capacity planning.
+
 ## 10. Observability
 
 Every request has a generated request ID. It is carried through Gateway logs, downstream requests, service logs, and event envelopes. Every log identifies its service and redacts passwords, tokens, reset credentials, and database secrets. Event IDs make asynchronous processing traceable and history deduplicable.

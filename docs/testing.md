@@ -151,9 +151,21 @@ docker compose logs --since 2m account-notification-consumer-1 account-notificat
 docker compose start mailpit
 ```
 
-The proof passes when the triggering request completes without waiting for Mailpit, notification
-workers remain bounded, retries occur after Mailpit returns, and unrelated TODO reads/writes remain
-available. Chain isolation remains pending until the BC chain worker exists.
+The mail portion passes when the triggering request completes without waiting for Mailpit,
+notification workers remain bounded, retries occur after Mailpit returns, and unrelated TODO
+reads/writes remain available. The chain portion remains pending until the BC chain worker exists.
+
+## PF-8 and PF-9 capacity verification
+
+```powershell
+npm run verify:capacity
+```
+
+This command checks that every stateless process declares two replicas, that Compose exposes the
+configured pool/prefetch/batch/rate-limit values, and that `docs/capacity.md` contains the matching
+calculations. The scaled E2E proof above verifies that one caller's traffic does not change the
+business result received by other callers. The PF-7 Mailpit failure injection verifies that a slow
+mail dependency remains outside the request path.
 
 Backfill dry-run
 

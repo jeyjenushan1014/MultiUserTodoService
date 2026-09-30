@@ -81,10 +81,11 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [x] Shared queues and competing-consumer verification
 - [x] Duplicate event/idempotency behavior under two replicas
 - [x] Worker restart and reconnect verification: health-gated RabbitMQ recovery, coordinated worker restart, and 27/27 E2E passed
-- [ ] PF-7 slow dependency isolation (mail timeout/prefetch implementation added; manual proof pending)
-- [ ] PF-8 pool, prefetch, and concurrency calculations
-- [ ] PF-9 per-caller resource protection
-- [ ] BC-12 multi-worker nonce/duplicate protection design
+- [x] PF-7 slow mail-provider isolation (timeouts, bounded prefetch, retry/DLQ, and manual proof passed)
+- [ ] PF-7 chain isolation (pending until the blockchain submitter/worker exists)
+- [x] PF-8 pool, prefetch, and concurrency calculations (`npm run verify:capacity` passed)
+- [x] PF-9 per-caller resource protection (bounded resources and scaled E2E proof passed)
+- [ ] BC-12 multi-worker nonce/duplicate protection design (blocked until the chain submitter exists)
 
 
 #chatgbt

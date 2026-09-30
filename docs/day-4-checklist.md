@@ -81,11 +81,13 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [x] Shared queues and competing-consumer verification
 - [x] Duplicate event/idempotency behavior under two replicas
 - [x] Worker restart and reconnect verification: health-gated RabbitMQ recovery, coordinated worker restart, and 27/27 E2E passed
-- [ ] PF-7 slow dependency isolation
+- [ ] PF-7 slow dependency isolation (mail timeout/prefetch implementation added; manual proof pending)
 - [ ] PF-8 pool, prefetch, and concurrency calculations
 - [ ] PF-9 per-caller resource protection
 - [ ] BC-12 multi-worker nonce/duplicate protection design
 
+
+#chatgbt
 ### 9:30 PM-12:00 AM: Distributed Workflow
 
 - [ ] WF-1 operation changes state in three or more services
@@ -103,6 +105,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 
 ## Day 2: Blockchain, Evolution, Lifecycle, and Operations
 
+# chatgbt
 ### 4:30-8:30 AM: Solidity and Local Blockchain
 
 - [ ] BC-1 contract stores task ID, workspace ID, action, and timestamp
@@ -131,6 +134,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [ ] Restart recovery and finality handling
 - [ ] Contract replacement verification
 
+#cobilot
 ### 12:30-3:30 PM: Evolution Compatibility
 
 - [ ] EV-1 online schema migration
@@ -146,6 +150,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [ ] EV-11 contract replacement preserves old verification
 - [ ] Update `docs/events.md` and `docs/architecture.md`
 
+# chatgbt
 ### 4:00-7:00 PM: Data Lifecycle
 
 - [ ] DG-1 account deletion endpoint
@@ -162,6 +167,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [ ] Idempotent repeated deletion
 - [ ] Retention cleanup proof
 
+# chagbt
 ### 7:30-10:00 PM: Mail and Operational Controls
 
 - [ ] ML-1 external provider real-mail demonstration
@@ -181,6 +187,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [ ] OP-9 one-command rollback
 - [ ] OP-10 all commands work on a clean clone
 
+# copilot
 ### 10:30 PM-12:00 AM: Operations Documentation
 
 - [ ] Create `docs/operations.md`
@@ -198,6 +205,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 
 ## Day 3: Performance, Proof, and Final Verification
 
+# copilot
 ### 4:30-7:30 AM: Performance
 
 - [ ] PF-2 keyset pagination for deep pages
@@ -210,6 +218,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [ ] Pool and concurrency calculations documented
 
 ### 8:00-10:00 AM: Proof
+# copilot
 
 - [ ] PR-1 every requirement mapped to an executable check
 - [ ] PR-2 tests use independent contracts
@@ -229,6 +238,7 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 
 ### 10:30 AM-12:00 PM: Public Deployment and Restore
 
+# chatgbt
 - [ ] Deploy contract to Sepolia or equivalent
 - [ ] Record public contract address
 - [ ] Read records directly from the public testnet

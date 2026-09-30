@@ -131,6 +131,30 @@ workers reconnect, consumers reconnect after RabbitMQ returns, outbox rows are n
 E2E passes after recovery. The Day 4 override file raises only verification rate limits so the
 full scaled E2E client does not become its own rate-limit failure.
 
+## PF-7 slow dependency isolation
+
+The notification worker is isolated from the request path. SMTP connection, greeting, and socket
+timeouts are bounded by `MAIL_CONNECTION_TIMEOUT_MS`, `MAIL_GREETING_TIMEOUT_MS`, and
+`MAIL_SOCKET_TIMEOUT_MS`. RabbitMQ notification prefetch is bounded by
+`RABBITMQ_NOTIFICATION_PREFETCH`, so a slow provider cannot create unlimited in-flight work.
+Failures remain in the existing retry/DLQ path and the originating business request is not held
+open by mail delivery.
+
+Manual proof commands:
+
+```powershell
+docker compose up -d --build
+docker compose stop mailpit
+# Trigger a TODO share or password-reset request from a separate client.
+docker compose ps
+docker compose logs --since 2m account-notification-consumer-1 account-notification-consumer-2
+docker compose start mailpit
+```
+
+The proof passes when the triggering request completes without waiting for Mailpit, notification
+workers remain bounded, retries occur after Mailpit returns, and unrelated TODO reads/writes remain
+available. Chain isolation remains pending until the BC chain worker exists.
+
 Backfill dry-run
 
 ```bash

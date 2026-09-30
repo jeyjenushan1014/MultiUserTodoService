@@ -30,6 +30,10 @@ const connection =
 const channel =
   await connection.createChannel();
 
+await channel.prefetch(
+  env.RABBITMQ_NOTIFICATION_PREFETCH,
+);
+
 const consumer =
   new TodoNotificationConsumer(
     channel,

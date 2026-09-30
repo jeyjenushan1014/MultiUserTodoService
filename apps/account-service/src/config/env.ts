@@ -300,6 +300,35 @@ MAIL_PORT: z.coerce
   .min(1)
   .max(65_535)
   .default(1025),
+
+MAIL_CONNECTION_TIMEOUT_MS: z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(60_000)
+  .default(5_000),
+
+MAIL_GREETING_TIMEOUT_MS: z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(60_000)
+  .default(5_000),
+
+MAIL_SOCKET_TIMEOUT_MS: z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(120_000)
+  .default(30_000),
+
+RABBITMQ_NOTIFICATION_PREFETCH: z.coerce
+  .number()
+  .int()
+  .positive()
+  .max(100)
+  .default(10),
+
 RABBITMQ_NOTIFICATION_DLQ_ROUTING_KEY:
   z.string()
     .min(1)

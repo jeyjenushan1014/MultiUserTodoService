@@ -58,3 +58,18 @@ export function authorizeWorkspace(action: WorkspaceAction, paramName = "workspa
     }
   };
 }
+
+export function authorizeWorkspaceIfPresent(action: WorkspaceAction, paramName = "workspaceId"): RequestHandler {
+  const authorize = authorizeWorkspace(action, paramName);
+
+  return (request, response, next) => {
+    const workspaceId = (request.params as Record<string, string | undefined>)[paramName];
+
+    if (workspaceId === undefined) {
+      next();
+      return;
+    }
+
+    authorize(request, response, next);
+  };
+}

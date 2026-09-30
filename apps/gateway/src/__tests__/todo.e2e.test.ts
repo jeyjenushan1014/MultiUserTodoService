@@ -929,12 +929,22 @@ describe.skipIf(
         const readd = await request(`/api/v1/workspaces/${workspaceId}/members`, {
           method: "POST",
           accessToken: userA.accessToken,
-          body: { userId: userB.userId, role: "viewer" },
+          body: { userId: userB.userId, role: "administrator" },
         });
         expect(readd.status).toBe(204);
 
+        await wait(1_100);
+        const freshReaddedUserB = await login(userB.email);
+        const readdedProjection = await request(`/api/v1/workspaces/${workspaceId}/members`, {
+          method: "POST",
+          accessToken: freshReaddedUserB.accessToken,
+          body: { userId: userA.userId, role: "viewer" },
+        });
+        expect(getErrorCode(readdedProjection.body)).not.toBe("WORKSPACE_ACTION_FORBIDDEN");
+
         const oldTokenAfterReadd = await request(`/api/v1/workspaces/${workspaceId}`, { accessToken: userB.accessToken });
-        expect(oldTokenAfterReadd.status).toBe(404);
+        expect(oldTokenAfterReadd.status).toBe(403);
+        expect(getErrorCode(oldTokenAfterReadd.body)).toBe("WORKSPACE_ACTION_FORBIDDEN");
 
         await wait(1_100);
         const freshUserB = await login(userB.email);

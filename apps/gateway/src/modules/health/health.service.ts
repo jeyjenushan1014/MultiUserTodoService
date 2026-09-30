@@ -115,15 +115,28 @@ async function probeDownstreamHealth(
   }
 }
 
-async function probe(
+async function probeHttpStatus(
   url: string,
 ): Promise<boolean> {
-  const result =
-    await probeDownstreamHealth(
-      url,
-    );
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => {
+      controller.abort();
+    },
+    env.DOWNSTREAM_TIMEOUT_MS,
+  );
 
-  return result.available;
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function rabbitMqManagementAuthorization():
@@ -190,7 +203,7 @@ Promise<boolean> {
 
 async function probeMailpit():
 Promise<boolean> {
-  return probe(
+  return probeHttpStatus(
     `${env.MAILPIT_URL}/readyz`,
   );
 }

@@ -88,7 +88,7 @@ import {
 } from "./cache/redis.todo.cache.invalidator.js";
 
 import { database } from "../../config/database.js";
-import { authorizeWorkspace } from "../../middleware/authorize-workspace.middleware.js";
+import { authorizeWorkspaceIfPresent } from "../../middleware/authorize-workspace.middleware.js";
 
 export const todoRouter =
   Router();
@@ -160,7 +160,7 @@ todoRouter.post(
     getTodoParamsSchema,
   ),
   // Require workspace read permission if the TODO belongs to a workspace
-  authorizeWorkspace("task.update"),
+  authorizeWorkspaceIfPresent("task.update"),
   validateBody(
     createTodoShareBodySchema,
   ),
@@ -196,7 +196,7 @@ todoRouter.delete(
     withdrawTodoShareParamsSchema,
   ),
   // If the TODO belongs to a workspace, require update permission
-  authorizeWorkspace("task.update"),
+  authorizeWorkspaceIfPresent("task.update"),
   withdrawTodoShareController,
 );
 
@@ -229,7 +229,7 @@ todoRouter.get(
     }
   },
 
-  authorizeWorkspace("task.read"),
+  authorizeWorkspaceIfPresent("task.read"),
   getTodoController,
 );
 
@@ -261,7 +261,7 @@ todoRouter.get(
     }
   },
 
-  authorizeWorkspace("task.read"),
+  authorizeWorkspaceIfPresent("task.read"),
   listTodoHistoryController,
 );
 
@@ -296,7 +296,7 @@ todoRouter.patch(
     }
   },
 
-  authorizeWorkspace("task.update"),
+  authorizeWorkspaceIfPresent("task.update"),
   updateTodoController,
 );
 
@@ -328,6 +328,6 @@ todoRouter.delete(
     }
   },
 
-  authorizeWorkspace("task.delete"),
+  authorizeWorkspaceIfPresent("task.delete"),
   deleteTodoController,
 );

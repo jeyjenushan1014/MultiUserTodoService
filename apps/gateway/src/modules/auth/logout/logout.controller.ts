@@ -15,6 +15,11 @@ import {
   verifyAccessToken,
 } from "../../../security/access-token-verifier.js";
 
+import {
+  cacheAccountRevoked,
+  cacheSessionRevoked,
+} from "../../../security/session-revocation.cache.js";
+
 function requireRequestId():
   string {
   const requestId =
@@ -44,6 +49,11 @@ export const logout:
       requireRequestId(),
     );
 
+    await cacheSessionRevoked(
+      identity.sessionId,
+      Math.floor(Date.now() / 1000),
+    );
+
     response
       .status(204)
       .send();
@@ -62,6 +72,11 @@ export const logoutAll:
     await logoutAllSessions(
       identity,
       requireRequestId(),
+    );
+
+    await cacheAccountRevoked(
+      identity.userId,
+      Math.floor(Date.now() / 1000),
     );
 
     response

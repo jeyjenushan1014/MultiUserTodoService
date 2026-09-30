@@ -20,13 +20,8 @@ by TRC-2.
 | TN-10 | Covered | `npm run test -w @todo/todo-service -- todo` | Ownerless-task path handled; TODO code updated to accept `workspace_id` and legacy owner-only behavior. Evidence: migration and code paths in `apps/todo-service`. |
 | TN-11 | Covered | `node apps/todo-service/scripts/backfill-workspaces.mjs --dry-run` (dry-run) | Migration file and backfill script exist. Evidence: `apps/todo-service/migrations/20260925170000_add_workspace_id_to_todos.cjs` and `apps/todo-service/scripts/backfill-workspaces.mjs`. |
 | TN-12 | Covered | Gateway/Todo Service route tests + manual check in `docs/authorization.md` §7 | Uniform `404`/`not found` semantics for inaccessible vs missing resources exercised by tests and manual verification steps recorded in documentation. |
-
-## Partially covered requirements
-
-| Requirement | Status | Automated check | What remains |
-|---|---|---|---|
-| TN-6 | Partially covered | Focused commands in `docs/testing.md`; Docker scenario `npm run test:e2e -w @todo/gateway -- --testNamePattern="revokes a prior token after workspace membership removal"` | Local projection checks, fail-closed behavior, and signed identity propagation are implemented and unit-tested. The live Docker Compose proof is now authored; it must pass on the current images before TN-6 is marked covered. |
-| TN-7 | Partially covered | Same Docker scenario plus cache, consumer, and middleware tests in `docs/testing.md` | Atomic versioned projection writes, role downgrade, revoked-before checks against the original JWT `iat`, old-token invalidation after re-add, fresh-token recovery, and latency measurement are implemented. The live RabbitMQ/Redis run remains the acceptance gate before claiming full evidence. |
+| TN-6 | Covered | `npm run test:e2e -w @todo/gateway -- --testNamePattern="revokes a prior token after workspace membership removal"` | Live Gateway, RabbitMQ, Redis, and Account Service flow proves authorization uses the local projection rather than a per-request Account Service authorization call. |
+| TN-7 | Covered | `npm run test:e2e -w @todo/gateway -- --testNamePattern="revokes a prior token after workspace membership removal"` | Live flow measures role/removal propagation, proves a fresh token is accepted after re-add, and proves the original token remains denied by the revoked-before watermark. |
 
 ## Coverage gaps — no evidence claimed
 

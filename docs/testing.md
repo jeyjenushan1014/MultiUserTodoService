@@ -71,7 +71,8 @@ npm run test:e2e -w @todo/gateway -- --testNamePattern="revokes a prior token af
 ```
 
 The TN-7 scenario logs observed propagation latency for role downgrade and membership removal,
-then verifies the same token remains denied after re-add and a freshly issued token succeeds. It
+then verifies a fresh token passes the re-added local projection while the original token remains
+denied with `403 WORKSPACE_ACTION_FORBIDDEN` after re-add. It
 requires the complete stack because Account Service persists the change and publishes the event,
 RabbitMQ delivers it, and Gateway applies it to Redis.
 

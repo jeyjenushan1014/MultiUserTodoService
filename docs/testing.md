@@ -83,6 +83,22 @@ node apps/todo-service/scripts/backfill-workspaces.mjs --dry-run
 node apps/todo-service/scripts/backfill-workspaces.mjs --apply   # to perform updates
 ```
 
+The clean-clone Compose proof is:
+
+```bash
+docker compose exec -T todo-service node apps/todo-service/scripts/backfill-workspaces.mjs --account-url http://account-service:3001 --internal-key "$INTERNAL_SERVICE_SECRET" --apply
+docker compose exec -T todo-service node apps/todo-service/scripts/backfill-workspaces.mjs --account-url http://account-service:3001 --internal-key "$INTERNAL_SERVICE_SECRET"
+```
+
+The apply operation updates only rows whose `workspace_id` is NULL, so rerunning it is safe.
+Owners with zero or multiple workspaces remain unchanged and are reported in `/tmp`.
+
+The real PostgreSQL last-administrator concurrency proof is:
+
+```bash
+docker compose exec -T account-service node apps/account-service/scripts/verify-workspace-concurrency.mjs
+```
+
 For code-level inspection, verify that endpoints will import the public function rather than role
 strings once enforcement is implemented:
 

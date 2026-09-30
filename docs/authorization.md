@@ -103,22 +103,15 @@ Listed explicitly so nothing here is claimed as done before it is:
   not just unit-tested).
 - Local membership projections outside Account Service: implemented by Gateway and Todo Service;
   contract and operational procedure are in `docs/workspace-membership-projection.md`.
-- The backfill migration moving existing ownerless tasks into the "no workspace" path (TN-10,
-  TN-11) — Todo Service has not been touched yet.
+- The backfill migration moving existing tasks into an unambiguous workspace when exactly one
+  workspace exists (TN-11) — applied and repeated against the live Compose database; ambiguous
+  owners remain ownerless and are reported for review.
 - Repeated production-representative propagation measurements needed to set an ARC-8 latency SLA.
-- A real PostgreSQL concurrency proof for the workspace-row lock used by the last-administrator
-  guard (TN-9) under two concurrent requests, rather than serial unit tests.
 
-Note on TN-9's reachability: under the current three-role model, `last-administrator` can only be
-produced by a caller acting on a target they are not (self-change is rejected first) while holding
-`member.remove`/`member.change-role` permission themselves — which requires being an
-administrator distinct from the target. If the target is genuinely the sole administrator, no such
-distinct administrator can exist, so this outcome is not reachable through the public API today
-with the current permission table. It is exercised directly at the repository and service layers
-(fixed rows, not derived from real requests) and exists as a guard for future paths that mutate
-membership on someone else's behalf — for example account deletion cascading a removal (DG-1,
-planned) — where the normal actor/self-change rules do not apply. This is recorded here rather than
-silently left implied, per the project's rule that an unproven claim is worse than a stated gap.
+The TN-9 proof creates two temporary administrators in PostgreSQL and issues reciprocal removals
+concurrently through the real repository. PostgreSQL workspace-row locking permits one removal,
+rejects the other, and leaves one administrator. The fixture and outbox rows are cleaned up after
+the check.
 
 ## 7. Manual verification of this document (empirical proof)
 
@@ -168,7 +161,6 @@ using two freshly registered accounts:
    member or whether the workspace exists).
 5. Re-added B as `viewer`; B attempting `POST /api/v1/workspaces/:id/members` →
    `403 WORKSPACE_ACTION_FORBIDDEN` (role enforcement confirmed live for a non-administrator).
-6. `last-administrator` (TN-9) was **not** reproduced live in this session — see the reachability
-   note in §5. It remains covered only by the repository/service tests that construct the state
-   directly.
+6. The live PostgreSQL TN-9 concurrency proof is documented in `docs/testing.md` and can be
+  repeated with the Compose command above.
 

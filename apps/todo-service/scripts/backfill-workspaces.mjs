@@ -14,8 +14,8 @@ Behavior:
 */
 
 import pg from "pg";
-import fs from "fs";
-import fetch from "node-fetch";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 const argv = process.argv.slice(2);
 const hasApply = argv.includes("--apply");
@@ -114,14 +114,15 @@ async function run() {
     console.info(`Candidates to apply: ${toApply.length}; Ambiguous: ${ambiguous.length}`);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const csvPath = `ambiguous-backfill-${timestamp}.csv`;
-    const csvStream = fs.createWriteStream(csvPath, { encoding: "utf8" });
-    csvStream.write("ownerId,todoCount,workspaceCount,workspaceIds,error\n");
+    const outputDirectory = process.env.BACKFILL_OUTPUT_DIRECTORY || "/tmp";
+    const csvPath = path.join(outputDirectory, `ambiguous-backfill-${timestamp}.csv`);
+    const csvLines = ["ownerId,todoCount,workspaceCount,workspaceIds,error\n"];
     for (const a of ambiguous) {
       const ids = (a.workspaces || []).map((w) => w.id).join("|");
-      csvStream.write(`${a.ownerId},${a.todoIds.length},${(a.workspaces||[]).length},"${ids}","${a.error||""}"\n`);
+      csvLines.push(`${a.ownerId},${a.todoIds.length},${(a.workspaces||[]).length},"${ids}","${a.error||""}"\n`);
     }
-    csvStream.end();
+    await fs.mkdir(outputDirectory, { recursive: true });
+    await fs.writeFile(csvPath, csvLines.join(""), "utf8");
 
     if (!hasApply) {
       console.info("Dry-run complete. Rerun with --apply to perform updates. Ambiguous cases written to:", csvPath);

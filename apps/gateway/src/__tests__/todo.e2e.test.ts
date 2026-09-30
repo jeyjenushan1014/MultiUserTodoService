@@ -1595,6 +1595,43 @@ describe.skipIf(
             missing.body,
           ),
         );
+
+        const measureRequest = async (
+          path: string,
+        ): Promise<number> => {
+          const startedAt = performance.now();
+          await request(
+            path,
+            {
+              accessToken: userB.accessToken,
+            },
+          );
+          return performance.now() - startedAt;
+        };
+
+        const missingDurations: number[] = [];
+        const crossOwnerDurations: number[] = [];
+        for (let sample = 0; sample < 4; sample += 1) {
+          missingDurations.push(
+            await measureRequest(
+              "/api/v1/todos/11111111-1111-4111-8111-111111111111",
+            ),
+          );
+          crossOwnerDurations.push(
+            await measureRequest(
+              `/api/v1/todos/${userAFirstTodo.id}`,
+            ),
+          );
+        }
+
+        const median = (durations: readonly number[]): number => {
+          const ordered = [...durations].sort((left, right) => left - right);
+          return ordered[Math.floor(ordered.length / 2)] ?? 0;
+        };
+
+        expect(
+          Math.abs(median(missingDurations) - median(crossOwnerDurations)),
+        ).toBeLessThan(100);
       },
     );
 

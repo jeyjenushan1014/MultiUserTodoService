@@ -207,6 +207,9 @@ COPY --from=todo-service-builder \
   /app/apps/todo-service/package.json \
   ./apps/todo-service/package.json
 
+COPY apps/todo-service/scripts \
+  ./apps/todo-service/scripts
+
 USER node
 
 CMD ["node", "apps/todo-service/dist/src/server.js"]
@@ -252,6 +255,9 @@ COPY --from=account-service-builder \
 COPY --from=account-service-builder \
   /app/apps/account-service/dist \
   ./apps/account-service/dist
+
+COPY apps/account-service/scripts \
+  ./apps/account-service/scripts
 
 USER node
 

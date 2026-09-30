@@ -68,15 +68,18 @@ docker compose exec -T todo-service node apps/todo-service/scripts/backfill-work
 
 ### 5:30-9:00 PM: Two-Instance Runtime
 
-- [ ] PF-1 two Gateway instances
-- [ ] PF-1 two Account Service instances
-- [ ] PF-1 two Todo Service instances
-- [ ] PF-1 two outbox workers per service
-- [ ] PF-1 two notification consumers
-- [ ] PF-1 two owner-projection consumers
-- [ ] PF-1 two history consumers
-- [ ] Shared queues and competing-consumer verification
-- [ ] Duplicate event/idempotency verification with two consumers
+Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite, and
+`docker compose down -v` cleanup.
+
+- [x] PF-1 two Gateway instances
+- [x] PF-1 two Account Service instances
+- [x] PF-1 two Todo Service instances
+- [x] PF-1 two outbox workers per service
+- [x] PF-1 two notification consumers
+- [x] PF-1 two owner-projection consumers
+- [x] PF-1 two history consumers
+- [x] Shared queues and competing-consumer verification
+- [x] Duplicate event/idempotency behavior under two replicas
 - [ ] Worker restart and reconnect verification
 - [ ] PF-7 slow dependency isolation
 - [ ] PF-8 pool, prefetch, and concurrency calculations

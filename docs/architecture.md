@@ -100,7 +100,31 @@ Services start with local configuration and do not require another service merel
 
 ## 9. Operational topology
 
-Compose starts two PostgreSQL containers, Redis, RabbitMQ, Mailpit, migration jobs, three application processes, and independent workers/consumers. Only Gateway port `3000` is the client API. Mailpit UI is at `http://localhost:8025`; RabbitMQ management is at `http://localhost:15672` for local inspection.
+Compose starts two PostgreSQL containers, Redis, RabbitMQ, Mailpit, migration jobs, an Nginx
+edge, two Gateway replicas, two Account Service replicas, two Todo Service replicas, and two
+replicas of every outbox worker, consumer, and cleanup worker. Only the edge port `3000` is the
+client API. The edge resolves the internal Gateway service through Docker DNS, so Gateway
+replicas do not compete for a host port. PostgreSQL and migration jobs remain single-holder
+components. Mailpit UI is at `http://localhost:8025`; RabbitMQ management is at
+`http://localhost:15672` for local inspection.
+
+### 9.1 PF-1 scale proof
+
+The implementation declares `deploy.replicas: 2` for every stateless process. Run the following
+commands to create the two-instance runtime and verify it; these commands are intentionally not
+run by the code assistant because PF-1 is an operator/runtime proof:
+
+```powershell
+docker compose up -d --build --scale gateway=2 --scale account-service=2 --scale todo-service=2 --scale todo-outbox-worker=2 --scale account-outbox-worker=2 --scale account-cleanup-worker=2 --scale todo-cleanup-worker=2 --scale todo-owner-consumer=2 --scale account-notification-consumer=2 --scale todo-history-worker=2
+docker compose ps
+docker compose exec -T gateway wget -qO- http://localhost:3000/health
+npm run test:e2e -w @todo/gateway
+```
+
+Expected evidence is two running containers for every named stateless process, one healthy
+client-facing edge, and the same E2E result as the single-replica run. Queue workers use durable
+queues and database/outbox idempotency so increasing replica count cannot duplicate accepted
+business state.
 
 ## 10. Observability
 

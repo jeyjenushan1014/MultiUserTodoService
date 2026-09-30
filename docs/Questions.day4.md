@@ -300,10 +300,10 @@ beyond PostgreSQL, Redis, RabbitMQ, and the mandatory chain?
 
 ### Resolution
 
-No additional infrastructure component is currently justified. PostgreSQL stores durable state and
-workflow progress, RabbitMQ transports events, and Redis holds shared short-lived state where
-appropriate. If an existing component cannot meet a requirement, I will record the exact blocking
-requirement and rejected alternatives here before adding anything.
+An Nginx edge proxy is justified by PF-1. Two Gateway replicas cannot both bind the host's client
+port directly, so the edge owns port 3000 and forwards to the internal Gateway service through
+Docker DNS. PostgreSQL stores durable state and workflow progress, RabbitMQ transports events,
+and Redis holds shared short-lived state. No other infrastructure component is added.
 
 ## Activity 10 — How does membership authority reach other services?
 

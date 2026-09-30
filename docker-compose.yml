@@ -112,6 +112,9 @@ services:
       - node
       - apps/todo-service/dist/src/workers/outbox-worker.js
 
+    deploy:
+      replicas: 2
+
     restart: unless-stopped
 
     environment:
@@ -247,6 +250,9 @@ services:
       retries: 10
       start_period: 15s
 
+    deploy:
+      replicas: 2
+
     restart: unless-stopped
 
 
@@ -291,6 +297,9 @@ services:
       rabbitmq:
         condition: service_healthy
 
+    deploy:
+      replicas: 2
+
     restart: unless-stopped
 
   account-cleanup-worker:
@@ -331,6 +340,9 @@ services:
         condition: service_healthy
       account-migrations:
         condition: service_completed_successfully
+
+    deploy:
+      replicas: 2
 
     restart: unless-stopped
 
@@ -386,6 +398,9 @@ services:
       retries: 10
       start_period: 15s
 
+    deploy:
+      replicas: 2
+
     restart: unless-stopped
 
 
@@ -429,6 +444,9 @@ services:
         condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+
+    deploy:
+      replicas: 2
 
     restart: unless-stopped
 
@@ -478,6 +496,9 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+    deploy:
+      replicas: 2
+
     restart: unless-stopped
 
   todo-history-worker:
@@ -524,6 +545,9 @@ services:
       rabbitmq:
         condition: service_healthy
 
+    deploy:
+      replicas: 2
+
     restart: unless-stopped
 
   todo-cleanup-worker:
@@ -560,6 +584,20 @@ services:
       todo-migrations:
         condition: service_completed_successfully
 
+    deploy:
+      replicas: 2
+
+    restart: unless-stopped
+
+  edge:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+    volumes:
+      - ./docker/nginx/day4.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      gateway:
+        condition: service_started
     restart: unless-stopped
 
   gateway:
@@ -608,8 +646,8 @@ services:
       PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS: ${PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS:-900}
 
 
-    ports:
-      - "127.0.0.1:${API_PORT:-3000}:3000"
+    deploy:
+      replicas: 2
 
     healthcheck:
       test:

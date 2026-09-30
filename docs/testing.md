@@ -87,6 +87,22 @@ the documented non-matrix invariants and source anchors (AUT-3), the documented 
 propagation bound (AUT-4), and refusal/non-disclosure semantics (AUT-5). It fails when the
 authorization document or the anchored implementation paths drift.
 
+## PF-1 two-instance verification
+
+The Compose file configures two replicas for every stateless process. The host-facing port is
+owned by the Nginx `edge` service; Gateway replicas are internal workers behind that edge.
+Run this proof manually:
+
+```powershell
+docker compose up -d --build --scale gateway=2 --scale account-service=2 --scale todo-service=2 --scale todo-outbox-worker=2 --scale account-outbox-worker=2 --scale account-cleanup-worker=2 --scale todo-cleanup-worker=2 --scale todo-owner-consumer=2 --scale account-notification-consumer=2 --scale todo-history-worker=2
+docker compose ps
+npm run test:e2e -w @todo/gateway
+docker compose down -v
+```
+
+The proof passes only when both replicas of every named stateless process remain healthy and the
+E2E suite produces the same result with competing workers.
+
 Backfill dry-run
 
 ```bash

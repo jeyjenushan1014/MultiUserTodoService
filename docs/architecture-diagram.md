@@ -5,7 +5,8 @@ The diagram shows the public boundary, synchronous calls, owned datastores, asyn
 ```mermaid
 flowchart LR
     Client[Client]
-    Gateway[Gateway :3000\nJWT verification\nrate limit\nrequest ID]
+    Edge[Nginx edge :3000\nDocker DNS forwarding]
+    Gateway[Gateway x2\nJWT verification\nrate limit\nrequest ID]
     Account[Account Service :3001\nusers and sessions]
     Todo[Todo Service :3002\nTODOs and shares]
     AccountDB[(Account PostgreSQL)]
@@ -13,13 +14,14 @@ flowchart LR
     Redis[(Redis\ncache and counters)]
     Rabbit[(RabbitMQ\ntodo.events exchange)]
     Mail[Mailpit\nSMTP and UI]
-    AccountOutbox[Account outbox worker]
-    TodoOutbox[Todo outbox worker]
-    Owner[Todo owner consumer]
-    Notify[Account notification consumer]
-    History[Todo history worker]
+    AccountOutbox[Account outbox workers x2]
+    TodoOutbox[Todo outbox workers x2]
+    Owner[Todo owner consumers x2]
+    Notify[Account notification consumers x2]
+    History[Todo history workers x2]
 
-    Client -->|public API| Gateway
+    Client -->|public API| Edge
+    Edge -->|load balances internal replicas| Gateway
     Gateway -->|signed identity, bounded HTTP| Account
     Gateway -->|signed identity, bounded HTTP| Todo
     Account --> AccountDB

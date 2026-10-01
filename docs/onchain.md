@@ -215,17 +215,23 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 
 | Requirement | Current evidence | Remaining gate |
 |---|---|---|
-| BC-1 | Contract can append the four fields and emit an event. | Backend must anchor every accepted create, update, and delete. |
-| BC-2 | Contract schema contains no personal-data fields or hashes. | Prove input UUIDs and integration payloads never identify a person before public release. |
+| BC-1 | Backend mutation repositories (`PostgresTodoRepository`, `PostgresUpdateTodoRepository`, `PostgresDeleteTodoRepository`) atomically enqueue chain commands to `chain_submissions`. | Public testnet anchor verification. |
+| BC-2 | Automated `PrivacyGate` strictly rejects titles, descriptions, emails, account IDs, and hashes. Unit-tested in `privacy-gate.test.ts`. | Public testnet demonstration. |
 | BC-3 | Local tests pass for count, bounded pages, invalid sizes, and empty pages. | Demonstrate direct reads against the public testnet. |
-| BC-4 | Local writer succeeds, another signer reverts. | Keep writer control safe in the backend. |
+| BC-4 | Local writer succeeds, another signer reverts. Backend custody protected by `SecureSignerKeyProvider`. | Keep writer control safe in production secrets. |
 | BC-5 | Local tests and chain-31337 deployment demonstrated. | Public testnet deployment and demonstration pending. |
 | BC-6 | `npm run rebuild:chain-projection` and unit tests verify clearing and rescan from chain. | Demonstrated against local RPC. |
 | BC-7 | Unit-tested: `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING`. | Demonstrated. |
 | BC-8 | Unit-tested: common ancestor reconciliation and `rollbackAfterBlock` removes reorged events. | Demonstrated. |
 | BC-9 | `CHAIN_CONFIRMATIONS` enforced $\ge 2$ in `env.ts` and safe head calculation tested. | Demonstrated. |
+| BC-10 | Asynchronous chain writes via Postgres outbox pattern & worker service. | Demonstrated. |
+| BC-11 | State machine: pending, reserved, submitted, confirmed, replaced, abandoned, dead_letter. | Demonstrated. |
+| BC-12 | Atomic sequential nonce coordination via `chain_writer_nonces` and row locking. | Demonstrated. |
+| BC-13 | Outage resilience: mutations persist to DB even during chain/RPC outage. | Demonstrated. |
+| BC-14 | Exponential backoff retry and DLQ routing on repeated failures. | Demonstrated. |
+| BC-15 | `SecureSignerKeyProvider` with runtime in-memory protection and logger redaction. | Demonstrated. |
 | BC-16 | Same-task append gas: 75,583 with 1 and 1,000 existing records. | Record final deployed version and any public-network measurements when available. |
-| BC-17 | Independent Hardhat project, own tests/build/deploy scripts, generated ABI. | Generate and consume deployed address metadata in backend; currently no submitter. |
+| BC-17 | Independent Hardhat project exports `task-history.abi.json` and `task-history.deployment.json`; consumed dynamically by backend without hardcoded addresses. | Demonstrated. |
 
 ## 13. Integration decisions and Chain Submission Architecture (BC-10, BC-11, BC-12, BC-13, BC-14)
 

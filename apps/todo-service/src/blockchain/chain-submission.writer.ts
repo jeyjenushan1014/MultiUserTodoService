@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 
 import { env } from "../config/env.js";
+import { PrivacyGate } from "./privacy-gate.js";
+
+export const DEFAULT_PERSONAL_WORKSPACE_ID =
+  "00000000-0000-4000-8000-000000000001";
 
 export type ChainTaskAction =
   | "created"
@@ -16,11 +20,21 @@ export interface EnqueueChainSubmissionInput {
   readonly action: ChainTaskAction;
 }
 
-export class PostgresChainSubmissionWriter {
+export interface ChainSubmissionWriter {
+  enqueue(
+    transaction: PoolClient,
+    input: EnqueueChainSubmissionInput,
+  ): Promise<void>;
+}
+
+export class PostgresChainSubmissionWriter implements ChainSubmissionWriter {
   public async enqueue(
     transaction: PoolClient,
     input: EnqueueChainSubmissionInput,
   ): Promise<void> {
+    // BC-2: Privacy Gate validation
+    PrivacyGate.assertPrivacySafe(input as unknown as Record<string, unknown>);
+
     await transaction.query(
       `
         INSERT INTO chain_submissions (

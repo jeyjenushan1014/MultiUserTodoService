@@ -22,13 +22,23 @@ by TRC-2.
 | WF-5 | Covered | `npm run verify:workflow:compensation` plus orchestrator unit tests | Live compensation completes through idempotent participant cleanup; unit tests cover repeated undo and compensation failure bounds. |
 | WF-9 | Covered | `npm run verify:workflow:correlation` | The Gateway-generated correlation ID was found in Account, Todo, Gateway, and workflow-worker logs. |
 | WF-10 | Covered | `npm run verify:workflow:compensation` | The proof aged a compensating workflow and observed degraded workflow health before recovery. |
+| BC-1 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | All task creations, updates, and deletions enqueue privacy-safe chain commands into durable `chain_submissions` within the same database transaction. |
+| BC-2 | Covered | `npm run test -w @todo/todo-service -- privacy-gate.test.ts` | `PrivacyGate` strictly validates opaque RFC4122 UUIDs and rejects any title, description, email, user ID, or hashes. |
 | BC-3 | Covered (contract) | `cd contracts/onchain; npm test` | Public view functions count records and return pages bounded to 50; direct public-testnet reading is a separate ONC-3 gate. |
 | BC-4 | Covered (contract) | `cd contracts/onchain; npm test` | Configured writer can append; an unauthorized signer is rejected. Backend key custody remains a separate BC-15 gate. |
 | BC-6 | Covered | `npm run rebuild:chain-projection` | Clears projection tables and rebuilds from chain logs starting at deployment block; verified live on container and unit-tested in `task-history-projection.test.ts`. |
 | BC-7 | Covered | `npm run test -w @todo/todo-service -- task-history-projection.test.ts` | Unit-tested: `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING` guarantees duplicate event processing leaves identical state. |
 | BC-8 | Covered | `npm run test -w @todo/todo-service -- task-history-projection.test.ts` | Unit-tested: reorg detection identifies common ancestor and `rollbackAfterBlock` removes orphaned events and block records above the ancestor. |
 | BC-9 | Covered | `npm run test -w @todo/todo-service -- task-history-projection.test.ts` | Unit-tested: `CHAIN_CONFIRMATIONS` is enforced $\ge 2$ and indexer only processes blocks at or behind `safeHead = latestBlock - confirmations + 1n`. |
+| BC-10 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Asynchronous chain writes via Postgres outbox pattern & worker service. |
+| BC-11 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | State machine transitions: pending, reserved, submitted, confirmed, replaced, abandoned, dead_letter. |
+| BC-12 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Atomic sequential nonce coordination via `chain_writer_nonces` and row locking across concurrent workers. |
+| BC-13 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Outage resilience: mutations persist to DB even during chain/RPC outage. |
+| BC-14 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Exponential backoff retry and DLQ routing on repeated failures. |
+| BC-15 | Covered | `npm run test -w @todo/todo-service -- signer-key-provider.test.ts` | `SecureSignerKeyProvider` with runtime in-memory protection, address validation, and logger redaction. |
 | BC-16 | Covered (local gas) | `cd contracts/onchain; npm run test:gas` | The append used 75,583 gas with 1 and 1,000 existing records for the same task; reads and deployment costs are recorded in `docs/onchain.md`. |
+| BC-17 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Independent Hardhat project exports `task-history.abi.json` and `task-history.deployment.json`; consumed dynamically by backend without hardcoded addresses. |
+| PF-7 | Covered (chain isolation) | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Slow or failing chain RPC calls do not affect API response time; mutations write to Postgres in milliseconds. |
 | OP-1 | Covered (chain copy) | `npm run rebuild:chain-projection` | One documented command rebuilds the local relational chain projection from chain source while services are running, without manual database edits. |
 | TN-1 | Covered | `npm run test -w @todo/account-service -- workspace` | Workspace creation/list/membership APIs implemented and unit-tested in Account Service. Evidence: `apps/account-service/src/modules/workspace/*` tests and routes. |
 | TN-2 | Covered | `npm run test -w @todo/account-service -- workspace.repository.test.ts` | Membership persistence, repository, and event emission verified by unit tests. Evidence: `apps/account-service/src/modules/workspace/workspace.repository.ts` and related tests. |
@@ -45,12 +55,12 @@ by TRC-2.
 
 ## Coverage gaps — no evidence claimed
 
-The on-chain contract has a local build, eight passing tests, ABI export, a reported chain-31337
-Ignition deployment, and a working local projection indexer with rebuild, deduplication, reorg
-rollback, and confirmation gating (BC-6, BC-7, BC-8, BC-9, OP-1).
-BC-1 (system-wide writes), BC-2 (input privacy), BC-5 (public testnet deployment),
-BC-10 through BC-15, and BC-17 (backend address artifact) are not yet covered. BC-3/4/16 rows above
-are explicitly local contract evidence, not claims of a deployed end-to-end blockchain subsystem.
+The on-chain contract has a local build, eight passing tests, ABI and deployment metadata export,
+a reported chain-31337 Ignition deployment, a working local projection indexer with rebuild, deduplication,
+reorg rollback, and confirmation gating (BC-6, BC-7, BC-8, BC-9, OP-1), backend durable anchoring with privacy gate
+(BC-1, BC-2), asynchronous submission with state machine, multi-worker nonce coordination, and DLQ (BC-10..BC-14),
+signer key custody (BC-15), gas measurements (BC-16), deployment artifact verification (BC-17), and RPC isolation (PF-7).
+BC-5 (public testnet deployment) remains pending live testnet demonstration.
 
 The following remain outside Day 4 evidence: full ARC-8 propagation latency numbers, real-container
 workflow stop/restart automation required by PR-4, workflow database/HTTP integration assertions

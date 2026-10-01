@@ -23,6 +23,12 @@ import type {
 } from "../../../outbox/todo-outbox.writer.interface.js";
 
 import {
+  DEFAULT_PERSONAL_WORKSPACE_ID,
+  PostgresChainSubmissionWriter,
+  type ChainSubmissionWriter,
+} from "../../../blockchain/chain-submission.writer.js";
+
+import {
   mapTodoRow,
 } from "../todo.mapper.js";
 
@@ -116,6 +122,9 @@ implements TodoRepository {
     private readonly outboxWriter:
       TodoOutboxWriter =
         new PostgresTodoOutboxWriter(),
+    private readonly chainSubmissionWriter:
+      ChainSubmissionWriter =
+        new PostgresChainSubmissionWriter(),
   ) {}
 
   public async create(
@@ -337,6 +346,7 @@ implements TodoRepository {
             RETURNING
               id,
               owner_id,
+              workspace_id,
               title,
               description,
               state,
@@ -396,6 +406,18 @@ implements TodoRepository {
           client,
           event,
         );
+
+      // BC-1: Anchor task creation into durable chain submissions
+      const rawTodo = createdTodo as unknown as { workspace_id?: string | null };
+      await this.chainSubmissionWriter.enqueue(
+        client,
+        {
+          sourceEventId: event.eventId,
+          taskId: createdTodo.id,
+          workspaceId: rawTodo.workspace_id ?? DEFAULT_PERSONAL_WORKSPACE_ID,
+          action: "created",
+        },
+      );
 
       await client.query(
         "COMMIT",

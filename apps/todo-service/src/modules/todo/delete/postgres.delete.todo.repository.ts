@@ -22,6 +22,12 @@ import type {
   TodoOutboxWriter,
 } from "../../../outbox/todo-outbox.writer.interface.js";
 
+import {
+  DEFAULT_PERSONAL_WORKSPACE_ID,
+  PostgresChainSubmissionWriter,
+  type ChainSubmissionWriter,
+} from "../../../blockchain/chain-submission.writer.js";
+
 import type {
   DeleteTodoRepository,
 } from "./delete.todo.repository.interface.js";
@@ -32,6 +38,9 @@ interface DeletedTodoRow {
 
   readonly owner_id:
     string;
+
+  readonly workspace_id?:
+    string | null;
 }
 
 async function rollbackTransaction(
@@ -58,6 +67,9 @@ implements DeleteTodoRepository {
     private readonly outboxWriter:
       TodoOutboxWriter =
         new PostgresTodoOutboxWriter(),
+    private readonly chainSubmissionWriter:
+      ChainSubmissionWriter =
+        new PostgresChainSubmissionWriter(),
   ) {}
 
   public async softDeleteOwnedTodo(
@@ -94,7 +106,8 @@ implements DeleteTodoRepository {
 
             RETURNING
               id,
-              owner_id
+              owner_id,
+              workspace_id
           `,
           [
             todoId,
@@ -144,6 +157,17 @@ implements DeleteTodoRepository {
           client,
           event,
         );
+
+      // BC-1: Anchor task deletion into durable chain submissions
+      await this.chainSubmissionWriter.enqueue(
+        client,
+        {
+          sourceEventId: event.eventId,
+          taskId: deletedTodo.id,
+          workspaceId: deletedTodo.workspace_id ?? DEFAULT_PERSONAL_WORKSPACE_ID,
+          action: "deleted",
+        },
+      );
 
       await client.query(
         "COMMIT",

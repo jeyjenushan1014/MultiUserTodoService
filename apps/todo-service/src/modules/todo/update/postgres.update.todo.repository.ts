@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   PoolClient,
 } from "pg";
@@ -26,6 +27,12 @@ import {
 import type {
   TodoOutboxWriter,
 } from "../../../outbox/todo-outbox.writer.interface.js";
+
+import {
+  DEFAULT_PERSONAL_WORKSPACE_ID,
+  PostgresChainSubmissionWriter,
+  type ChainSubmissionWriter,
+} from "../../../blockchain/chain-submission.writer.js";
 
 import {
   mapTodoRow,
@@ -108,6 +115,9 @@ implements UpdateTodoRepository {
     private readonly outboxWriter:
       TodoOutboxWriter =
         new PostgresTodoOutboxWriter(),
+    private readonly chainSubmissionWriter:
+      ChainSubmissionWriter =
+        new PostgresChainSubmissionWriter(),
   ) {}
 
   private async appendCompletedEvent(
@@ -303,6 +313,7 @@ implements UpdateTodoRepository {
             RETURNING
               id,
               owner_id,
+              workspace_id,
               title,
               description,
               state,
@@ -331,6 +342,18 @@ implements UpdateTodoRepository {
         updatedTodo,
         ownerId,
         requestId,
+      );
+
+      // BC-1: Anchor task update into durable chain submissions
+      const rawTodo = updatedTodo as unknown as { workspace_id?: string | null };
+      await this.chainSubmissionWriter.enqueue(
+        client,
+        {
+          sourceEventId: randomUUID(),
+          taskId: updatedTodo.id,
+          workspaceId: rawTodo.workspace_id ?? DEFAULT_PERSONAL_WORKSPACE_ID,
+          action: "updated",
+        },
       );
 
       await client.query(
@@ -455,6 +478,7 @@ implements UpdateTodoRepository {
             RETURNING
               id,
               owner_id,
+              workspace_id,
               title,
               description,
               state,
@@ -486,6 +510,18 @@ implements UpdateTodoRepository {
         updatedTodo,
         callerId,
         requestId,
+      );
+
+      // BC-1: Anchor task update into durable chain submissions
+      const rawTodo = updatedTodo as unknown as { workspace_id?: string | null };
+      await this.chainSubmissionWriter.enqueue(
+        client,
+        {
+          sourceEventId: randomUUID(),
+          taskId: updatedTodo.id,
+          workspaceId: rawTodo.workspace_id ?? DEFAULT_PERSONAL_WORKSPACE_ID,
+          action: "updated",
+        },
       );
 
       await client.query(

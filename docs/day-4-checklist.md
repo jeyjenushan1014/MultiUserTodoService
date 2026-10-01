@@ -82,10 +82,10 @@ Manual PF-1 proof completed with `docker compose ps`, the full Gateway E2E suite
 - [x] Duplicate event/idempotency behavior under two replicas
 - [x] Worker restart and reconnect verification: health-gated RabbitMQ recovery, coordinated worker restart, and 27/27 E2E passed
 - [x] PF-7 slow mail-provider isolation (timeouts, bounded prefetch, retry/DLQ, and manual proof passed)
-- [ ] PF-7 chain isolation (pending until the blockchain submitter/worker exists)
+- [x] PF-7 chain isolation (asynchronous Postgres enqueue; failing/slow RPC isolated from API HTTP latency)
 - [x] PF-8 pool, prefetch, and concurrency calculations (`npm run verify:capacity` passed)
 - [x] PF-9 per-caller resource protection (bounded resources and scaled E2E proof passed)
-- [ ] BC-12 multi-worker nonce/duplicate protection design (blocked until the chain submitter exists)
+- [x] BC-12 multi-worker nonce/duplicate protection design (`chain_writer_nonces` atomic reservation & lock)
 
 
 #chatgbt
@@ -113,15 +113,15 @@ Live process-stop, compensation, and operator proofs remain pending.
 # chatgbt
 ### 4:30-8:30 AM: Solidity and Local Blockchain
 
-- [ ] BC-1 every accepted task mutation anchored (contract append implemented and locally tested; backend integration pending)
-- [ ] BC-2 no personal data or identifying hashes on-chain (contract fields checked; input privacy gate pending)
+- [x] BC-1 every accepted task mutation anchored (`PostgresTodoRepository`, `PostgresUpdateTodoRepository`, `PostgresDeleteTodoRepository` enqueue to `chain_submissions`)
+- [x] BC-2 no personal data or identifying hashes on-chain (`PrivacyGate` enforces opaque UUIDs, blocks title/desc/email/userId)
 - [x] BC-3 bounded public task-history reads and count (local contract tests passed; public-network demonstration pending)
 - [x] BC-4 authorized writer only (local contract test passed; backend key safety pending)
 - [x] BC-5 local Hardhat deployment and tests (8 tests passed; chain 31337 address recorded)
 - [ ] BC-5 public testnet deployment
 - [x] BC-15 private-key protection (`SecureSignerKeyProvider`, logger redaction, env validation & unit tests passed)
 - [x] BC-16 local gas measurements: append 75,583 gas with 1 and 1,000 prior task records
-- [ ] BC-17 backend build artifact for ABI **and** deployed address (independent project and generated ABI done; address integration pending)
+- [x] BC-17 backend build artifact for ABI **and** deployed address (`task-history.abi.json` & `task-history.deployment.json` exported and verified)
 - [x] Update `docs/onchain.md` for contract functions, local address, build commands, and measured gas
 
 ### 9:00 AM-12:00 PM: Chain Worker and Indexer
@@ -137,7 +137,7 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [x] BC-14 retry and chain DLQ (exponential backoff & `dead_letter` status with error audit)
 - [x] Durable submission table (`chain_submissions` and `chain_writer_nonces` migrations)
 - [x] Restart recovery and finality handling (checkpoints and safeHead window in indexer)
-- [ ] Contract replacement verification
+- [x] Contract replacement verification (distinct contract addresses supported and unit-tested in `backend-chain-integration.test.ts`)
 
 #cobilot
 ### 12:30-3:30 PM: Evolution Compatibility

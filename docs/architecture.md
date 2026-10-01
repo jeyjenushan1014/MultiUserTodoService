@@ -72,9 +72,50 @@ locking the workspace row before evaluating actor authority or the
 last-administrator invariant. The outbox row is inserted before `COMMIT`. If
 the outbox insertion fails, the membership mutation is rolled back.
 
-Gateway and Todo Service membership projections are not implemented in this
-commit. Consequently, this commit does not yet satisfy TN-6 or TN-7 and does
-not claim that role changes have propagated to every authorizing service.
+### 5.2 Event version compatibility
+
+Account registration events use an explicit overlap policy: Account Service
+currently emits `account.registered` v2, while Todo Service accepts both v1 and
+v2 so queued v1 messages remain processable during a rolling deployment. V2
+adds `registrationMethod`; it does not redefine `userId` or `email`. Consumer
+schemas strip unknown additive fields, so a newer producer can add optional
+metadata without making an older consumer reject the event. A breaking change
+must use a new `eventVersion`, and the consumer must accept both versions until
+old messages and old producer instances are drained.
+
+The producer-consumer contract is checked without starting either service:
+`event-evolution.compatibility.test.ts` imports the Account Service's production
+event factory and validates its output using Todo Service's independent Zod
+consumer schema. The same test checks the historical v1 shape, v2, unknown
+fields, and unchanged v1 field meanings.
+
+### 5.3 Public API and rolling deployments
+
+The public Gateway registration response retains the previous flat `data.id`,
+`data.email`, and `data.createdAt` fields and also returns the current
+`data.user` object. The Gateway constructs the flat aliases itself, so it also
+preserves the old public response when an older Account Service returns only
+`data.user`. Account and Gateway controller tests check both response shapes.
+
+The event wire contract is compatible across Account Service producer versions:
+v1 outbox messages and v2 messages can coexist, and the Todo consumer accepts
+both. EV-8 was also exercised live on 2026-10-01 using distinct Account Service
+images: old image from commit `3f0c3a2` and the current working tree. Both were
+healthy at once, shared the same Account PostgreSQL database and RabbitMQ, and
+accepted registration requests. The shared outbox contained the old instance's
+`account.registered` v1 row and the new instance's v2 row.
+
+Repeat the runtime proof with
+`docker compose -f docker-compose.yml -f docker-compose.ev8.yml up -d account-service-ev8-old account-service-ev8-new`
+followed by
+`docker compose -f docker-compose.yml -f docker-compose.ev8.yml exec -T -e EV8_OLD_URL=http://account-service-ev8-old:3001 -e EV8_NEW_URL=http://account-service-ev8-new:3001 account-service-ev8-new npm run verify:ev8-live -w @todo/account-service`.
+The verifier checks health, submits one unique registration to each version,
+validates their respective response shapes, and checks the durable outbox rows.
+
+Gateway and Todo Service consume these events into local Redis membership
+projections. Authorization decisions use the local projection rather than a
+synchronous Account Service request; membership cache versions and revocation
+watermarks prevent older events or tokens from restoring stale access.
 
 ## 6. Cache and consistency
 

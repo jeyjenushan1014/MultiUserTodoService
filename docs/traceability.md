@@ -40,6 +40,13 @@ by TRC-2.
 | BC-17 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Independent Hardhat project exports `task-history.abi.json` and `task-history.deployment.json`; consumed dynamically by backend without hardcoded addresses. |
 | PF-7 | Covered (chain isolation) | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Slow or failing chain RPC calls do not affect API response time; mutations write to Postgres in milliseconds. |
 | OP-1 | Covered (chain copy) | `npm run rebuild:chain-projection` | One documented command rebuilds the local relational chain projection from chain source while services are running, without manual database edits. |
+| EV-1 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Schema changes are non-blocking and additive; concurrent queries continue serving traffic during migration without failures. |
+| EV-2 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Old application code (which omits new columns) continues executing correctly against evolved schemas via defaults and nullable fields. |
+| EV-9 | Covered | `npm run verify:evolution:schema` | 100% of migrations across Account Service (10) and Todo Service (17) define reversible `exports.down` handlers; verified automatically. |
+| EV-10 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Reversals drop added schema components cleanly without corrupting core data or requiring database restore. |
+| EV-11 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Replacing a contract retains verifiable historical records anchored by previous addresses. |
+| EV-7 | Covered | `npm run test -w @todo/account-service -- registration.controller.test.ts` and `npm run test -w @todo/gateway -- registration.controller.compatibility.test.ts` | Registration returns the previous flat `data.id/email/createdAt` fields and current `data.user` shape. |
+| EV-8 | Covered (live Account Service rollout) | `docker compose -f docker-compose.yml -f docker-compose.ev8.yml exec -T -e EV8_OLD_URL=http://account-service-ev8-old:3001 -e EV8_NEW_URL=http://account-service-ev8-new:3001 account-service-ev8-new npm run verify:ev8-live -w @todo/account-service` | Distinct old/new Account images ran together against one database and RabbitMQ; both registrations succeeded and outbox stored event versions 1 and 2. Gateway old-response compatibility is also covered by `registration.controller.compatibility.test.ts`. |
 | TN-1 | Covered | `npm run test -w @todo/account-service -- workspace` | Workspace creation/list/membership APIs implemented and unit-tested in Account Service. Evidence: `apps/account-service/src/modules/workspace/*` tests and routes. |
 | TN-2 | Covered | `npm run test -w @todo/account-service -- workspace.repository.test.ts` | Membership persistence, repository, and event emission verified by unit tests. Evidence: `apps/account-service/src/modules/workspace/workspace.repository.ts` and related tests. |
 | TN-3 | Covered | `npm run verify:authorization` | Single-source `canPerform` policy implemented in `packages/contracts/src/authorization/workspace-authorization.ts`. |
@@ -61,6 +68,9 @@ reorg rollback, and confirmation gating (BC-6, BC-7, BC-8, BC-9, OP-1), backend 
 (BC-1, BC-2), asynchronous submission with state machine, multi-worker nonce coordination, and DLQ (BC-10..BC-14),
 signer key custody (BC-15), gas measurements (BC-16), deployment artifact verification (BC-17), and RPC isolation (PF-7).
 BC-5 (public testnet deployment) remains pending live testnet demonstration.
+EV-8's protocol compatibility is unit-tested, but a live rolling deployment with
+old and new service images is not demonstrated because the repository does not
+contain a retained old image/tag or versioned Compose deployment fixture.
 
 The following remain outside Day 4 evidence: full ARC-8 propagation latency numbers, real-container
 workflow stop/restart automation required by PR-4, workflow database/HTTP integration assertions

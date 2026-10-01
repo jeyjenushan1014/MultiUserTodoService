@@ -11,6 +11,9 @@ export interface RegisteredAccount {
 
 export interface RegisterAccountResponse {
   readonly data: {
+    readonly id: string;
+    readonly email: string;
+    readonly createdAt: string;
     readonly user: RegisteredAccount;
   };
 }

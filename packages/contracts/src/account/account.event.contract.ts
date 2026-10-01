@@ -5,11 +5,26 @@ export interface AccountRegisteredPayload {
   readonly email: string;
 }
 
-export type AccountRegisteredEvent =
+export interface AccountRegisteredPayloadV2
+  extends AccountRegisteredPayload {
+  readonly registrationMethod: "password";
+}
+
+export type AccountRegisteredEventV1 =
   EventEnvelope<
     "account.registered",
     AccountRegisteredPayload
   >;
+
+export type AccountRegisteredEventV2 =
+  EventEnvelope<
+    "account.registered",
+    AccountRegisteredPayloadV2
+  >;
+
+export type AccountRegisteredEvent =
+  | AccountRegisteredEventV1
+  | AccountRegisteredEventV2;
 
   export interface AccountEmailChangedPayload {
   readonly userId: string;

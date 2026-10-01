@@ -37,5 +37,10 @@ export const register:
 
     response
       .status(201)
-      .json(result);
+      .json({
+        data: {
+          ...result.data.user,
+          user: result.data.user,
+        },
+      });
   };

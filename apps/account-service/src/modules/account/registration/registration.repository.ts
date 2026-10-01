@@ -20,6 +20,9 @@ import type {
   UserDatabaseRow,
 } from "./registration.types.js";
 
+import {
+  createAccountRegisteredEventV2,
+} from "./account-registered.event.js";
 import { logger } from "../../../config/logger.js";
 
 async function rollback(
@@ -87,23 +90,14 @@ implements RegistrationRepository {
         );
       }
 
-      const event:
-        AccountRegisteredEvent = {
-          eventId: data.eventId,
-          eventType:
-            "account.registered",
-          eventVersion: 1,
-          occurredAt:
-            data.createdAt.toISOString(),
-          requestId:
-            data.requestId,
-          producer:
-            "account-service",
-          payload: {
+        const event: AccountRegisteredEvent =
+          createAccountRegisteredEventV2({
+            eventId: data.eventId,
             userId: user.id,
             email: user.email,
-          },
-        };
+            occurredAt: data.createdAt.toISOString(),
+            requestId: data.requestId,
+          });
 
       await client.query(
   `

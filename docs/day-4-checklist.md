@@ -142,18 +142,18 @@ Live process-stop, compensation, and operator proofs remain pending.
 #cobilot
 ### 12:30-3:30 PM: Evolution Compatibility
 
-- [ ] EV-1 online schema migration
-- [ ] EV-2 old code works during migration
-- [ ] EV-3 simultaneous event versions
-- [ ] EV-4 unknown event fields ignored
-- [ ] EV-5 event meanings remain stable
-- [ ] EV-6 independent producer/consumer compatibility checks
-- [ ] EV-7 previous API compatibility
-- [ ] EV-8 old and new service versions together
-- [ ] EV-9 reversible migration test
-- [ ] EV-10 rollback without database restore
-- [ ] EV-11 contract replacement preserves old verification
-- [ ] Update `docs/events.md` and `docs/architecture.md`
+- [x] EV-1 online schema migration (additive non-locking schema changes tested under concurrent queries)
+- [x] EV-2 old code works during migration (omitted fields handled with default/nulls without locking or failing)
+- [x] EV-3 simultaneous event versions (`account.registered` v1 and v2 accepted during rollout)
+- [x] EV-4 unknown event fields ignored (consumer schemas strip additive envelope/payload fields)
+- [x] EV-5 event meanings remain stable (v2 adds `registrationMethod`; v1 `userId` and `email` meanings retained)
+- [x] EV-6 independent producer/consumer compatibility checks (`event-evolution.compatibility.test.ts` validates production factory output against Todo consumer schema)
+- [x] EV-7 previous API compatibility (registration preserves legacy `data.id/email/createdAt` alongside `data.user`)
+- [x] EV-8 old and new service versions together (`docker-compose.ev8.yml` ran distinct old/new Account images concurrently against one DB; `verify:ev8-live` confirmed both writes and v1/v2 outbox rows)
+- [x] EV-9 reversible migration test (`npm run verify:evolution:schema` audits 27/27 migrations with working `down()` functions)
+- [x] EV-10 rollback without database restore (reversals drop column/table cleanly without database restore)
+- [x] EV-11 contract replacement preserves old verification (multi-contract support unit-tested in `backend-chain-integration.test.ts`)
+- [x] Update `docs/events.md` and `docs/architecture.md` for event-version rollout and compatibility rules
 
 # chatgbt
 ### 4:00-7:00 PM: Data Lifecycle

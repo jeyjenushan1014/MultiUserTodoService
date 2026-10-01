@@ -6,7 +6,10 @@ export type {
 
 export type {
   AccountRegisteredEvent,
+  AccountRegisteredEventV1,
+  AccountRegisteredEventV2,
   AccountRegisteredPayload,
+  AccountRegisteredPayloadV2,
 } from "./account.event.contract.js";
 
 export type {

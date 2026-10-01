@@ -1,0 +1,120 @@
+services:
+  account-service-ev8-old:
+    image: multiuser-todo/account-service:ev8-old
+    pull_policy: never
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-15}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      RABBITMQ_NOTIFICATION_DLQ: ${RABBITMQ_NOTIFICATION_DLQ:-todo.notifications.dlq}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-1000}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-60}
+      OUTBOX_MAX_RETRY_DELAY_SECONDS: ${OUTBOX_MAX_RETRY_DELAY_SECONDS:-300}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      TODO_SERVICE_URL: ${TODO_SERVICE_URL:-http://todo-service:3002}
+      GATEWAY_URL: http://gateway:3000
+      INTERNAL_IDENTITY_MAX_AGE_SECONDS: ${INTERNAL_IDENTITY_MAX_AGE_SECONDS:-30}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
+      REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@todo.local}
+      MAIL_CONNECTION_TIMEOUT_MS: ${MAIL_CONNECTION_TIMEOUT_MS:-5000}
+      MAIL_GREETING_TIMEOUT_MS: ${MAIL_GREETING_TIMEOUT_MS:-5000}
+      MAIL_SOCKET_TIMEOUT_MS: ${MAIL_SOCKET_TIMEOUT_MS:-30000}
+      RABBITMQ_NOTIFICATION_PREFETCH: ${RABBITMQ_NOTIFICATION_PREFETCH:-10}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:3101:3001"
+    depends_on:
+      account-postgres:
+        condition: service_healthy
+      account-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: "no"
+
+  account-service-ev8-new:
+    image: multiuser-todo/account-service:ev8-new
+    pull_policy: never
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      ACCOUNT_DATABASE_URL: postgres://${ACCOUNT_POSTGRES_USER}:${ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${ACCOUNT_POSTGRES_DB}
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+      DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
+      PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-15}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
+      RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
+      RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
+      RABBITMQ_NOTIFICATION_DLQ: ${RABBITMQ_NOTIFICATION_DLQ:-todo.notifications.dlq}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-20}
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-1000}
+      OUTBOX_LOCK_TIMEOUT_SECONDS: ${OUTBOX_LOCK_TIMEOUT_SECONDS:-60}
+      OUTBOX_MAX_RETRY_DELAY_SECONDS: ${OUTBOX_MAX_RETRY_DELAY_SECONDS:-300}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      TODO_SERVICE_URL: ${TODO_SERVICE_URL:-http://todo-service:3002}
+      GATEWAY_URL: http://gateway:3000
+      INTERNAL_IDENTITY_MAX_AGE_SECONDS: ${INTERNAL_IDENTITY_MAX_AGE_SECONDS:-30}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-todo-account-service}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
+      REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@todo.local}
+      MAIL_CONNECTION_TIMEOUT_MS: ${MAIL_CONNECTION_TIMEOUT_MS:-5000}
+      MAIL_GREETING_TIMEOUT_MS: ${MAIL_GREETING_TIMEOUT_MS:-5000}
+      MAIL_SOCKET_TIMEOUT_MS: ${MAIL_SOCKET_TIMEOUT_MS:-30000}
+      RABBITMQ_NOTIFICATION_PREFETCH: ${RABBITMQ_NOTIFICATION_PREFETCH:-10}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:3102:3001"
+    depends_on:
+      account-postgres:
+        condition: service_healthy
+      account-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: "no"

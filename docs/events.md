@@ -20,9 +20,16 @@ The publisher is decoupled from consumers: the domain request commits its databa
 
 ## 3. Account events
 
-### `account.registered` version 1
+### `account.registered` versions 1 and 2
 
-Published by Account Service after a user row and outbox row commit. Consumed by Todo owner projection. Payload: `userId: UUID`, `email: string`. The consumer upserts `todo_owners`; duplicate delivery leaves the same projection state. Failure is retried and eventually sent to the owner-projection DLQ.
+Published by Account Service after the user row and outbox row commit. Consumed by Todo owner projection. Both versions retain the same meanings for `userId` (the account identity) and `email` (the account's current email at registration). The consumer upserts `todo_owners`; duplicate delivery leaves the same projection state. Failure is retried and eventually sent to the owner-projection DLQ.
+
+| Version | Payload | Status |
+|---|---|---|
+| 1 | `userId: UUID`, `email: string` | Historical messages may remain in the broker during rollout; Todo Service continues to accept them. |
+| 2 | `userId: UUID`, `email: string`, `registrationMethod: "password"` | Current Account Service producer version. The new field is additive; it does not change the meaning of either v1 field. |
+
+The Todo consumer accepts v1 and v2 concurrently. Unknown additive envelope or payload fields are stripped and ignored. Incompatible changes require a new version and an overlap period where consumers accept both versions.
 
 ### `account.email-changed` version 1
 
@@ -81,6 +88,8 @@ Consumers acknowledge only after their database or mail work succeeds. A duplica
 ## 6. Evolution rules
 
 Existing event versions are immutable. Additive fields may be introduced only when old consumers can ignore them. A breaking payload change creates a new event version and keeps consumers capable of handling the prior version during rollout. Event type names and field meanings remain consistent across contracts, code, logs, and this document.
+
+Automated compatibility evidence: `npm run test -w @todo/todo-service -- event-evolution.compatibility.test.ts`. The test imports Account Service's real v2 producer factory and validates its output with Todo Service's separately maintained consumer schema. It also verifies concurrent v1/v2 acceptance, unknown-field handling, and stable v1 field meanings.
 
 ## 7. Email catalogue
 

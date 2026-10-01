@@ -129,7 +129,7 @@ describe(
     );
 
     it(
-      "rejects outbox-only metadata",
+      "ignores unknown additive metadata",
       () => {
         const event =
           createValidEvent();
@@ -142,11 +142,11 @@ describe(
 
         const result =
           accountRegisteredEventSchema
-            .safeParse(event);
+            .parse(event);
 
         expect(
-          result.success,
-        ).toBe(false);
+          result,
+        ).not.toHaveProperty("aggregateType");
       },
     );
   },

@@ -32,10 +32,9 @@
     "verify:workflow:correlation": "node scripts/verify-workflow-correlation.mjs",
     "test:workflow-resume": "node scripts/verify-workflow-resume.mjs",
     "start:outbox-worker": "node dist/src/workers/outbox-worker.js",
-      "verify:day4": "node scripts/verify-day4.mjs",
-      "verify:authorization": "npm run clean -w @todo/contracts && npm run build -w @todo/contracts && npm run test -w @todo/contracts && node scripts/verify-authorization-docs.mjs"
-     
-
+    "verify:day4": "node scripts/verify-day4.mjs",
+    "verify:evolution:schema": "node scripts/verify-evolution-schema.mjs",
+    "verify:authorization": "npm run clean -w @todo/contracts && npm run build -w @todo/contracts && npm run test -w @todo/contracts && node scripts/verify-authorization-docs.mjs"
   },
   "engines": {
     "node": ">=24"

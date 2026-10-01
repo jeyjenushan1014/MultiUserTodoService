@@ -73,8 +73,13 @@ Creates an account without authentication. Request:
 Email is trimmed and lowercased, must be at most 254 characters, and must be valid. Password must be 12-128 characters. Response `201`:
 
 ```json
-{ "data": { "user": { "id": "uuid", "email": "alice@example.com", "createdAt": "2026-09-24T09:00:00.000Z" } } }
+{ "data": { "id": "uuid", "email": "alice@example.com", "createdAt": "2026-09-24T09:00:00.000Z", "user": { "id": "uuid", "email": "alice@example.com", "createdAt": "2026-09-24T09:00:00.000Z" } } }
 ```
+
+The flat `data.id`, `data.email`, and `data.createdAt` fields preserve the previous
+registration response contract documented in `docs/legacy/day2-monolith-api.md`.
+The nested `data.user` shape is the current form. Both forms are returned together;
+the flat fields have no scheduled removal date. Neither form includes a password.
 
 Returns `400 VALIDATION_ERROR` or `409 EMAIL_ALREADY_REGISTERED`. The password is never returned.
 

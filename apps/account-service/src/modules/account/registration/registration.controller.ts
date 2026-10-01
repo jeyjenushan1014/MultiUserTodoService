@@ -45,6 +45,7 @@ export function createRegistrationController(
     const responseBody:
       RegisterAccountResponse = {
         data: {
+          ...user,
           user,
         },
       };

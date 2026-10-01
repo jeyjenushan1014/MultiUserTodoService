@@ -3,8 +3,8 @@ import {
 } from "zod";
 
 export const accountRegisteredEventSchema =
-  z
-    .object({
+  z.discriminatedUnion("eventVersion", [
+    z.object({
       eventId:
         z.uuid(),
 
@@ -28,17 +28,28 @@ export const accountRegisteredEventSchema =
         z.iso.datetime(),
 
       payload:
-        z
-          .object({
+        z.object({
             userId:
               z.uuid(),
 
             email:
               z.email(),
-          })
-          .strict(),
-    })
-    .strict();
+          }),
+    }),
+    z.object({
+      eventId: z.uuid(),
+      eventType: z.literal("account.registered"),
+      eventVersion: z.literal(2),
+      producer: z.literal("account-service"),
+      requestId: z.uuid(),
+      occurredAt: z.iso.datetime(),
+      payload: z.object({
+        userId: z.uuid(),
+        email: z.email(),
+        registrationMethod: z.literal("password"),
+      }),
+    }),
+  ]);
 
 export type AccountRegisteredEvent =
   z.infer<
@@ -69,10 +80,8 @@ export const accountEmailChangedEventSchema =
           userId: z.uuid(),
 
           email: z.email(),
-        })
-        .strict(),
-    })
-    .strict();
+        }),
+      });
 
 export type AccountEmailChangedEvent =
   z.infer<

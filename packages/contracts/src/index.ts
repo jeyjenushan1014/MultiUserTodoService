@@ -9,7 +9,10 @@ export type {
   RegisteredAccount,
   RegisterAccountResponse,
   AccountRegisteredEvent,
+  AccountRegisteredEventV1,
+  AccountRegisteredEventV2,
   AccountRegisteredPayload,
+  AccountRegisteredPayloadV2,
 } from "./account/index.js";
 
 

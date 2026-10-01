@@ -17,7 +17,8 @@
   "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
   "start:notification-consumer": "node dist/worker/notification.worker.js"
   ,"start:owner-projection-rebuild": "node dist/maintenance/owner-projection-rebuild.worker.js",
-   "start:workflow": "node dist/worker/workflow.worker.js"
+    "start:workflow": "node dist/worker/workflow.worker.js",
+    "verify:ev8-live": "node scripts/verify-ev8-live.mjs"
 },
   "dependencies": {
     "@todo/common": "*",

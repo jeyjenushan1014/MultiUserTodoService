@@ -1,4 +1,20 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const candidateEnvPaths = [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(configDir, "../../../../.env"),
+  path.resolve(configDir, "../../../../../.env"),
+];
+for (const envPath of candidateEnvPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 import {
   z,
@@ -339,6 +355,47 @@ TODO_HISTORY_DLQ:
         .min(3_600)
         .max(31_536_000)
         .default(2_592_000),
+
+    CHAIN_RPC_URL: z
+      .string()
+      .min(1)
+      .default("http://127.0.0.1:8545"),
+
+    CHAIN_ID: z
+      .coerce
+        .number()
+        .int()
+        .min(1)
+        .default(31337),
+
+    TASK_HISTORY_CONTRACT_ADDRESS: z
+  .string()
+  .regex(/^0x[0-9a-fA-F]{40}$/),
+
+TASK_HISTORY_DEPLOYMENT_BLOCK: z.coerce
+  .number()
+  .int()
+  .nonnegative(),
+
+CHAIN_CONFIRMATIONS: z.coerce
+  .number()
+  .int()
+  .min(2)
+  .default(2),
+
+CHAIN_SCAN_RANGE: z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(2_000)
+  .default(100),
+
+CHAIN_POLL_INTERVAL_MS: z.coerce
+  .number()
+  .int()
+  .min(250)
+  .max(60_000)
+  .default(2_000),
 
     OUTBOX_RETENTION_SECONDS:
       z.coerce

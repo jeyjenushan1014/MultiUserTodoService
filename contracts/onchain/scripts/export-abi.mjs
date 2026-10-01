@@ -15,13 +15,23 @@ const outputPath = resolve(
   "apps/todo-service/src/blockchain/generated/task-history.abi.json",
 );
 
+const distOutputPath = resolve(
+  repositoryRoot,
+  "apps/todo-service/dist/src/blockchain/generated/task-history.abi.json",
+);
+
 const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
 
 if (!Array.isArray(artifact.abi)) {
   throw new Error("TaskHistory artifact does not contain an ABI array");
 }
 
+const abiContent = `${JSON.stringify(artifact.abi, null, 2)}\n`;
+
 mkdirSync(dirname(outputPath), { recursive: true });
-writeFileSync(outputPath, `${JSON.stringify(artifact.abi, null, 2)}\n`);
+writeFileSync(outputPath, abiContent);
+
+mkdirSync(dirname(distOutputPath), { recursive: true });
+writeFileSync(distOutputPath, abiContent);
 
 console.log(`Generated ABI: ${outputPath}`);

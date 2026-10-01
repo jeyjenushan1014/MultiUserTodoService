@@ -23,6 +23,7 @@
     "migrate:todo:down": "npm run migrate:down -w @todo/todo-service",
     "test:e2e": "npm run test:e2e -w @todo/gateway",
     "test:docs": "node scripts/verify-api-docs.mjs",
+    "rebuild:chain-projection": "docker compose exec -T todo-service npm run rebuild:chain-projection -w @todo/todo-service",
     "verify:capacity": "node scripts/verify-capacity.mjs",
     "verify:workflow:wf2": "node scripts/verify-workflow-half-applied.mjs",
     "verify:workflow:wf3": "node scripts/verify-workflow-process-stop.mjs",

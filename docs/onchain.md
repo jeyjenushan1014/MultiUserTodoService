@@ -162,11 +162,55 @@ If the contract is replaced later:
 
 This approach must still be implemented and tested for BC-17 and EV-11.
 
-## 11. Evidence and remaining gates
+## 11. Chain Projection and Indexer (BC-6, BC-7, BC-8, BC-9)
+
+Todo Service maintains a local relational copy of what is on chain in PostgreSQL, populated
+solely from what the contract emits:
+
+- `chain_projection_checkpoints`: tracks `last_scanned_block` and `last_scanned_block_hash` per
+  `(chain_id, contract_address)`.
+- `chain_projection_blocks`: records historical block heights and hashes to detect and unwind chain
+  reorganisations.
+- `task_chain_events`: stores the projected event records (`task_id`, `workspace_id`, `action`,
+  `chain_timestamp`, block and transaction coordinates).
+
+Key guarantees implemented in `apps/todo-service/src/blockchain/`:
+
+1. **Rebuildable from chain alone (BC-6, OP-1):**
+   The projection is completely rebuildable with one documented command:
+   ```powershell
+   npm run rebuild:chain-projection
+   ```
+   This clears all local projection tables for the configured contract and rescans canonical event
+   logs from `TASK_HISTORY_DEPLOYMENT_BLOCK` to `safeHead`. It runs while the service is alive without
+   manual database editing.
+
+2. **Event deduplication and idempotency (BC-7):**
+   `TaskHistoryProjectionRepository.commitScannedRange` inserts events with:
+   `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING`.
+   Processing the same block or event twice produces the exact same state as processing once.
+
+3. **Chain reorganisation handling (BC-8):**
+   Before scanning forward, `TaskHistoryIndexer.reconcileReorganization` checks if the block hash at
+   `last_scanned_block` matches the canonical RPC node's hash. If a fork occurred, it walks back through
+   stored checkpoints to locate the common ancestor, and executes `rollbackAfterBlock` within a transaction,
+   deleting orphaned events and block records above the ancestor before resuming from the canonical branch.
+
+4. **Configurable confirmations (BC-9):**
+   `CHAIN_CONFIRMATIONS` is enforced by Zod schema to be an integer $\ge 2$ (default 2, never 1). The
+   indexer calculates `safeHead = latestBlock - BigInt(CHAIN_CONFIRMATIONS) + 1n`. Only blocks at or
+   behind `safeHead` are scanned and committed.
+
+5. **Multi-instance indexer coordination (PF-1):**
+   `TaskHistoryIndexerWorker` acquires a PostgreSQL advisory lock
+   (`pg_try_advisory_lock(hashtext('task-history-indexer:...'))`) so that running two replicas of
+   Todo Service or indexer workers prevents dual conflicting scanners while ensuring failover if one stops.
+
+## 12. Evidence and remaining gates
 
 Eight local contract tests passed, including four-field storage, writer refusal, invalid IDs,
-bounded paging, and append gas. Those tests establish contract behavior, not system-wide
-anchoring of every TODO mutation or a public deployment.
+bounded paging, and append gas. The chain projection indexer and rebuild pipeline are implemented
+and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-projection.test.ts`.
 
 | Requirement | Current evidence | Remaining gate |
 |---|---|---|
@@ -175,20 +219,22 @@ anchoring of every TODO mutation or a public deployment.
 | BC-3 | Local tests pass for count, bounded pages, invalid sizes, and empty pages. | Demonstrate direct reads against the public testnet. |
 | BC-4 | Local writer succeeds, another signer reverts. | Keep writer control safe in the backend. |
 | BC-5 | Local tests and chain-31337 deployment demonstrated. | Public testnet deployment and demonstration pending. |
+| BC-6 | `npm run rebuild:chain-projection` and unit tests verify clearing and rescan from chain. | Demonstrated against local RPC. |
+| BC-7 | Unit-tested: `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING`. | Demonstrated. |
+| BC-8 | Unit-tested: common ancestor reconciliation and `rollbackAfterBlock` removes reorged events. | Demonstrated. |
+| BC-9 | `CHAIN_CONFIRMATIONS` enforced $\ge 2$ in `env.ts` and safe head calculation tested. | Demonstrated. |
 | BC-16 | Same-task append gas: 75,583 with 1 and 1,000 existing records. | Record final deployed version and any public-network measurements when available. |
 | BC-17 | Independent Hardhat project, own tests/build/deploy scripts, generated ABI. | Generate and consume deployed address metadata in backend; currently no submitter. |
 
-## 12. Integration decisions still open
+## 13. Integration decisions still open
 
 - Todo Service has a `todos.workspace_id` column, but it is nullable. Legacy tasks may not have a workspace ID. Decide whether those tasks should be anchored before implementing the chain write.
 - Current TODO event payloads contain user IDs. Do not pass those event payloads to the blockchain worker. Create a separate chain command or event containing only the required `todoId`, `workspaceId`, and `action`.
 - The current event catalogue does not contain a general event for all task updates. Define which updates must be recorded and create the required event contract before implementing the worker.
 - The contract uses `bytes16` for task and workspace identifiers. Define and test UUID-to-bytes16
 	encoding in the backend; do not use hashes as a substitute.
-- Implement asynchronous durable submission, nonce coordination for two writers, receipt
-	reconciliation and terminal states, retry/DLQ, confirmation finality, reorg-safe indexing,
-	and a paged rebuild command before claiming BC-6 through BC-14.
+- Implement asynchronous durable submission (BC-10), nonce coordination for two writers (BC-12), receipt
+	reconciliation and terminal states (BC-11), retry/DLQ (BC-14), and chain downtime resilience (BC-13).
 
-No production private key, public-testnet deployment, chain reader, or chain submission worker
-is supplied by the contract-only milestone. These are separate release gates, not implied by
-green Solidity tests.
+No production private key, public-testnet deployment, or chain submission worker
+is supplied by this milestone. These are separate release gates.

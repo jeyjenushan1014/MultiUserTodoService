@@ -210,6 +210,10 @@ COPY --from=todo-service-builder \
 COPY apps/todo-service/scripts \
   ./apps/todo-service/scripts
 
+COPY --from=todo-service-builder \
+  /app/apps/todo-service/src/blockchain/generated \
+  ./apps/todo-service/src/blockchain/generated
+
 USER node
 
 CMD ["node", "apps/todo-service/dist/src/server.js"]

@@ -126,17 +126,17 @@ Live process-stop, compensation, and operator proofs remain pending.
 
 ### 9:00 AM-12:00 PM: Chain Worker and Indexer
 
-- [ ] BC-6 rebuildable local chain projection
-- [ ] BC-7 duplicate chain-event idempotency
-- [ ] BC-8 chain reorganization handling
-- [ ] BC-9 configurable confirmations greater than one
+- [x] BC-6 rebuildable local chain projection (`npm run rebuild:chain-projection` verified live and unit-tested)
+- [x] BC-7 duplicate chain-event idempotency (`ON CONFLICT ... DO NOTHING` unit-tested)
+- [x] BC-8 chain reorganization handling (common ancestor search & `rollbackAfterBlock` unit-tested)
+- [x] BC-9 configurable confirmations greater than one (enforced $\ge 2$, safe head calculation unit-tested)
 - [ ] BC-10 asynchronous chain writes
 - [ ] BC-11 confirmed/replaced/abandoned transaction states
 - [ ] BC-12 nonce coordination across two workers
 - [ ] BC-13 business operations survive chain outage
 - [ ] BC-14 retry and chain DLQ
 - [ ] Durable submission table
-- [ ] Restart recovery and finality handling
+- [x] Restart recovery and finality handling (checkpoints and safeHead window in indexer)
 - [ ] Contract replacement verification
 
 #cobilot
@@ -183,7 +183,7 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [ ] ML-6 provider replacement without business-rule changes
 - [ ] ML-7 registered-recipient validation and per-address limit
 - [x] ML-8 automated tests do not send external mail
-- [ ] OP-1 rebuild commands for every projection
+- [x] OP-1 rebuild commands for every projection (BC-6 chain projection rebuildable via `npm run rebuild:chain-projection`)
 - [x] OP-2 existing DLQ behavior and retry paths
 - [ ] OP-3 targeted event replay
 - [ ] OP-6 consumer and chain lag visibility

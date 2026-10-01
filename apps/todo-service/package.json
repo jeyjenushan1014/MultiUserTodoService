@@ -5,14 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"import('node:fs').then(fs => { if (fs.existsSync('src/blockchain/generated/task-history.abi.json')) { fs.mkdirSync('dist/src/blockchain/generated', { recursive: true }); fs.copyFileSync('src/blockchain/generated/task-history.abi.json', 'dist/src/blockchain/generated/task-history.abi.json'); } })\"",
     "start": "node dist/src/server.js",
     "start:owner-consumer": "node dist/src/workers/owner-projection.worker.js",
     "test": "vitest run --config vitest.config.ts",
     "migrate": "node-pg-migrate up -m migrations --migrations-table pgmigrations",
     "migrate:down": "node-pg-migrate down -m migrations --migrations-table pgmigrations",
     "start:history-worker": "node dist/src/history/history-worker.js",
-    "start:cleanup": "node dist/src/retention/cleanup.worker.js"
+    "start:cleanup": "node dist/src/retention/cleanup.worker.js",
+    "start:chain-indexer": "node dist/src/blockchain/task-history-indexer.worker.js",
+     "rebuild:chain-projection": "node dist/src/blockchain/rebuild-task-history-projection.js"
   },
   "dependencies": {
     "@todo/common": "1.0.0",
@@ -25,6 +27,7 @@
     "pg": "^8.23.0",
     "pino": "^10.3.1",
     "redis": "^6.2.1",
+    "viem": "^2.57.2",
     "zod": "^4.6.5"
   }
 }

@@ -3,6 +3,8 @@ import type {
   ChangeEmailRequest,
   ChangeEmailResponse,
   ConfirmPasswordResetRequest,
+  AccountDeletionRequestResponse,
+  AccountExportResponse,
   CurrentAccountResponse,
   ErrorResponse,
   InternalIdentityEnvelope,
@@ -641,6 +643,48 @@ export async function getCurrentAccount(
     );
   }
 
+  return result;
+}
+
+/*
+DELETE /internal/v1/accounts/me
+*/
+export async function requestAccountDeletion(
+  identity: CallerIdentity,
+  idempotencyKey: string,
+  requestId: string,
+): Promise<AccountDeletionRequestResponse> {
+  const result = await sendAccountRequest<AccountDeletionRequestResponse>({
+    path: "/internal/v1/accounts/me",
+    method: "DELETE",
+    requestId,
+    identity,
+    idempotencyKey,
+  });
+
+  if (result === undefined || !isRecord(result)) {
+    throw new AppError(
+      502,
+      "INVALID_DOWNSTREAM_RESPONSE",
+      "Account service returned an invalid response",
+    );
+  }
+  return result;
+}
+
+export async function exportAccount(
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<AccountExportResponse> {
+  const result = await sendAccountRequest<AccountExportResponse>({
+    path: "/internal/v1/accounts/me/export",
+    method: "GET",
+    requestId,
+    identity,
+  });
+  if (result === undefined || !isRecord(result)) {
+    throw new AppError(502, "INVALID_DOWNSTREAM_RESPONSE", "Account service returned an invalid response");
+  }
   return result;
 }
 

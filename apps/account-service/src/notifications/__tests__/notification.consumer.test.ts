@@ -576,6 +576,11 @@ describe(
         } =
           createDeliveryRepository();
 
+        queryMock.mockResolvedValue({
+          rows: [{ email: "recipient@example.com" }],
+          rowCount: 1,
+        } as never);
+
         const consumer =
           new TodoNotificationConsumer(
             channel.channel,
@@ -610,6 +615,28 @@ describe(
         expect(
           channel.ackMock,
         ).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it(
+      "does not send a queued password-reset email when the account is pending deletion",
+      async () => {
+        const channel = createChannel();
+        const { mailer, sendPasswordResetEmailMock } = createMailer();
+        const { repository } = createDeliveryRepository();
+        queryMock.mockResolvedValue({ rows: [], rowCount: 0 } as never);
+
+        const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+        await consumer.start();
+        const callback = channel.consumeMock.mock.calls[0]?.[1] as (message: ConsumeMessage) => void;
+        callback(createMessage(passwordResetRequestedEvent));
+
+        await vi.waitFor(() => {
+          expect(channel.ackMock).toHaveBeenCalledOnce();
+        });
+
+        expect(queryMock.mock.calls[0]?.[0]).toContain("account_deletion_requests");
+        expect(sendPasswordResetEmailMock).not.toHaveBeenCalled();
       },
     );
 

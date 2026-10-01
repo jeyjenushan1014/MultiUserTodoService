@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const redisMocks = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ import {
   removeMembership,
   getMembershipRole,
   getWorkspaceAuthorization,
+  purgeWorkspaceMembershipCache,
 } from "../workspace-membership.cache.js";
 
 describe("gateway workspace-membership.cache", () => {
@@ -38,6 +40,10 @@ describe("gateway workspace-membership.cache", () => {
     vi.clearAllMocks();
     redisMocks.isReady = true;
   });
+
+  function hashedUserId(userId: string): string {
+    return createHmac("sha256", env.INTERNAL_SERVICE_SECRET).update(userId).digest("hex");
+  }
 
   it("applies membership changes atomically with event timestamp ordering", async () => {
     const changedAt = 1_695_000_000_000;
@@ -48,9 +54,9 @@ describe("gateway workspace-membership.cache", () => {
       expect.stringContaining("currentVersion"),
       {
         keys: [
-          "workspace.membership:u1:w1",
-          "workspace.revoked:u1:w1",
-          "workspace.membership-version:u1:w1",
+          `workspace.membership:${hashedUserId("u1")}:w1`,
+          `workspace.revoked:${hashedUserId("u1")}:w1`,
+          `workspace.membership-version:${hashedUserId("u1")}:w1`,
         ],
         arguments: [
           String(changedAt),
@@ -71,9 +77,9 @@ describe("gateway workspace-membership.cache", () => {
       expect.stringContaining("currentVersion"),
       expect.objectContaining({
         keys: [
-          "workspace.membership:u2:w2",
-          "workspace.revoked:u2:w2",
-          "workspace.membership-version:u2:w2",
+          `workspace.membership:${hashedUserId("u2")}:w2`,
+          `workspace.revoked:${hashedUserId("u2")}:w2`,
+          `workspace.membership-version:${hashedUserId("u2")}:w2`,
         ],
         arguments: [
           String(epoch * 1000),
@@ -107,5 +113,18 @@ describe("gateway workspace-membership.cache", () => {
       role: "editor",
       revokedBefore: 54321,
     });
+  });
+
+  it("purges current digested keys and legacy raw-user keys", async () => {
+    await purgeWorkspaceMembershipCache("u5", ["w5"]);
+    const digest = hashedUserId("u5");
+    expect(redis.del).toHaveBeenCalledWith([
+      `workspace.membership:${digest}:w5`,
+      `workspace.revoked:${digest}:w5`,
+      `workspace.membership-version:${digest}:w5`,
+      "workspace.membership:u5:w5",
+      "workspace.revoked:u5:w5",
+      "workspace.membership-version:u5:w5",
+    ]);
   });
 });

@@ -23,12 +23,14 @@ docker compose exec -T todo-service node apps/todo-service/scripts/backfill-work
   --account-url http://account-service:3001 `
   --internal-key "$env:INTERNAL_SERVICE_SECRET" `
   --apply
+
+npm run verify:account-lifecycle
 ```
 
 ## Current Baseline
 
 - [x] Day 3 quality gate: `npm run check`
-- [x] API documentation check: 19 endpoints verified
+- [x] API documentation check: 21 endpoints verified
 - [x] Authorization documentation check: 3 roles x 11 actions
 - [x] Full Gateway E2E suite: 27/27 passed from clean Redis state
 - [x] Live dependency health: PostgreSQL, Redis, RabbitMQ, Mailpit, and workers available
@@ -158,19 +160,19 @@ Live process-stop, compensation, and operator proofs remain pending.
 # chatgbt
 ### 4:00-7:00 PM: Data Lifecycle
 
-- [ ] DG-1 account deletion endpoint
-- [ ] DG-2 removal from services, broker, DLQs, and chain
-- [ ] DG-3 anonymized retained history
-- [ ] DG-4 deletion verification command
-- [ ] DG-5 account export endpoint
-- [ ] DG-6 operational retention lifetimes
+- [x] DG-1 account deletion endpoint
+- [x] DG-2 removal from services, broker, DLQs, and local chain state; immutable public chain history is opaque and retained
+- [x] DG-3 anonymized retained history
+- [x] DG-4 deletion verification command (`npm run verify:account-erasure -- ...`)
+- [x] DG-5 account export endpoint (`GET /api/v1/users/me/export`)
+- [x] DG-6 operational retention lifetimes
 - [x] DG-7 credentials and tokens are protected in current implemented paths
-- [ ] DG-8 shared tasks/workspaces survive deletion
-- [ ] DG-9 deletion continues during service outage
-- [ ] DG-10 queued and future mail cancellation
-- [ ] Durable deletion workflow
-- [ ] Idempotent repeated deletion
-- [ ] Retention cleanup proof
+- [x] DG-8 shared tasks/workspaces survive deletion
+- [x] DG-9 deletion continues during service outage through leased retry state
+- [x] DG-10 queued and future mail cancellation through delivery cleanup and broker/DLQ purge
+- [x] Durable deletion workflow (`npm run verify:account-lifecycle` plus live `verify-account-erasure.mjs`)
+- [x] Idempotent repeated deletion (`requestDeletion` idempotency test and live repeated-key proof)
+- [x] Retention cleanup proof (`npm run verify:account-lifecycle` bounded-cutoff test)
 
 # chagbt
 ### 7:30-10:00 PM: Mail and Operational Controls
@@ -301,7 +303,6 @@ npm run verify:day4
 
 ## Current Remaining Scope
 
-The authorization and legacy-data slice is now proven. The remaining major implementation
-areas are workflow orchestration, two-instance scaling, Solidity/Hardhat anchoring, event/API
-evolution, account deletion/export, external mail, performance/load evidence, operational
-runbooks, backup restore, and complete proof automation.
+The authorization, legacy-data, and account lifecycle slices are now implemented. Remaining
+major areas are public testnet deployment, external mail, performance/load evidence, backup
+restore, and complete proof automation outside the lifecycle verifier.

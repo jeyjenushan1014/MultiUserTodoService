@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type {
   PoolClient,
 } from "pg";
@@ -26,6 +28,11 @@ implements OwnerProjectionRepository {
       await client.query(
         "BEGIN",
       );
+
+      if (await this.isDeletionTombstoned(client, data.userId)) {
+        await client.query("COMMIT");
+        return "duplicate";
+      }
 
       const eventInserted =
         await this.insertProcessedEvent(
@@ -77,6 +84,11 @@ implements OwnerProjectionRepository {
       await client.query(
         "BEGIN",
       );
+
+      if (await this.isDeletionTombstoned(client, data.userId)) {
+        await client.query("COMMIT");
+        return "duplicate";
+      }
 
       const eventInserted =
         await this.insertProcessedEvent(
@@ -331,6 +343,15 @@ implements OwnerProjectionRepository {
         userId,
       ],
     );
+  }
+
+  private async isDeletionTombstoned(client: PoolClient, userId: string): Promise<boolean> {
+    const userIdHash = createHash("sha256").update(userId).digest("hex");
+    const result = await client.query(
+      "SELECT 1 FROM account_deletion_tombstones WHERE user_id_hash = $1",
+      [userIdHash],
+    );
+    return result.rowCount === 1;
   }
 
   private async insertProcessedEvent(

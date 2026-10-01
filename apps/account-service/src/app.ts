@@ -58,6 +58,7 @@ import {
 } from "./modules/workspace/workspace.routes.js";
 
 import { workflowHealthRouter, workflowRouter } from "./workflow/workflow.routes.js";
+import { internalAccountDeletionRouter } from "./modules/account/deletion/account-deletion.routes.js";
 
 export const app =
   express();
@@ -98,6 +99,11 @@ app.use(
 app.use(
   "/internal/v1/accounts",
   internalProfileRouter,
+);
+
+app.use(
+  "/internal/v1/accounts",
+  internalAccountDeletionRouter,
 );
 
 app.use(

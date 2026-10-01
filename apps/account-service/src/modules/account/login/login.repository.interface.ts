@@ -10,5 +10,5 @@ export interface LoginRepository {
 
   createSession(
     data: CreateSessionData,
-  ): Promise<void>;
+  ): Promise<boolean>;
 }

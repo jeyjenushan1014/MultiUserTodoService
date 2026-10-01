@@ -1,18 +1,24 @@
+import { createHmac } from "node:crypto";
+
 import { cache } from "../config/cache.js";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import { AppError } from "@todo/common";
 
 function membershipKey(userId: string, workspaceId: string): string {
-  return `workspace.membership:${userId}:${workspaceId}`;
+  return `workspace.membership:${hashedUserId(userId)}:${workspaceId}`;
 }
 
 function membershipRevokedKey(userId: string, workspaceId: string): string {
-  return `workspace.revoked:${userId}:${workspaceId}`;
+  return `workspace.revoked:${hashedUserId(userId)}:${workspaceId}`;
 }
 
 function membershipVersionKey(userId: string, workspaceId: string): string {
-  return `workspace.membership-version:${userId}:${workspaceId}`;
+  return `workspace.membership-version:${hashedUserId(userId)}:${workspaceId}`;
+}
+
+function hashedUserId(userId: string): string {
+  return createHmac("sha256", env.INTERNAL_SERVICE_SECRET).update(userId).digest("hex");
 }
 
 const applyMembershipEventScript = `
@@ -104,6 +110,23 @@ export async function removeMembership(userId: string, workspaceId: string, revo
   }
 
   await applyMembershipEvent(userId, workspaceId, null, changedAtEpochMilliseconds);
+}
+
+export async function purgeWorkspaceMembershipCache(userId: string, workspaceIds: readonly string[]): Promise<void> {
+  if (!cache.isReady) {
+    throw new AppError(503, "WORKSPACE_PROJECTION_UNAVAILABLE", "Workspace authorization is temporarily unavailable");
+  }
+  const keys = workspaceIds.flatMap((workspaceId) => [
+    membershipKey(userId, workspaceId),
+    membershipRevokedKey(userId, workspaceId),
+    membershipVersionKey(userId, workspaceId),
+    `workspace.membership:${userId}:${workspaceId}`,
+    `workspace.revoked:${userId}:${workspaceId}`,
+    `workspace.membership-version:${userId}:${workspaceId}`,
+  ]);
+  if (keys.length > 0) {
+    await cache.del(keys);
+  }
 }
 
 export async function getMembershipRole(userId: string, workspaceId: string): Promise<string | null> {

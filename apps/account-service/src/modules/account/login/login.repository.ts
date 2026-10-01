@@ -46,6 +46,11 @@ implements LoginRepository {
             password_hash
           FROM users
           WHERE email = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM account_deletion_requests
+              WHERE user_id = users.id
+                AND status IN ('pending', 'running')
+            )
           LIMIT 1
         `,
         [
@@ -58,12 +63,27 @@ implements LoginRepository {
 
   public async createSession(
     data: CreateSessionData,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const client =
       await database.connect();
 
     try {
       await client.query("BEGIN");
+
+      const eligibleAccount = await client.query<{ id: string }>(
+        `SELECT id FROM users
+         WHERE id = $1
+           AND NOT EXISTS (
+             SELECT 1 FROM account_deletion_requests
+             WHERE user_id = users.id AND status IN ('pending', 'running')
+           )
+         FOR UPDATE`,
+        [data.userId],
+      );
+      if (eligibleAccount.rowCount !== 1) {
+        await client.query("COMMIT");
+        return false;
+      }
 
       await client.query(
         `
@@ -112,6 +132,7 @@ implements LoginRepository {
       );
 
       await client.query("COMMIT");
+      return true;
     } catch (error) {
       await rollback(client);
       throw error;

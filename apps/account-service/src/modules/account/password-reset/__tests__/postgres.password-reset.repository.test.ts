@@ -33,6 +33,9 @@ describe("PostgresPasswordResetRepository", () => {
     // BEGIN
     clientMocks.query.mockResolvedValueOnce({});
 
+    // lock eligible account
+    clientMocks.query.mockResolvedValueOnce({ rowCount: 1, rows: [{ id: "user-id" }] });
+
     // invalidatePreviousTokens
     clientMocks.query.mockResolvedValueOnce({});
 
@@ -88,6 +91,31 @@ describe("PostgresPasswordResetRepository", () => {
     expect(
       params[5],
     ).not.toContain(resetToken);
+  });
+
+  it("does not create a reset token for an account pending deletion", async () => {
+    const repo = new PostgresPasswordResetRepository();
+    clientMocks.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({});
+
+    const created = await repo.createPasswordReset({
+      tokenId: "token-id",
+      eventId: "event-id",
+      userId: "user-id",
+      email: "user@example.com",
+      resetToken: "reset-token",
+      tokenHash: "hash",
+      occurredAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+      requestId: "request-id",
+    });
+
+    expect(created).toBe(false);
+    expect(clientMocks.query).toHaveBeenCalledTimes(3);
+    expect(clientMocks.query.mock.calls[1]?.[0]).toContain("account_deletion_requests");
+    expect(clientMocks.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
   });
 
   it("completes password reset, consumes tokens and revokes sessions", async () => {

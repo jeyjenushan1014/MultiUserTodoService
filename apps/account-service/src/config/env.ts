@@ -54,6 +54,10 @@ RABBITMQ_NOTIFICATION_DLQ:
     .min(1)
     .default("todo.notifications.dlq"),
 
+ACCOUNT_DELETION_BROKER_QUEUES: z.string().min(1).default(
+  "todo.notifications,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership",
+),
+
 OUTBOX_BATCH_SIZE:
   z.coerce
     .number()

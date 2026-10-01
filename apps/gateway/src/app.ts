@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import { workflowParticipantRouter } from "./workflow/workflow-participant.routes.js";
 import { workflowRouter } from "./modules/workflow/workflow.routes.js";
+import { accountDeletionCacheRouter } from "./security/account-deletion.routes.js";
 
 import {
   errorHandlerMiddleware,
@@ -104,6 +105,11 @@ app.use(
 app.use(
   "/internal/v1/workflow-participations",
   workflowParticipantRouter,
+);
+
+app.use(
+  "/internal/v1/account-deletions",
+  accountDeletionCacheRouter,
 );
 
 app.use(

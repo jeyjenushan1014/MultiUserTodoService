@@ -1,5 +1,51 @@
 # Operations
 
+## Account lifecycle controls (DG-1 through DG-10)
+
+### Export
+
+Use `GET /api/v1/users/me/export` with a valid bearer token. The response is assembled from both
+data owners and excludes passwords, token values, JWTs, and service secrets. A non-2xx response
+is not a partial export.
+
+### Deletion and verification
+
+Deletion is asynchronous and requires an `Idempotency-Key`:
+
+```powershell
+curl.exe -X DELETE http://localhost:3000/api/v1/users/me -H "Authorization: Bearer $TOKEN" -H "Idempotency-Key: $KEY"
+```
+
+After completion, run:
+
+```powershell
+npm run verify:account-lifecycle
+docker compose exec -T todo-service node apps/todo-service/scripts/verify-account-erasure.mjs <deletion-request-id> <user-id> <email>
+```
+
+The verifier covers both databases, Redis, all configured queues/DLQs, and chain logs. A failed
+check means the account is not fully erased. Restore the unavailable dependency and let the
+leased worker retry; do not delete rows manually. Repeating the same idempotency key is safe.
+
+Personal unshared TODOs and account-linked queue messages are removed. Shared workspaces and
+shared TODOs remain for other members, with retained history anonymized. Public chain history is
+immutable and opaque; only local pending/projection references for deleted personal TODOs are
+removed.
+
+### Retention cleanup
+
+The replicated `account-cleanup-worker` runs bounded transactional batches. Configure lifetimes:
+
+| Data | Setting | Default |
+|---|---|---:|
+| Expired/revoked sessions | `SESSION_RETENTION_SECONDS` | 2,592,000 (30 days) |
+| Used/expired refresh and reset tokens | `TOKEN_RETENTION_SECONDS` | 2,592,000 (30 days) |
+| Published account outbox events | `OUTBOX_RETENTION_SECONDS` | 2,592,000 (30 days) |
+| Completed notification deliveries | `NOTIFICATION_RETENTION_SECONDS` | 2,592,000 (30 days) |
+
+Cleanup never removes active sessions, unused refresh tokens, processing deliveries, or
+unpublished outbox events.
+
 ## Workspace-launch Activity 2/3 manual verification
 
 ```bash

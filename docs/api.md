@@ -119,6 +119,27 @@ Returns `204`. The token is hashed in storage, expires, and is invalidated wheth
 
 Returns `200` with `{ "data": { "user": { "id": "uuid", "email": "alice@example.com", "createdAt": "2026-09-24T09:00:00.000Z" } } }`.
 
+### `GET /api/v1/users/me/export`
+
+Returns `200` with a JSON export containing the authenticated account, workspace memberships,
+owned and shared TODOs, shares involving the account, and relevant TODO history. The export does
+not contain passwords, refresh tokens, reset tokens, JWTs, or service credentials. Account and
+Todo data are read independently; a dependency failure returns an error rather than a partial
+export.
+
+### `DELETE /api/v1/users/me`
+
+Requires an authenticated caller and an `Idempotency-Key` header between 8 and 200 characters.
+Returns `202` with `{ "data": { "deletionRequestId": "uuid", "status": "pending" } }`.
+The request is durably recorded and all active sessions are revoked in the same database
+transaction. Repeating the request with the same key returns the same request ID. A leased
+worker then prepares workspace ownership, erases Todo data, purges configured broker queues and
+DLQs, clears authorization caches, and removes the Account record. Retries resume after service
+or broker outages. Personal unshared TODOs are deleted; shared workspaces and shared TODOs
+survive, with retained history anonymized. The public blockchain is append-only, so opaque shared
+task history remains; local chain submission and projection rows for deleted personal TODOs are
+removed. Use the account-erasure verifier before treating deletion as complete.
+
 ### `PATCH /api/v1/users/me/email`
 
 Request: `{ "email": "new@example.com" }`. The email is normalized and uniqueness is enforced by the Account database. Returns `200` with the user object. Todo projections update asynchronously from `account.email-changed`, so TODO responses may briefly converge to the new email.

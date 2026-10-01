@@ -40,6 +40,12 @@ export type {
 } from "./current-account.contract.js";
 
 export type {
+  AccountDeletionRequestResponse,
+  AccountExportResponse,
+  TodoExportResponse,
+} from "./account-deletion.contract.js";
+
+export type {
   ChangedEmailAccount,
   ChangeEmailRequest,
   ChangeEmailResponse,

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import {
   SignJWT,
 } from "jose";
@@ -49,6 +50,7 @@ vi.mock(
 
 const {
   authenticate,
+  authenticateDeletionRetry,
 } = await import(
   "../authenticate.middleware.js"
 );
@@ -232,6 +234,31 @@ describe(
     );
 
     it(
+      "allows a revoked signed token only through the deletion retry middleware",
+      async () => {
+        redisState.values.set("session-revoked:session-1", String(Math.floor(Date.now() / 1000)));
+        const token = await signAccessToken();
+        const request = createRequest(token);
+        const response = createResponse();
+        const next = vi.fn() as NextFunction;
+
+        await new Promise<void>((resolve) => {
+          (authenticateDeletionRetry as (request: Request, response: Response, next: NextFunction) => void)(
+            request,
+            response,
+            (error?: unknown): void => {
+              (next as (error?: unknown) => void)(error);
+              resolve();
+            },
+          );
+        });
+
+        expect(next).toHaveBeenCalledWith(undefined);
+        expect(response.locals.callerIdentity).toMatchObject({ userId: "user-1", sessionId: "session-1" });
+      },
+    );
+
+    it(
       "rejects a token issued before an account-wide revocation",
       async () => {
         const revokedAtEpochSeconds =
@@ -240,7 +267,7 @@ describe(
           );
 
         redisState.values.set(
-          "account-revoked:user-1",
+          `account-revoked:${createHmac("sha256", env.INTERNAL_SERVICE_SECRET).update("user-1").digest("hex")}`,
           String(revokedAtEpochSeconds),
         );
 

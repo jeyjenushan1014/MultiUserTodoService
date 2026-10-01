@@ -23,6 +23,8 @@
     "migrate:todo:down": "npm run migrate:down -w @todo/todo-service",
     "test:e2e": "npm run test:e2e -w @todo/gateway",
     "test:docs": "node scripts/verify-api-docs.mjs",
+    "verify:account-erasure": "docker compose exec -T todo-service node apps/todo-service/scripts/verify-account-erasure.mjs",
+    "verify:account-lifecycle": "npm run test -w @todo/account-service -- src/modules/account/deletion/__tests__/account-deletion.repository.test.ts src/worker/__tests__/account-deletion.worker.test.ts src/retention/__tests__/cleanup.repository.test.ts && npm run test -w @todo/todo-service -- src/account-deletion/__tests__/account-deletion.repository.test.ts",
     "rebuild:chain-projection": "docker compose exec -T todo-service npm run rebuild:chain-projection -w @todo/todo-service",
     "verify:capacity": "node scripts/verify-capacity.mjs",
     "verify:workflow:wf2": "node scripts/verify-workflow-half-applied.mjs",

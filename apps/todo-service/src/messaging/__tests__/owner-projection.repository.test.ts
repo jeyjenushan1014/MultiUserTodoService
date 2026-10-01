@@ -139,6 +139,31 @@ beforeEach(
 describe(
   "PostgresOwnerProjectionRepository",
   () => {
+    it("ignores delayed account events after the deletion tombstone is present", async () => {
+      const registrationClient = createClient();
+      registrationClient.queryMock
+        .mockResolvedValueOnce(createQueryResult())
+        .mockResolvedValueOnce(createQueryResult(1, [{ user_id_hash: "digest" }]))
+        .mockResolvedValueOnce(createQueryResult());
+
+      const emailChangeClient = createClient();
+      emailChangeClient.queryMock
+        .mockResolvedValueOnce(createQueryResult())
+        .mockResolvedValueOnce(createQueryResult(1, [{ user_id_hash: "digest" }]))
+        .mockResolvedValueOnce(createQueryResult());
+
+      const repository = new PostgresOwnerProjectionRepository();
+      await expect(repository.applyAccountRegistered(
+        createData("account.registered", "39eb964c-991a-47bc-a012-e9db6eb86c10", "user@example.com", registeredAt),
+      )).resolves.toBe("duplicate");
+      await expect(repository.applyAccountEmailChanged(
+        createData("account.email-changed", "c92a5db4-e31d-4c46-b703-ea3daf5144cc", "new@example.com", changedAt),
+      )).resolves.toBe("duplicate");
+
+      expect(registrationClient.queryMock).not.toHaveBeenCalledWith(expect.stringContaining("INSERT INTO todo_owners"), expect.anything());
+      expect(emailChangeClient.queryMock).not.toHaveBeenCalledWith(expect.stringContaining("todo_owner_pending_email_changes"), expect.anything());
+    });
+
     it(
       "keeps an email change until registration arrives",
       async () => {
@@ -146,6 +171,9 @@ describe(
           createClient();
 
         emailChangeClient.queryMock
+          .mockResolvedValueOnce(
+            createQueryResult(),
+          )
           .mockResolvedValueOnce(
             createQueryResult(),
           )
@@ -181,6 +209,9 @@ describe(
           createClient();
 
         registrationClient.queryMock
+          .mockResolvedValueOnce(
+            createQueryResult(),
+          )
           .mockResolvedValueOnce(
             createQueryResult(),
           )
@@ -244,6 +275,9 @@ describe(
             createQueryResult(),
           )
           .mockResolvedValueOnce(
+            createQueryResult(),
+          )
+          .mockResolvedValueOnce(
             createQueryResult(1),
           )
           .mockResolvedValueOnce(
@@ -279,7 +313,7 @@ describe(
         expect(
           client.queryMock,
         ).toHaveBeenNthCalledWith(
-          4,
+          5,
           expect.stringContaining(
             "owners.projection_occurred_at < pending.occurred_at",
           ),
@@ -291,7 +325,7 @@ describe(
         expect(
           client.queryMock,
         ).toHaveBeenNthCalledWith(
-          5,
+          6,
           expect.stringContaining(
             "pending.occurred_at <= owners.projection_occurred_at",
           ),

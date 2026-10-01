@@ -117,6 +117,11 @@ async function findAccountEmail(
         SELECT email
         FROM users
         WHERE id = $1
+          AND NOT EXISTS (
+            SELECT 1 FROM account_deletion_requests
+            WHERE user_id = users.id
+              AND status IN ('pending', 'running')
+          )
         LIMIT 1
       `,
       [accountId],
@@ -316,14 +321,16 @@ export class TodoNotificationConsumer {
         message,
         passwordResetRequested.data.eventId,
         async () => {
-          await this.mailer.sendPasswordResetEmail(
-            passwordResetRequested.data.payload.email,
-            decryptPasswordResetToken(
-              passwordResetRequested.data.payload
-                .encryptedResetToken,
-            ),
-            passwordResetRequested.data.payload.expiresAt,
-          );
+          const accountEmail = await findAccountEmail(passwordResetRequested.data.payload.userId);
+          if (accountEmail === passwordResetRequested.data.payload.email) {
+            await this.mailer.sendPasswordResetEmail(
+              accountEmail,
+              decryptPasswordResetToken(
+                passwordResetRequested.data.payload.encryptedResetToken,
+              ),
+              passwordResetRequested.data.payload.expiresAt,
+            );
+          }
         },
       );
     } catch (error) {

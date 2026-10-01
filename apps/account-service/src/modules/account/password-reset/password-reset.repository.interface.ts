@@ -12,7 +12,7 @@ export interface PasswordResetRepository {
 
   createPasswordReset(
     data: CreatePasswordResetData,
-  ): Promise<void>;
+  ): Promise<boolean>;
 
   completePasswordReset(
     data: CompletePasswordResetData,

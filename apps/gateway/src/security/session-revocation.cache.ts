@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import {
   redis,
 } from "../config/redis.js";
@@ -17,13 +19,35 @@ import type {
 function sessionRevokedKey(
   sessionId: string,
 ): string {
-  return `session-revoked:${sessionId}`;
+  const hashedSessionId = createHmac("sha256", env.INTERNAL_SERVICE_SECRET).update(sessionId).digest("hex");
+  return `session-revoked:${hashedSessionId}`;
 }
 
 function accountRevokedKey(
   userId: string,
 ): string {
-  return `account-revoked:${userId}`;
+  const hashedUserId = createHmac("sha256", env.INTERNAL_SERVICE_SECRET).update(userId).digest("hex");
+  return `account-revoked:${hashedUserId}`;
+}
+
+export async function purgeLegacyAccountRevocation(userId: string): Promise<void> {
+  await redis.del(`account-revoked:${userId}`);
+}
+
+export async function purgeSessionRevocationCaches(sessionIds: readonly string[]): Promise<void> {
+  const keys = sessionIds.flatMap((sessionId) => [
+    sessionRevokedKey(sessionId),
+    `session-revoked:${sessionId}`,
+  ]);
+  if (keys.length > 0) {
+    await redis.del(keys);
+  }
+}
+
+export async function hasAccountRevocationCache(userId: string): Promise<boolean> {
+  const hashedUserId = createHmac("sha256", env.INTERNAL_SERVICE_SECRET).update(userId).digest("hex");
+  const values = await redis.mGet([`account-revoked:${hashedUserId}`, `account-revoked:${userId}`]);
+  return values.some((value) => value !== null);
 }
 
 /*
@@ -82,7 +106,7 @@ export async function isSessionRevoked(
     const revokedSession =
       await redis.get(
         sessionRevokedKey(claims.sessionId),
-      );
+      ) ?? await redis.get(`session-revoked:${claims.sessionId}`);
 
     if (revokedSession !== null) {
       return true;

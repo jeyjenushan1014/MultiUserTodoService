@@ -10,7 +10,8 @@ import type {
   UpdateTodoRequest,
   UpdateTodoResponse,
   ShareTodoResponse,
-  CreateTodoShareRequest
+  CreateTodoShareRequest,
+  TodoExportResponse,
 } from "@todo/contracts";
 
 import {
@@ -747,5 +748,21 @@ export async function getTodoHistory(
     );
   }
 
+  return result;
+}
+
+export async function exportAccountTodos(
+  identity: CallerIdentity,
+  requestId: string,
+): Promise<TodoExportResponse> {
+  const result = await sendTodoRequest<TodoExportResponse>({
+    endpoint: new URL("/internal/v1/account-deletions/export", env.TODO_SERVICE_URL),
+    method: "GET",
+    requestId,
+    identity,
+  });
+  if (result === undefined || !isRecord(result)) {
+    throw new AppError(502, "INVALID_DOWNSTREAM_RESPONSE", "TODO service returned an invalid response");
+  }
   return result;
 }

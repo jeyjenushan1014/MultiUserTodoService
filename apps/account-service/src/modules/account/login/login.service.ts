@@ -120,7 +120,7 @@ export class LoginService {
         email: user.email,
       });
 
-    await this.repository
+    const sessionCreated = await this.repository
       .createSession({
         sessionId,
         familyId,
@@ -130,6 +130,10 @@ export class LoginService {
         sessionExpiresAt,
         refreshTokenExpiresAt,
       });
+
+    if (!sessionCreated) {
+      throw INVALID_CREDENTIALS;
+    }
 
 
 

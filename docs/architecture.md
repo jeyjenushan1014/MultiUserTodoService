@@ -125,6 +125,25 @@ Owner-only TODO reads use Redis, keyed by the owner and query/resource identity.
 
 The access JWT contains identity and session claims but is accepted only while the Account session remains active. Logout, logout-all, refresh-token reuse detection, and password reset revoke session state, so an otherwise valid old JWT stops working. Refresh and reset credentials are random opaque values; only hashes are stored.
 
+## 7.1 Account export and deletion
+
+`GET /api/v1/users/me/export` is a read-only Gateway aggregation. Account Service returns the
+authenticated account and workspace memberships, while Todo Service returns owned/shared TODOs,
+related shares, and relevant history. Both calls use signed internal identity and the export
+fails rather than returning a partial document.
+
+Account deletion is a durable leased workflow in `account_deletion_requests`. It revokes sessions
+immediately, prepares workspace ownership, calls the Todo erasure participant, purges Gateway and
+Todo caches plus configured RabbitMQ queues/DLQs, and then removes the Account record. Shared
+workspaces and shared TODOs survive; orphaned empty workspaces and unshared personal TODOs are
+removed. Retained history is anonymized and a tombstone prevents the deleted identity returning
+to Todo projections.
+
+The public chain is append-only, so historical blocks cannot be rewritten. Chain payloads are
+opaque task/workspace identifiers and contain no account email or user ID. Pending local chain
+submissions and local projection rows for deleted personal TODOs are removed; shared-task chain
+history remains as anonymized operational history.
+
 ## 8. Availability and failure behavior
 
 Services start with local configuration and do not require another service merely to start. Database pools have error handling and reconnect behavior. Downstream calls are bounded. RabbitMQ consumers and outbox workers restart independently under Compose.

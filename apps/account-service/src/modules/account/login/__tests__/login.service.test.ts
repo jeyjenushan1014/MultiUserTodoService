@@ -156,7 +156,7 @@ describe(
 
         dependencies
           .createSessionMock
-          .mockResolvedValue();
+          .mockResolvedValue(true);
 
         vi.mocked(
           createAccessToken,
@@ -213,7 +213,7 @@ describe(
 
         dependencies
           .createSessionMock
-          .mockResolvedValue();
+          .mockResolvedValue(true);
 
         vi.mocked(
           createAccessToken,
@@ -259,7 +259,7 @@ describe(
 
         dependencies
           .createSessionMock
-          .mockResolvedValue();
+          .mockResolvedValue(true);
 
         vi.mocked(
           createAccessToken,
@@ -301,7 +301,7 @@ describe(
 
         dependencies
           .createSessionMock
-          .mockResolvedValue();
+          .mockResolvedValue(true);
 
         vi.mocked(
           createAccessToken,
@@ -367,7 +367,7 @@ describe(
 
     dependencies
       .createSessionMock
-      .mockResolvedValue();
+      .mockResolvedValue(true);
 
     vi.mocked(
       createAccessToken,

@@ -6,9 +6,32 @@
 npm run check
 npm run test:e2e
 npm run verify:authorization
+npm run verify:account-erasure -- <deletion-request-id> <user-id> <email>
+npm run verify:account-lifecycle
 ```
 
 `npm run check` runs lint, TypeScript builds, and unit tests without requiring manually started infrastructure. `npm run test:e2e` exercises the public Gateway path against the Docker stack.
+
+The account-lifecycle unit slice is:
+
+```powershell
+npm run verify:account-lifecycle
+```
+
+This command proves durable deletion persistence, idempotent request reuse, expiring worker
+leases, retry requeue, bounded retention cleanup, Todo anonymization, shared-task preservation,
+and local chain cleanup.
+
+After triggering account deletion and waiting for the worker, run the live proof:
+
+```powershell
+docker compose exec -T todo-service node apps/todo-service/scripts/verify-account-erasure.mjs <deletion-request-id> <user-id> <email>
+```
+
+It checks Account tombstone/completion state, Todo identity-linked rows and local chain
+references, Gateway Redis authorization state, every configured broker queue and DLQ, and public
+chain logs for the deleted account ID or email. Repeat the same idempotency key and stop either
+participant before restarting it to prove idempotence and outage resume.
 
 `npm run verify:authorization` proves the AUT-1 role/action table matches the built public contract.
 It does not replace the workspace projection tests. The TN-6/TN-7 proof also runs middleware,
@@ -222,6 +245,12 @@ The isolation rule is verified for get, update, and delete: an inaccessible TODO
 | RR-1 to RR-9 | Container stop/restart checks in the failure-test table below. These require runtime execution, not unit tests alone. |
 | SR-3 to SR-8 | Gateway E2E isolation, permissions, revocation, email-change, and reset-token tests. |
 | AUT-1 | `npm run verify:authorization`; compares every Markdown permission cell with the built public contract. |
+| DG-1, DG-2, DG-3, DG-8 | Deletion repository tests plus `verify-account-erasure.mjs`; checks durable request, cross-service cleanup, anonymized history, shared-task preservation, and local chain cleanup. |
+| DG-4 | `verify-account-erasure.mjs` checks Account, Todo, Gateway, broker, and chain state together. |
+| DG-5 | Gateway export route, Account/Todo export endpoints, package contract build, and API documentation. |
+| DG-6 | Account cleanup repository tests and configured retention cutoffs. |
+| DG-7 | Credential redaction and hash-storage tests. |
+| DG-9, DG-10 | Durable leased worker retry tests, broker purge tests, and the stop/restart live proof above. |
 
 ## Failure tests
 

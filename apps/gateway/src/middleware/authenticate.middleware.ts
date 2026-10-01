@@ -45,6 +45,7 @@ async function authenticateRequest(
     unknown,
     AuthenticationLocals
   >,
+  allowRevokedToken = false,
 ): Promise<void> {
   const token =
     extractBearerToken(request);
@@ -52,7 +53,7 @@ async function authenticateRequest(
   const claims =
     await verifyAccessTokenClaims(token);
 
-  if (await isSessionRevoked(claims)) {
+  if (!allowRevokedToken && await isSessionRevoked(claims)) {
     throw new AppError(
       401,
       "INVALID_ACCESS_TOKEN",
@@ -68,7 +69,7 @@ async function authenticateRequest(
   response.locals.accessTokenIssuedAt = claims.issuedAt;
 }
 
-function createAuthenticateMiddleware():
+function createAuthenticateMiddleware(allowRevokedToken = false):
   RequestHandler {
   return (
     request: Request,
@@ -78,6 +79,7 @@ function createAuthenticateMiddleware():
     void authenticateRequest(
       request,
       response,
+      allowRevokedToken,
     )
       .then(() => {
         next();
@@ -92,6 +94,9 @@ function createAuthenticateMiddleware():
 
 export const authenticate =
   createAuthenticateMiddleware();
+
+export const authenticateDeletionRetry =
+  createAuthenticateMiddleware(true);
 
 /*
  * Reads and writes now use the same check; kept as a separate

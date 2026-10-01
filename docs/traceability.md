@@ -75,8 +75,11 @@ contain a retained old image/tag or versioned Compose deployment fixture.
 The following remain outside Day 4 evidence: full ARC-8 propagation latency numbers, real-container
 workflow stop/restart automation required by PR-4, workflow database/HTTP integration assertions
 called out in the workflow table below, and several unrelated requirement groups (BC-*, EV-*,
-remaining PF-*, DG-*, OP-*, PR-*, ML-*, DOC-*, EVT-*, ONC-*, OPS-*, and TRC-*). These gaps are
-documented and tracked; they are not claimed as covered by this commit
+remaining PF-*, OP-*, PR-*, ML-*, DOC-*, EVT-*, ONC-*, OPS-*, and TRC-*). DG-1 through DG-10
+are covered by `npm run verify:account-lifecycle`, export contract/build checks, retention implementation,
+and the live `verify-account-erasure.mjs` proof. Public chain history is immutable and opaque;
+local identity-linked state is removed or anonymized. These remaining gaps are documented and
+tracked; they are not claimed as covered by this commit.
 
 ## Evidence file and test pointers
 

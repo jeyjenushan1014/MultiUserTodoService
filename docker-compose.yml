@@ -206,6 +206,7 @@ services:
       DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
       PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      ACCOUNT_DELETION_BROKER_QUEUES: ${ACCOUNT_DELETION_BROKER_QUEUES:-todo.notifications,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
       RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
       RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
@@ -401,6 +402,7 @@ services:
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
       RABBITMQ_URL: >-
         amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      ACCOUNT_DELETION_BROKER_QUEUES: ${ACCOUNT_DELETION_BROKER_QUEUES:-todo.notifications,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       REQUEST_BODY_LIMIT: ${REQUEST_BODY_LIMIT:-100kb}
       WORKSPACE_PROJECTION_FAIL_OPEN: ${WORKSPACE_PROJECTION_FAIL_OPEN:-false}

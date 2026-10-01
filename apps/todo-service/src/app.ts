@@ -35,6 +35,7 @@ import {
 } from "./messaging/owner-projection-rebuild.routes.js";
 
 import { workflowParticipantRouter } from "./workflow/workflow-participant.routes.js";
+import { accountDeletionRouter } from "./account-deletion/account-deletion.routes.js";
 
 export const app =
   express();
@@ -80,6 +81,11 @@ app.use(
 app.use(
   "/internal/v1/workflow-participations",
   workflowParticipantRouter,
+)
+
+app.use(
+  "/internal/v1/account-deletions",
+  accountDeletionRouter,
 )
 
 

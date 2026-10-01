@@ -3,6 +3,7 @@ import { logger } from "../config/logger.js";
 import { WorkflowOrchestrator } from "../workflow/workflow.orchestrator.js";
 import { workflowParticipants } from "../workflow/workflow.participants.js";
 import { workflowRepository } from "../workflow/workflow.module.js";
+import { processNextAccountDeletion } from "./account-deletion.worker.js";
 
 const orchestrator = new WorkflowOrchestrator(workflowRepository, workflowParticipants);
 let stopping = false;
@@ -10,6 +11,10 @@ let stopping = false;
 async function poll(): Promise<void> {
   while (!stopping) {
     try {
+      const deletionProcessed = await processNextAccountDeletion(env.WORKFLOW_WORKER_ID, env.WORKFLOW_LEASE_MS);
+      if (deletionProcessed) {
+        continue;
+      }
       const workflow = await workflowRepository.claimNext(env.WORKFLOW_WORKER_ID, env.WORKFLOW_LEASE_MS);
       if (workflow === null) {
         await new Promise((resolve) => setTimeout(resolve, env.WORKFLOW_POLL_INTERVAL_MS));

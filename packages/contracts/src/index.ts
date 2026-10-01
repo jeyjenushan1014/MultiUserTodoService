@@ -60,6 +60,12 @@ export type {
 } from "./account/index.js";
 
 export type {
+  AccountDeletionRequestResponse,
+  AccountExportResponse,
+  TodoExportResponse,
+} from "./account/index.js";
+
+export type {
   ChangedEmailAccount,
   ChangeEmailRequest,
   ChangeEmailResponse,

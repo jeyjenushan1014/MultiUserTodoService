@@ -17,6 +17,8 @@ const publicEndpoints = [
   "POST /api/v1/auth/password-reset/request",
   "POST /api/v1/auth/password-reset/confirm",
   "GET /api/v1/users/me",
+  "GET /api/v1/users/me/export",
+  "DELETE /api/v1/users/me",
   "PATCH /api/v1/users/me/email",
   "POST /api/v1/todos",
   "GET /api/v1/todos",

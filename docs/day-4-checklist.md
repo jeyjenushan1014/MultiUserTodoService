@@ -119,7 +119,7 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [x] BC-4 authorized writer only (local contract test passed; backend key safety pending)
 - [x] BC-5 local Hardhat deployment and tests (8 tests passed; chain 31337 address recorded)
 - [ ] BC-5 public testnet deployment
-- [ ] BC-15 private-key protection
+- [x] BC-15 private-key protection (`SecureSignerKeyProvider`, logger redaction, env validation & unit tests passed)
 - [x] BC-16 local gas measurements: append 75,583 gas with 1 and 1,000 prior task records
 - [ ] BC-17 backend build artifact for ABI **and** deployed address (independent project and generated ABI done; address integration pending)
 - [x] Update `docs/onchain.md` for contract functions, local address, build commands, and measured gas

@@ -38,6 +38,10 @@ const environmentSchema =
         .min(1)
         .max(65_535)
         .default(3002),
+      
+    CHAIN_WRITER_ADDRESS: z
+  .string()
+  .regex(/^0x[a-fA-F0-9]{40}$/),
 
     TODO_DATABASE_URL:
       z
@@ -396,6 +400,11 @@ CHAIN_POLL_INTERVAL_MS: z.coerce
   .min(250)
   .max(60_000)
   .default(2_000),
+
+CHAIN_SIGNER_PRIVATE_KEY: z
+  .string()
+  .regex(/^0x[a-fA-F0-9]{64}$/, "Must be a 32-byte hex-encoded Ethereum private key (0x...)")
+  .optional(),
 
     OUTBOX_RETENTION_SECONDS:
       z.coerce

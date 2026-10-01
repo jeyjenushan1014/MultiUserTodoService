@@ -82,7 +82,7 @@ describe("TaskHistoryProjectionRepository", () => {
       taskId: "11111111-1111-4111-8111-111111111111",
       workspaceId: "22222222-2222-4222-8222-222222222222",
       action: "created",
-      chainTimestamp: new Date("2026-10-01T00:00:00.000Z"),
+      chainTimestamp: 1790833183n,
     };
 
     await repository.commitScannedRange({
@@ -100,6 +100,7 @@ describe("TaskHistoryProjectionRepository", () => {
     expect(eventInsert).toBeDefined();
     expect(eventInsert?.text).toContain("ON CONFLICT");
     expect(eventInsert?.text).toContain("DO NOTHING");
+    expect(eventInsert?.values?.[9]).toBe("1790833183");
 
     const checkpointInsert = queries.find((q) =>
       q.text.includes("INSERT INTO chain_projection_checkpoints"),
@@ -107,6 +108,51 @@ describe("TaskHistoryProjectionRepository", () => {
     expect(checkpointInsert).toBeDefined();
     expect(checkpointInsert?.text).toContain("ON CONFLICT");
     expect(checkpointInsert?.text).toContain("DO UPDATE SET");
+  });
+
+  it("inserts all event blocks into chain_projection_blocks before task_chain_events to satisfy FK even when event block differs from toBlock", async () => {
+    const { pool, queries } = createMockPool();
+    const repository = new TaskHistoryProjectionRepository(pool);
+
+    const eventAtBlock7: ChainEventRow = {
+      chainId: 31337,
+      contractAddress: "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+      transactionHash: "0xtxhash7",
+      logIndex: 1,
+      blockNumber: 7n,
+      blockHash: "0xblockhash7",
+      taskId: "11111111-1111-4111-8111-111111111111",
+      workspaceId: "22222222-2222-4222-8222-222222222222",
+      action: "updated",
+      chainTimestamp: 1790833000n,
+    };
+
+    await repository.commitScannedRange({
+      chainId: 31337,
+      contractAddress: "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+      fromBlock: 5n,
+      toBlock: 10n,
+      endBlockHash: "0xblockhash10",
+      events: [eventAtBlock7],
+    });
+
+    const blockInserts = queries.filter((q) =>
+      q.text.includes("INSERT INTO chain_projection_blocks"),
+    );
+    expect(blockInserts).toHaveLength(2);
+
+    const block7Insert = blockInserts.find((q) => q.values?.[2] === "7");
+    const block10Insert = blockInserts.find((q) => q.values?.[2] === "10");
+    expect(block7Insert?.values?.[3]).toBe("0xblockhash7");
+    expect(block10Insert?.values?.[3]).toBe("0xblockhash10");
+
+    const firstBlockIndex = queries.findIndex((q) =>
+      q.text.includes("INSERT INTO chain_projection_blocks"),
+    );
+    const eventIndex = queries.findIndex((q) =>
+      q.text.includes("INSERT INTO task_chain_events"),
+    );
+    expect(firstBlockIndex).toBeLessThan(eventIndex);
   });
 
   it("rolls back projection past common ancestor block on reorganization (BC-8)", async () => {

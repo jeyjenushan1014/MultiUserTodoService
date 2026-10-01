@@ -65,12 +65,13 @@ A writer account is configured in the constructor. Only that account may call
 
 A transaction from any other account reverts with `UnauthorizedWriter`. The constructor rejects
 the zero address with `InvalidWriter`; a zero task or workspace ID reverts with `ZeroIdentifier`.
-The deploy module uses Hardhat account 0 as the writer only for the local demonstration. No
-backend signing key is configured yet. A future signing key must be supplied at runtime, never
-stored in the repository, Docker image, database, event payload, or logs. If the key is lost,
-submissions must stop and a new writer/contract must be deployed while preserving old addresses.
-If it leaks, stop submissions, replace the trusted writer/contract, and treat old writes as
-untrusted until verified. Key management and its tests remain open under BC-15/ONC-7.
+The deploy module uses Hardhat account 0 as the writer only for the local demonstration.
+Backend signing key custody is implemented under BC-15 (`SecureSignerKeyProvider`):
+- Key must be supplied only at runtime via secure environment/secrets manager (`CHAIN_SIGNER_PRIVATE_KEY`).
+- Never stored in Git, Docker images, database, RabbitMQ event payloads, or logger output (redacted in `logger.ts`).
+- Address derivation validation: the provider checks in-memory that the private key matches `CHAIN_WRITER_ADDRESS` before any transaction signing.
+- Object serialization masks the key (`[PROTECTED_IN_MEMORY]`).
+- If the key is lost, submissions must stop and a new writer/contract deployed. If leaked, immediately revoke/rotate and halt worker.
 
 ## 6. Reading history
 
@@ -238,3 +239,15 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 
 No production private key, public-testnet deployment, or chain submission worker
 is supplied by this milestone. These are separate release gates.
+
+
+## Durable chain submissions
+
+`chain_submissions` stores privacy-safe commands for asynchronous blockchain writes.
+It contains task ID, workspace ID, action, chain/contract/writer addresses, retry data,
+nonce, transaction hashes, and transaction status. It does not contain task content,
+user IDs, email addresses, or signing private keys.
+
+The table is the durable queue foundation. BC-10 through BC-14 remain incomplete until
+the business transaction enqueues commands atomically and the chain worker implements
+submission, nonce coordination, receipt/finality tracking, retry, and dead-letter handling.

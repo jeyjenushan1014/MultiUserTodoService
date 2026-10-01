@@ -345,7 +345,6 @@ export class TaskHistoryIndexer {
     });
 
     const decodedEvents: ChainEventRow[] = [];
-    const timestampByBlock = new Map<bigint, Date>();
 
     for (const log of logs) {
       const decoded = decodeEventLog({
@@ -367,15 +366,9 @@ export class TaskHistoryIndexer {
         "timestamp",
       );
 
-      const chainTimestamp = new Date(
-        Number(timestampSeconds) * 1_000,
-      );
-
-      if (Number.isNaN(chainTimestamp.getTime())) {
+      if (timestampSeconds < 0n) {
         throw new Error("Contract emitted an invalid timestamp");
       }
-
-      timestampByBlock.set(log.blockNumber, chainTimestamp);
 
       decodedEvents.push({
         chainId: env.CHAIN_ID,
@@ -387,7 +380,7 @@ export class TaskHistoryIndexer {
         taskId: bytes16ToUuid(taskIdBytes),
         workspaceId: bytes16ToUuid(workspaceIdBytes),
         action: actionToName(args.action),
-        chainTimestamp,
+        chainTimestamp: timestampSeconds,
       });
     }
 

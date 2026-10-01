@@ -13,7 +13,7 @@ export interface ChainEventRow {
   taskId: string;
   workspaceId: string;
   action: "created" | "updated" | "deleted";
-  chainTimestamp: Date;
+  chainTimestamp: bigint;
 }
 
 export interface ProjectionCheckpoint {
@@ -133,6 +133,43 @@ export class TaskHistoryProjectionRepository {
     try {
       await client.query("BEGIN");
 
+      const blockHashes = new Map<string, string>();
+
+      for (const event of input.events) {
+        blockHashes.set(
+          event.blockNumber.toString(),
+          event.blockHash.toLowerCase(),
+        );
+      }
+
+      // Also store the scanned range's ending block checkpoint
+      blockHashes.set(
+        input.toBlock.toString(),
+        input.endBlockHash.toLowerCase(),
+      );
+
+      for (const [blockNumber, blockHash] of blockHashes) {
+        await client.query(
+          `
+            INSERT INTO chain_projection_blocks (
+              chain_id,
+              contract_address,
+              block_number,
+              block_hash
+            )
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (chain_id, contract_address, block_number)
+            DO UPDATE SET block_hash = EXCLUDED.block_hash
+          `,
+          [
+            input.chainId,
+            input.contractAddress.toLowerCase(),
+            blockNumber,
+            blockHash,
+          ],
+        );
+      }
+
       for (const event of input.events) {
         await client.query(
           `
@@ -166,30 +203,10 @@ export class TaskHistoryProjectionRepository {
             event.taskId,
             event.workspaceId,
             event.action,
-            event.chainTimestamp,
+            event.chainTimestamp.toString(),
           ],
         );
       }
-
-      await client.query(
-        `
-          INSERT INTO chain_projection_blocks (
-            chain_id,
-            contract_address,
-            block_number,
-            block_hash
-          )
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (chain_id, contract_address, block_number)
-          DO UPDATE SET block_hash = EXCLUDED.block_hash
-        `,
-        [
-          input.chainId,
-          input.contractAddress.toLowerCase(),
-          input.toBlock.toString(),
-          input.endBlockHash.toLowerCase(),
-        ],
-      );
 
       await client.query(
         `

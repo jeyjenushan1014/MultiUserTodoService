@@ -1,0 +1,183 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "writerAddress",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidPageSize",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidWriter",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UnauthorizedWriter",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroIdentifier",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes16",
+        "name": "taskId",
+        "type": "bytes16"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes16",
+        "name": "workspaceId",
+        "type": "bytes16"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum TaskHistory.Action",
+        "name": "action",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "timestamp",
+        "type": "uint64"
+      }
+    ],
+    "name": "TaskActionRecorded",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_PAGE_SIZE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes16",
+        "name": "taskId",
+        "type": "bytes16"
+      },
+      {
+        "internalType": "uint256",
+        "name": "offset",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "limit",
+        "type": "uint256"
+      }
+    ],
+    "name": "getHistory",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes16",
+            "name": "taskId",
+            "type": "bytes16"
+          },
+          {
+            "internalType": "bytes16",
+            "name": "workspaceId",
+            "type": "bytes16"
+          },
+          {
+            "internalType": "enum TaskHistory.Action",
+            "name": "action",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint64",
+            "name": "timestamp",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct TaskHistory.TaskActionRecord[]",
+        "name": "page",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes16",
+        "name": "taskId",
+        "type": "bytes16"
+      }
+    ],
+    "name": "getRecordCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes16",
+        "name": "taskId",
+        "type": "bytes16"
+      },
+      {
+        "internalType": "bytes16",
+        "name": "workspaceId",
+        "type": "bytes16"
+      },
+      {
+        "internalType": "enum TaskHistory.Action",
+        "name": "action",
+        "type": "uint8"
+      }
+    ],
+    "name": "recordTaskAction",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "writer",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

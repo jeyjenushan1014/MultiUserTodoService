@@ -98,3 +98,21 @@ commands are authenticated internal HTTP requests carrying the immutable workflo
 Their durable retry source is the Account Service workflow table, rather than a transient HTTP
 request or a second message contract. This distinction is intentional and documented here so the
 commands are not mistaken for uncatalogued events.
+
+## Contract event: `TaskActionRecorded` (TaskHistory v1)
+
+This event is emitted by `recordTaskAction` in `contracts/onchain/contracts/TaskHistory.sol`.
+It is an EVM log, **not** a RabbitMQ message; no backend chain reader currently consumes it.
+
+| Parameter | ABI type | Indexed | Meaning |
+|---|---|---|---|
+| `taskId` | `bytes16` | yes | Opaque task identifier |
+| `workspaceId` | `bytes16` | yes | Opaque workspace identifier |
+| `action` | `uint8` (`Action`) | no | `Created = 0`, `Updated = 1`, `Deleted = 2` |
+| `timestamp` | `uint64` | no | Timestamp of the containing block, not the original request time |
+
+The local contract test proves the event's four-value shape. Before public deployment, verify
+that the IDs sent as inputs do not identify people. A future chain reader must rebuild from
+canonical logs and remove orphaned projections after a chain reorganisation; confirmations,
+duplicate-event handling, and reader/rebuild commands are not yet implemented. Existing TODO
+broker events contain account IDs or titles and must never be forwarded to this contract.

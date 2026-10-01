@@ -22,6 +22,9 @@ by TRC-2.
 | WF-5 | Covered | `npm run verify:workflow:compensation` plus orchestrator unit tests | Live compensation completes through idempotent participant cleanup; unit tests cover repeated undo and compensation failure bounds. |
 | WF-9 | Covered | `npm run verify:workflow:correlation` | The Gateway-generated correlation ID was found in Account, Todo, Gateway, and workflow-worker logs. |
 | WF-10 | Covered | `npm run verify:workflow:compensation` | The proof aged a compensating workflow and observed degraded workflow health before recovery. |
+| BC-3 | Covered (contract) | `cd contracts/onchain; npm test` | Public view functions count records and return pages bounded to 50; direct public-testnet reading is a separate ONC-3 gate. |
+| BC-4 | Covered (contract) | `cd contracts/onchain; npm test` | Configured writer can append; an unauthorized signer is rejected. Backend key custody remains a separate BC-15 gate. |
+| BC-16 | Covered (local gas) | `cd contracts/onchain; npm run test:gas` | The append used 75,583 gas with 1 and 1,000 existing records for the same task; reads and deployment costs are recorded in `docs/onchain.md`. |
 | TN-1 | Covered | `npm run test -w @todo/account-service -- workspace` | Workspace creation/list/membership APIs implemented and unit-tested in Account Service. Evidence: `apps/account-service/src/modules/workspace/*` tests and routes. |
 | TN-2 | Covered | `npm run test -w @todo/account-service -- workspace.repository.test.ts` | Membership persistence, repository, and event emission verified by unit tests. Evidence: `apps/account-service/src/modules/workspace/workspace.repository.ts` and related tests. |
 | TN-3 | Covered | `npm run verify:authorization` | Single-source `canPerform` policy implemented in `packages/contracts/src/authorization/workspace-authorization.ts`. |
@@ -36,6 +39,11 @@ by TRC-2.
 | TN-7 | Covered | `npm run test:e2e -w @todo/gateway -- --testNamePattern="revokes a prior token after workspace membership removal"` | Live flow measures role/removal propagation, proves a fresh token is accepted after re-add, and proves the original token remains denied by the revoked-before watermark. |
 
 ## Coverage gaps — no evidence claimed
+
+The on-chain contract has a local build, eight passing tests, ABI export, and a reported chain-31337
+Ignition deployment. BC-1 (system-wide writes), BC-2 (input privacy), BC-5 (public deployment),
+BC-6 through BC-15, and BC-17 (backend address artifact) are not yet covered. BC-3/4/16 rows above
+are explicitly local contract evidence, not claims of a deployed end-to-end blockchain subsystem.
 
 The following remain outside Day 4 evidence: full ARC-8 propagation latency numbers, real-container
 workflow stop/restart automation required by PR-4, workflow database/HTTP integration assertions

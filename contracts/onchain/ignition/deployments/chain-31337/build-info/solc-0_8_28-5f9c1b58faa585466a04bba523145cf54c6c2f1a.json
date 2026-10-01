@@ -1,0 +1,49 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-5f9c1b58faa585466a04bba523145cf54c6c2f1a",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "compilerType": "solc",
+  "toolVersions": {
+    "hardhat": "3.18.0"
+  },
+  "userSourceNameMap": {
+    "contracts/TaskHistory.sol": "project/contracts/TaskHistory.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/TaskHistory.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity 0.8.28;\r\n\r\n/// @title TaskHistory\r\n/// @notice Stores a minimal, public history of workspace task actions.\r\ncontract TaskHistory {\r\n    enum Action {\r\n        Created,\r\n        Updated,\r\n        Deleted\r\n    }\r\n\r\n    struct TaskActionRecord {\r\n        bytes16 taskId;\r\n        bytes16 workspaceId;\r\n        Action action;\r\n        uint64 timestamp;\r\n    }\r\n\r\n    uint256 public constant MAX_PAGE_SIZE = 50;\r\n\r\n    /// @notice The one account allowed to add records.\r\n    address public immutable writer;\r\n\r\n    /// @dev Each task has its own append-only list.\r\n    mapping(bytes16 taskId => TaskActionRecord[] records) private _recordsByTask;\r\n\r\n    error InvalidWriter();\r\n    error UnauthorizedWriter();\r\n    error ZeroIdentifier();\r\n    error InvalidPageSize();\r\n\r\n    /// @notice Contains only the four approved record values.\r\n    event TaskActionRecorded(\r\n        bytes16 indexed taskId,\r\n        bytes16 indexed workspaceId,\r\n        Action action,\r\n        uint64 timestamp\r\n    );\r\n\r\n    modifier onlyWriter() {\r\n        if (msg.sender != writer) {\r\n            revert UnauthorizedWriter();\r\n        }\r\n        _;\r\n    }\r\n\r\n    constructor(address writerAddress) {\r\n        if (writerAddress == address(0)) {\r\n            revert InvalidWriter();\r\n        }\r\n\r\n        writer = writerAddress;\r\n    }\r\n\r\n    /// @notice Adds a task activity record. Only the configured writer can call this.\r\n    /// @dev The timestamp is the block timestamp, not the original API request time.\r\n    function recordTaskAction(\r\n        bytes16 taskId,\r\n        bytes16 workspaceId,\r\n        Action action\r\n    ) external onlyWriter {\r\n        if (taskId == bytes16(0) || workspaceId == bytes16(0)) {\r\n            revert ZeroIdentifier();\r\n        }\r\n\r\n        uint64 recordedAt = uint64(block.timestamp);\r\n\r\n        TaskActionRecord memory record = TaskActionRecord({\r\n            taskId: taskId,\r\n            workspaceId: workspaceId,\r\n            action: action,\r\n            timestamp: recordedAt\r\n        });\r\n\r\n        _recordsByTask[taskId].push(record);\r\n\r\n        emit TaskActionRecorded(\r\n            taskId,\r\n            workspaceId,\r\n            action,\r\n            recordedAt\r\n        );\r\n    }\r\n\r\n    /// @notice Returns how many records exist for a task.\r\n    function getRecordCount(bytes16 taskId)\r\n        external\r\n        view\r\n        returns (uint256)\r\n    {\r\n        return _recordsByTask[taskId].length;\r\n    }\r\n\r\n    /// @notice Returns a bounded page of records for a task.\r\n    /// @param taskId Task whose history is requested.\r\n    /// @param offset Zero-based position of the first returned record.\r\n    /// @param limit Number of records requested; maximum is MAX_PAGE_SIZE.\r\n    function getHistory(\r\n        bytes16 taskId,\r\n        uint256 offset,\r\n        uint256 limit\r\n    ) external view returns (TaskActionRecord[] memory page) {\r\n        if (limit == 0 || limit > MAX_PAGE_SIZE) {\r\n            revert InvalidPageSize();\r\n        }\r\n\r\n        TaskActionRecord[] storage records = _recordsByTask[taskId];\r\n        uint256 total = records.length;\r\n\r\n        if (offset >= total) {\r\n            return new TaskActionRecord[](0);\r\n        }\r\n\r\n        uint256 pageLength = total - offset;\r\n        if (pageLength > limit) {\r\n            pageLength = limit;\r\n        }\r\n\r\n        page = new TaskActionRecord[](pageLength);\r\n\r\n        for (uint256 i = 0; i < pageLength; i++) {\r\n            page[i] = records[offset + i];\r\n        }\r\n    }\r\n}"
+      }
+    }
+  }
+}

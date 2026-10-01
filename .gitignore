@@ -8,6 +8,10 @@ dist/
 *.tsbuildinfo
 **/*.tsbuildinfo
 
+contracts/onchain/artifacts/
+contracts/onchain/cache/
+contracts/onchain/typechain-types/
+
 # Tests
 coverage/
 **/coverage/

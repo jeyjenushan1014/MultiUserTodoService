@@ -113,16 +113,16 @@ Live process-stop, compensation, and operator proofs remain pending.
 # chatgbt
 ### 4:30-8:30 AM: Solidity and Local Blockchain
 
-- [ ] BC-1 contract stores task ID, workspace ID, action, and timestamp
-- [ ] BC-2 no personal data or identifying hashes on-chain
-- [ ] BC-3 bounded public task-history reads
-- [ ] BC-4 authorized writer only
-- [ ] BC-5 local Hardhat deployment and tests
+- [ ] BC-1 every accepted task mutation anchored (contract append implemented and locally tested; backend integration pending)
+- [ ] BC-2 no personal data or identifying hashes on-chain (contract fields checked; input privacy gate pending)
+- [x] BC-3 bounded public task-history reads and count (local contract tests passed; public-network demonstration pending)
+- [x] BC-4 authorized writer only (local contract test passed; backend key safety pending)
+- [x] BC-5 local Hardhat deployment and tests (8 tests passed; chain 31337 address recorded)
 - [ ] BC-5 public testnet deployment
 - [ ] BC-15 private-key protection
-- [ ] BC-16 gas measurements
-- [ ] BC-17 independent contract project and generated ABI
-- [ ] Create `docs/onchain.md`
+- [x] BC-16 local gas measurements: append 75,583 gas with 1 and 1,000 prior task records
+- [ ] BC-17 backend build artifact for ABI **and** deployed address (independent project and generated ABI done; address integration pending)
+- [x] Update `docs/onchain.md` for contract functions, local address, build commands, and measured gas
 
 ### 9:00 AM-12:00 PM: Chain Worker and Indexer
 

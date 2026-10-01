@@ -1,0 +1,40 @@
+{
+  "contracts": {
+    "contracts/TaskHistory.sol:TaskHistory": {
+      "sourceName": "contracts/TaskHistory.sol",
+      "contractName": "TaskHistory",
+      "proxyChain": [],
+      "deployment": {
+        "min": 762101,
+        "max": 762101,
+        "avg": 762101,
+        "median": 762101,
+        "count": 8,
+        "runtimeSize": 3266
+      },
+      "functions": {
+        "getHistory": {
+          "min": 25281,
+          "max": 31884,
+          "avg": 29676,
+          "median": 31864,
+          "count": 3
+        },
+        "getRecordCount": {
+          "min": 24162,
+          "max": 24162,
+          "avg": 24162,
+          "median": 24162,
+          "count": 3
+        },
+        "recordTaskAction": {
+          "min": 75583,
+          "max": 92683,
+          "avg": 75634,
+          "median": 75583,
+          "count": 1005
+        }
+      }
+    }
+  }
+}

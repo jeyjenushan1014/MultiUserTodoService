@@ -142,3 +142,12 @@ Todo Service owns its reservation; Gateway owns a Redis publication record. Two 
 share work through expiring PostgreSQL leases and `SKIP LOCKED`. All ordinary state remains hidden
 until the workflow is terminal, and every remote call occurs after the preceding local transaction
 has closed.
+
+## Local on-chain contract milestone
+
+`contracts/onchain` contains a Hardhat 3 / Solidity 0.8.28 project for a minimal public
+`TaskHistory` record. Its build exports a generated ABI into Todo Service source. The local
+Hardhat test suite and chain-31337 deployment are documented in `onchain.md`. This is not yet a
+running platform component: there is no production chain writer, nonce coordinator, chain reader,
+public-testnet address, or finality state. TODO requests do not wait for mining today because
+they do not submit chain transactions yet, not because BC-10 has been demonstrated.

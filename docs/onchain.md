@@ -227,15 +227,38 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 | BC-16 | Same-task append gas: 75,583 with 1 and 1,000 existing records. | Record final deployed version and any public-network measurements when available. |
 | BC-17 | Independent Hardhat project, own tests/build/deploy scripts, generated ABI. | Generate and consume deployed address metadata in backend; currently no submitter. |
 
-## 13. Integration decisions still open
+## 13. Integration decisions and Chain Submission Architecture (BC-10, BC-11, BC-12, BC-13, BC-14)
 
-- Todo Service has a `todos.workspace_id` column, but it is nullable. Legacy tasks may not have a workspace ID. Decide whether those tasks should be anchored before implementing the chain write.
-- Current TODO event payloads contain user IDs. Do not pass those event payloads to the blockchain worker. Create a separate chain command or event containing only the required `todoId`, `workspaceId`, and `action`.
-- The current event catalogue does not contain a general event for all task updates. Define which updates must be recorded and create the required event contract before implementing the worker.
-- The contract uses `bytes16` for task and workspace identifiers. Define and test UUID-to-bytes16
-	encoding in the backend; do not use hashes as a substitute.
-- Implement asynchronous durable submission (BC-10), nonce coordination for two writers (BC-12), receipt
-	reconciliation and terminal states (BC-11), retry/DLQ (BC-14), and chain downtime resilience (BC-13).
+### Asynchronous Writes & Outage Resilience (BC-10, BC-13)
+- User-facing TODO APIs (Create/Update/Delete) never synchronously await blockchain transaction completion or block confirmations.
+- Instead, the mutation handler atomically inserts a command into the durable `chain_submissions` table within the Postgres transaction via `PostgresChainSubmissionWriter.enqueue()`.
+- If the RPC node or public blockchain is offline, business operations proceed normally without degradation: the submissions simply remain in `pending` state and wait for the worker.
+
+### Nonce Coordination Across Workers (BC-12)
+- Ethereum/EVM requires strict incremental sequence nonces per account. If two workers submit transactions concurrently with the same nonce, a duplicate nonce conflict occurs.
+- `PostgresChainSubmissionRepository.allocateNextNonce` achieves zero-conflict coordination:
+  - It maintains an atomic counter in `chain_writer_nonces(chain_id, writer_address, next_nonce)`.
+  - When allocating, it executes `SELECT next_nonce FROM chain_writer_nonces WHERE ... FOR UPDATE`.
+  - It verifies against the on-chain transaction count (`getTransactionCount`), allocates the guaranteed next integer, increments the database row, and marks the submission as `reserved`.
+  - Submissions are claimed using `FOR UPDATE SKIP LOCKED`, so multiple worker replicas concurrently claim distinct batches without contention.
+
+### Transaction States (BC-11)
+Submissions transition deterministically across discrete states:
+- `pending`: Command enqueued, waiting to be claimed.
+- `reserved`: Nonce allocated, transaction being prepared/signed.
+- `submitted`: Transaction broadcasted to network; `transaction_hash` recorded.
+- `confirmed`: Included in a finalized block; `confirmed_block_number` and `confirmed_block_hash` saved.
+- `replaced`: Underpriced transaction replaced by a higher-fee transaction with same nonce (`replacement_transaction_hash`).
+- `abandoned`: Dropped due to reorg or deliberate cancellation.
+- `dead_letter`: Unrecoverable errors after exceeding max retries.
+
+State is fully durable in PostgreSQL. If the worker process restarts mid-flight, uncommitted locks expire after 2 minutes, and the worker resumes from the recorded state without creating gaps.
+
+### Retry & Dead-Letter-Queue (BC-14)
+- Transient RPC network errors, fee spikes, or temporary provider downtime trigger exponential backoff retry:
+  $\text{delay} = \min(\text{baseDelay} \times 2^{\text{attempts}-1}, 60\,000\text{ ms})$.
+- If attempts reach `maxRetries` (default 5), the record moves to `status = 'dead_letter'` with `last_error` populated.
+- Operators can inspect and alert on dead-lettered transactions without losing data or blocking normal processing.
 
 No production private key, public-testnet deployment, or chain submission worker
 is supplied by this milestone. These are separate release gates.

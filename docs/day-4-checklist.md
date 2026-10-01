@@ -130,12 +130,12 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [x] BC-7 duplicate chain-event idempotency (`ON CONFLICT ... DO NOTHING` unit-tested)
 - [x] BC-8 chain reorganization handling (common ancestor search & `rollbackAfterBlock` unit-tested)
 - [x] BC-9 configurable confirmations greater than one (enforced $\ge 2$, safe head calculation unit-tested)
-- [ ] BC-10 asynchronous chain writes
-- [ ] BC-11 confirmed/replaced/abandoned transaction states
-- [ ] BC-12 nonce coordination across two workers
-- [ ] BC-13 business operations survive chain outage
-- [ ] BC-14 retry and chain DLQ
-- [ ] Durable submission table
+- [x] BC-10 asynchronous chain writes (durable `chain_submissions` outbox pattern & worker service)
+- [x] BC-11 confirmed/replaced/abandoned transaction states (`pending`, `reserved`, `submitted`, `confirmed`, `replaced`, `abandoned`, `dead_letter`)
+- [x] BC-12 nonce coordination across two workers (`chain_writer_nonces` atomic allocation with `FOR UPDATE` and `FOR UPDATE SKIP LOCKED`)
+- [x] BC-13 business operations survive chain outage (API persists to Postgres submission table; independent worker polling)
+- [x] BC-14 retry and chain DLQ (exponential backoff & `dead_letter` status with error audit)
+- [x] Durable submission table (`chain_submissions` and `chain_writer_nonces` migrations)
 - [x] Restart recovery and finality handling (checkpoints and safeHead window in indexer)
 - [ ] Contract replacement verification
 

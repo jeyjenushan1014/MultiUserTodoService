@@ -21,6 +21,9 @@ const composeEnvironment = {
   RABBITMQ_PASSWORD: randomBytes(32).toString("hex"),
   INTERNAL_SERVICE_SECRET: randomBytes(48).toString("hex"),
   JWT_SECRET: randomBytes(48).toString("hex"),
+  CHAIN_WRITER_ADDRESS: "0x0000000000000000000000000000000000000001",
+  TASK_HISTORY_CONTRACT_ADDRESS: "0x0000000000000000000000000000000000000002",
+  TASK_HISTORY_DEPLOYMENT_BLOCK: "1",
   API_PORT: "0",
   MAILPIT_SMTP_PORT: "0",
   MAILPIT_HTTP_PORT: "0",
@@ -232,6 +235,7 @@ try {
     headers: { authorization: `Bearer ${accessToken}` },
   }, 8000);
   assert.equal(todoRead.status, 200, "Unrelated TODO read failed while Mailpit was stopped");
+  console.log("Unrelated authenticated TODO read and write succeeded during the mail outage.");
 
   await waitFor(() => {
     const result = probe(requestId);

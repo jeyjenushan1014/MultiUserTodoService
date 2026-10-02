@@ -173,7 +173,8 @@ This command forces `MAIL_TEST_SINK_ONLY=true`, uses fresh generated credentials
 and ephemeral published ports for its own Compose project, and checks that
 Mailpit is the only configured SMTP host before sending a request. It registers
 one test account, stops Mailpit, requests a reset over the public Gateway API,
-asserts `202` without waiting for mail, observes retry and terminal DLQ state,
+asserts `202` without waiting for mail, proves authenticated TODO read/write
+still work during the outage, observes retry and terminal DLQ state,
 restarts Mailpit, replays that event with the operator command, and confirms
 the message summary in Mailpit. It checks no token or mail body in its output,
 then removes only its own project and volumes. It is also called by

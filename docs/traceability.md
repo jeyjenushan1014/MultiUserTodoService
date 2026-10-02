@@ -84,7 +84,8 @@ tracked; they are not claimed as covered by this commit.
 ML-5 and ML-8 have local mail-failure evidence: `npm run verify:mail` (34
 notification unit tests plus a disposable live Compose run) makes a real
 password-reset request while Mailpit is stopped, requires HTTP 202, observes
-two delayed retries and a terminal notification DLQ entry, restarts Mailpit,
+unrelated TODO read/write HTTP 200/201, two delayed retries and a terminal
+notification DLQ entry, restarts Mailpit,
 replays the specific event, and confirms a local message. It asserts the
 worker's Compose environment is sink-only with no external provider host,
 and neither this check nor the mocked unit tests send external mail.

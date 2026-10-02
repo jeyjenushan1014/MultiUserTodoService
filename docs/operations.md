@@ -15,10 +15,13 @@ npm run verify:mail
 It runs mail unit tests, builds its own sink-only Compose project with two
 Account Service and notification-consumer replicas, stops Mailpit while a
 real Gateway reset request succeeds, checks two retries and a DLQ event,
-restarts Mailpit, replays the event and checks Mailpit. It cleans only its
+confirms an authenticated TODO read/write still succeed, restarts Mailpit,
+replays the event and checks Mailpit. It cleans only its
 disposable project. A passing result prints `Mail verification passed`;
 it never sends to an external provider. Do not run this against real accounts:
 the verifier generates and removes its own local test account and volumes.
+It configures inert local-only chain addresses so Todo can start; it does not
+start a chain writer or submit a chain transaction.
 The verification project uses 3/4-second retry delays; normal deployments
 retain 30/60-second defaults. When the actual operator DLQ is filling,
 restore Mailpit, inspect the affected event IDs, and replay them individually

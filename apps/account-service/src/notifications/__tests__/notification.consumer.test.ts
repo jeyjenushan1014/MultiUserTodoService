@@ -7,7 +7,7 @@ import {
 } from "vitest";
 
 import type {
-  Channel,
+  ConfirmChannel,
   ConsumeMessage,
 } from "amqplib";
 
@@ -43,6 +43,9 @@ vi.mock(
       RABBITMQ_NOTIFICATION_DLQ:
         "todo.notifications.dlq",
 
+      MAIL_RETRY_FIRST_MS: 30_000,
+      MAIL_RETRY_SECOND_MS: 60_000,
+
       INTERNAL_SERVICE_SECRET:
         "test-internal-service-secret-with-more-than-32-characters",
     },
@@ -74,13 +77,15 @@ import {
 const queryMock = vi.mocked(database.query); // eslint-disable-line @typescript-eslint/unbound-method
 
 interface ChannelMocks {
-  readonly channel: Channel;
+  readonly channel: ConfirmChannel;
   readonly assertExchangeMock: ReturnType<typeof vi.fn>;
   readonly assertQueueMock: ReturnType<typeof vi.fn>;
   readonly bindQueueMock: ReturnType<typeof vi.fn>;
   readonly consumeMock: ReturnType<typeof vi.fn>;
   readonly ackMock: ReturnType<typeof vi.fn>;
   readonly nackMock: ReturnType<typeof vi.fn>;
+  readonly sendToQueueMock: ReturnType<typeof vi.fn>;
+  readonly waitForConfirmsMock: ReturnType<typeof vi.fn>;
 }
 
 function createChannel(): ChannelMocks {
@@ -110,6 +115,12 @@ function createChannel(): ChannelMocks {
   const nackMock =
     vi.fn();
 
+  const sendToQueueMock =
+    vi.fn().mockReturnValue(true);
+
+  const waitForConfirmsMock =
+    vi.fn().mockResolvedValue(undefined);
+
   const channel =
     {
       assertExchange:
@@ -129,7 +140,13 @@ function createChannel(): ChannelMocks {
 
       nack:
         nackMock,
-    } as unknown as Channel;
+
+      sendToQueue:
+        sendToQueueMock,
+
+      waitForConfirms:
+        waitForConfirmsMock,
+    } as unknown as ConfirmChannel;
 
   return {
     channel,
@@ -139,11 +156,14 @@ function createChannel(): ChannelMocks {
     consumeMock,
     ackMock,
     nackMock,
+    sendToQueueMock,
+    waitForConfirmsMock,
   };
 }
 
 function createMessage(
   payload: unknown,
+  attempt = 1,
 ): ConsumeMessage {
   return {
     content: Buffer.from(
@@ -162,9 +182,11 @@ function createMessage(
     properties: {
       contentType:
         "application/json",
-      headers: {},
+      headers: {
+        "x-notification-attempt": attempt,
+      },
     },
-  } as ConsumeMessage;
+  } as unknown as ConsumeMessage;
 }
 
 function createMailer(): {
@@ -210,6 +232,7 @@ function createDeliveryRepository(
   readonly claimMock: ReturnType<typeof vi.fn>;
   readonly markSentMock: ReturnType<typeof vi.fn>;
   readonly markFailedMock: ReturnType<typeof vi.fn>;
+  readonly markDeadLetterMock: ReturnType<typeof vi.fn>;
 } {
   const claimMock =
     vi.fn().mockResolvedValue({
@@ -226,15 +249,35 @@ function createDeliveryRepository(
   const markFailedMock =
     vi.fn().mockResolvedValue(undefined);
 
+  const markDeadLetterMock =
+    vi.fn().mockResolvedValue(undefined);
+
   return {
     repository: {
+      withRecipientGuard: async <T>(_accountId: string, action: (session: {
+        findEmail: (accountId: string) => Promise<string | undefined>;
+        reserveAddress: (eventId: string, accountId: string, email: string) => Promise<boolean>;
+      }) => Promise<T>) => action({
+        findEmail: async (accountId) => {
+          const result = await database.query<{ email: string }>(
+            `SELECT email FROM users WHERE id = $1 AND NOT EXISTS (
+              SELECT 1 FROM account_deletion_requests WHERE user_id = users.id
+              AND status IN ('pending', 'running'))`,
+            [accountId],
+          );
+          return result.rows[0]?.email;
+        },
+        reserveAddress: vi.fn().mockResolvedValue(true),
+      }),
       claim: claimMock,
       markSent: markSentMock,
       markFailed: markFailedMock,
+      markDeadLetter: markDeadLetterMock,
     },
     claimMock,
     markSentMock,
     markFailedMock,
+    markDeadLetterMock,
   };
 }
 
@@ -377,7 +420,22 @@ describe(
 
         expect(
           channel.assertQueueMock,
-        ).toHaveBeenCalledTimes(2);
+        ).toHaveBeenCalledTimes(3);
+
+        expect(channel.assertQueueMock).toHaveBeenCalledWith(
+          "todo.notifications.retry",
+          expect.objectContaining({
+            durable: true,
+            deadLetterExchange: "todo.events",
+            deadLetterRoutingKey: "notification.retry",
+          }),
+        );
+
+        expect(channel.bindQueueMock).toHaveBeenCalledWith(
+          "todo.notifications",
+          "todo.events",
+          "notification.retry",
+        );
 
         expect(
           channel.bindQueueMock,
@@ -494,6 +552,87 @@ describe(
         ).toHaveBeenCalledTimes(1);
       },
     );
+
+    it("uses the destination pinned for the event instead of the default sink", async () => {
+      const channel = createChannel();
+      const { mailer: sinkMailer, sendTodoSharedEmailMock: sinkSend } = createMailer();
+      const { mailer: providerMailer, sendTodoSharedEmailMock: providerSend } = createMailer();
+      const { repository } = createDeliveryRepository();
+      const selectMailer = vi.fn().mockResolvedValue(providerMailer);
+      queryMock.mockResolvedValue({ rows: [{ email: "recipient@example.com" }], rowCount: 1 } as never);
+
+      const consumer = new TodoNotificationConsumer(
+        channel.channel, sinkMailer, repository, selectMailer,
+      );
+      await consumer.start();
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent, 2));
+
+      await vi.waitFor(() => {
+        expect(channel.ackMock).toHaveBeenCalledOnce();
+      });
+      expect(selectMailer).toHaveBeenCalledWith(sharedEvent.eventId);
+      expect(providerSend).toHaveBeenCalledOnce();
+      expect(sinkSend).not.toHaveBeenCalled();
+    });
+
+    it("does not send when the registered address has reached its daily limit", async () => {
+      const channel = createChannel();
+      const { mailer, sendTodoSharedEmailMock } = createMailer();
+      const { repository } = createDeliveryRepository();
+      const reserveAddress = vi.fn().mockResolvedValue(false);
+      const quotaRepository = Object.assign(repository, {
+        withRecipientGuard: async <T>(
+          _accountId: string,
+          send: (session: { findEmail: () => Promise<string>; reserveAddress: typeof reserveAddress }) => Promise<T>,
+        ) => send({
+          findEmail: () => Promise.resolve("recipient@example.com"),
+          reserveAddress,
+        }),
+      });
+      queryMock.mockResolvedValue({
+        rows: [{ email: "recipient@example.com" }],
+        rowCount: 1,
+      } as never);
+
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, quotaRepository);
+      await consumer.start();
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent));
+
+      await vi.waitFor(() => {
+        expect(channel.ackMock).toHaveBeenCalledOnce();
+      });
+      expect(reserveAddress).toHaveBeenCalledWith(
+        sharedEvent.eventId,
+        sharedEvent.payload.recipientId,
+        "recipient@example.com",
+      );
+      expect(sendTodoSharedEmailMock).not.toHaveBeenCalled();
+    });
+
+    it("skips a queued share when its recipient account no longer exists", async () => {
+      const channel = createChannel();
+      const { mailer, sendTodoSharedEmailMock } = createMailer();
+      const { repository } = createDeliveryRepository();
+      queryMock.mockResolvedValue({ rows: [], rowCount: 0 } as never);
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+      await consumer.start();
+
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent));
+
+      await vi.waitFor(() => {
+        expect(channel.ackMock).toHaveBeenCalledOnce();
+      });
+      expect(sendTodoSharedEmailMock).not.toHaveBeenCalled();
+    });
 
     it(
       "sends an email for todo.share-withdrawn",
@@ -640,6 +779,28 @@ describe(
       },
     );
 
+    it("does not send a reset token to a stale address after an email change", async () => {
+      const channel = createChannel();
+      const { mailer, sendPasswordResetEmailMock } = createMailer();
+      const { repository } = createDeliveryRepository();
+      queryMock.mockResolvedValue({
+        rows: [{ email: "new-recipient@example.com" }],
+        rowCount: 1,
+      } as never);
+
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+      await consumer.start();
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(passwordResetRequestedEvent));
+
+      await vi.waitFor(() => {
+        expect(channel.ackMock).toHaveBeenCalledOnce();
+      });
+      expect(sendPasswordResetEmailMock).not.toHaveBeenCalled();
+    });
+
     it(
       "dead-letters invalid messages",
       async () => {
@@ -689,8 +850,29 @@ describe(
       },
     );
 
+    it("dead-letters an invalid retry attempt without claiming or sending", async () => {
+      const channel = createChannel();
+      const { mailer, sendTodoSharedEmailMock } = createMailer();
+      const { repository, claimMock } = createDeliveryRepository();
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+      await consumer.start();
+
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent, 4));
+
+      await vi.waitFor(() => {
+        expect(channel.nackMock).toHaveBeenCalledWith(
+          expect.anything(), false, false,
+        );
+      });
+      expect(claimMock).not.toHaveBeenCalled();
+      expect(sendTodoSharedEmailMock).not.toHaveBeenCalled();
+    });
+
     it(
-      "dead-letters messages when mail delivery fails",
+      "delays a refused delivery and succeeds after retry",
       async () => {
         const channel =
           createChannel();
@@ -707,9 +889,9 @@ describe(
         } =
           createDeliveryRepository();
 
-        sendTodoSharedEmailMock.mockRejectedValue(
-          new Error("SMTP unavailable"),
-        );
+        sendTodoSharedEmailMock
+          .mockRejectedValueOnce(new Error("451 provider temporarily unavailable"))
+          .mockResolvedValueOnce(undefined);
 
         queryMock.mockResolvedValue({
           rows: [
@@ -744,24 +926,249 @@ describe(
         );
 
         await vi.waitFor(() => {
-          expect(
-            channel.nackMock,
-          ).toHaveBeenCalledWith(
-            expect.anything(),
-            false,
-            false,
-          );
+          expect(channel.sendToQueueMock).toHaveBeenCalledTimes(1);
         });
+
+        const [retryQueue, retryBody, retryOptions] =
+          channel.sendToQueueMock.mock.calls[0] as unknown as [
+            string,
+            Buffer,
+            {
+              persistent: boolean;
+              expiration: string;
+              headers: Record<string, unknown>;
+            },
+          ];
+        expect(retryQueue).toBe("todo.notifications.retry");
+        expect(Buffer.isBuffer(retryBody)).toBe(true);
+        expect(retryOptions.persistent).toBe(true);
+        expect(retryOptions.expiration).toMatch(/^[1-9]\d*$/);
+        expect(retryOptions.headers["x-notification-attempt"]).toBe(2);
 
         expect(
           markFailedMock,
         ).toHaveBeenCalledWith(
           sharedEvent.eventId,
           "processing-token",
-          "SMTP unavailable",
+          expect.any(String),
+          false,
         );
+
+        expect(channel.nackMock).not.toHaveBeenCalled();
+        expect(channel.ackMock).toHaveBeenCalledTimes(1);
+        expect(channel.waitForConfirmsMock).toHaveBeenCalledOnce();
+        expect(channel.waitForConfirmsMock.mock.invocationCallOrder[0])
+          .toBeLessThan(channel.ackMock.mock.invocationCallOrder[0] ?? 0);
+
+        callback(createMessage(sharedEvent, 2));
+
+        await vi.waitFor(() => {
+          expect(sendTodoSharedEmailMock).toHaveBeenCalledTimes(2);
+          expect(channel.ackMock).toHaveBeenCalledTimes(2);
+        });
+        expect(queryMock).toHaveBeenCalledTimes(2);
       },
     );
+
+    it(
+      "retries provider timeouts with backoff and dead-letters after three attempts",
+      async () => {
+        const channel = createChannel();
+        const { mailer, sendTodoSharedEmailMock } = createMailer();
+        const { repository, markFailedMock, markDeadLetterMock } = createDeliveryRepository();
+
+        sendTodoSharedEmailMock.mockRejectedValue(
+          new Error("Mail provider timed out"),
+        );
+        queryMock.mockResolvedValue({
+          rows: [{ email: "recipient@example.com" }],
+          rowCount: 1,
+        } as never);
+
+        const consumer = new TodoNotificationConsumer(
+          channel.channel,
+          mailer,
+          repository,
+        );
+        await consumer.initialize();
+        await consumer.start();
+
+        const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+          message: ConsumeMessage,
+        ) => void;
+
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          callback(createMessage(sharedEvent, attempt));
+
+          await vi.waitFor(() => {
+            expect(markFailedMock).toHaveBeenCalledTimes(attempt);
+          });
+
+          if (attempt < 3) {
+            await vi.waitFor(() => {
+              expect(channel.sendToQueueMock).toHaveBeenCalledTimes(attempt);
+              expect(channel.ackMock).toHaveBeenCalledTimes(attempt);
+            });
+            const [retryQueue, , retryOptions] =
+              channel.sendToQueueMock.mock.calls[attempt - 1] as unknown as [
+                string,
+                Buffer,
+                { headers: Record<string, unknown> },
+              ];
+            expect(retryQueue).toBe("todo.notifications.retry");
+            expect(retryOptions.headers["x-notification-attempt"])
+              .toBe(attempt + 1);
+            expect(channel.nackMock).not.toHaveBeenCalled();
+          }
+        }
+
+        const firstDelay = Number(
+          (channel.sendToQueueMock.mock.calls[0]?.[2] as { expiration: string }).expiration,
+        );
+        const secondDelay = Number(
+          (channel.sendToQueueMock.mock.calls[1]?.[2] as { expiration: string }).expiration,
+        );
+        expect(firstDelay).toBeGreaterThan(0);
+        expect(secondDelay).toBeGreaterThan(firstDelay);
+        expect(channel.waitForConfirmsMock).toHaveBeenCalledTimes(3);
+        expect(channel.sendToQueueMock).toHaveBeenCalledTimes(3);
+        expect(channel.sendToQueueMock).toHaveBeenCalledWith(
+          "todo.notifications.dlq",
+          expect.any(Buffer),
+          expect.objectContaining({ persistent: true }),
+        );
+        await vi.waitFor(() => {
+          expect(markDeadLetterMock).toHaveBeenCalledWith(sharedEvent.eventId);
+          expect(channel.ackMock).toHaveBeenCalledTimes(3);
+        });
+        expect(channel.waitForConfirmsMock.mock.invocationCallOrder[2])
+          .toBeLessThan(markDeadLetterMock.mock.invocationCallOrder[0] ?? 0);
+        expect(channel.nackMock).not.toHaveBeenCalled();
+        expect(sendTodoSharedEmailMock).toHaveBeenCalledTimes(3);
+      },
+    );
+
+    it("defers a competing delivery until the active lease is free", async () => {
+      const channel = createChannel();
+      const { mailer, sendTodoSharedEmailMock } = createMailer();
+      const { repository, claimMock } = createDeliveryRepository("in-progress");
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+      await consumer.start();
+
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent));
+
+      await vi.waitFor(() => {
+        expect(channel.ackMock).toHaveBeenCalledOnce();
+      });
+      const [queue, , options] = channel.sendToQueueMock.mock.calls[0] as unknown as [
+        string, Buffer, { expiration: string; headers: Record<string, unknown> },
+      ];
+      expect(queue).toBe("todo.notifications.retry");
+      expect(Number(options.expiration)).toBeGreaterThan(0);
+      expect(options.headers["x-notification-attempt"]).toBe(1);
+      expect(channel.waitForConfirmsMock.mock.invocationCallOrder[0])
+        .toBeLessThan(channel.ackMock.mock.invocationCallOrder[0] ?? 0);
+      expect(claimMock).toHaveBeenCalledWith(sharedEvent.eventId, 1);
+      expect(sendTodoSharedEmailMock).not.toHaveBeenCalled();
+      expect(channel.nackMock).not.toHaveBeenCalled();
+    });
+
+    it("recovers a retry after a crash between failure and publish", async () => {
+      const channel = createChannel();
+      const { mailer, sendTodoSharedEmailMock } = createMailer();
+      const { repository } = createDeliveryRepository();
+      repository.claim = vi.fn().mockResolvedValue({ status: "retry-pending" });
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+      await consumer.start();
+
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent));
+
+      await vi.waitFor(() => {
+        expect(channel.ackMock).toHaveBeenCalledOnce();
+      });
+      const [, , options] = channel.sendToQueueMock.mock.calls[0] as unknown as [
+        string, Buffer, { headers: Record<string, unknown> },
+      ];
+      expect(options.headers["x-notification-attempt"]).toBe(2);
+      expect(sendTodoSharedEmailMock).not.toHaveBeenCalled();
+    });
+
+    it("keeps the original delivery when retry publish is unconfirmed", async () => {
+      const channel = createChannel();
+      channel.waitForConfirmsMock.mockRejectedValueOnce(new Error("broker unavailable"));
+      const { mailer } = createMailer();
+      const { repository } = createDeliveryRepository();
+      repository.claim = vi.fn().mockResolvedValue({ status: "retry-pending" });
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+      await consumer.start();
+
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent));
+
+      await vi.waitFor(() => {
+        expect(channel.nackMock).toHaveBeenCalledWith(
+          expect.anything(), false, true,
+        );
+      });
+      expect(channel.ackMock).not.toHaveBeenCalled();
+    });
+
+    it("finishes a pending DLQ handoff after a worker restart", async () => {
+      const channel = createChannel();
+      const { mailer, sendTodoSharedEmailMock } = createMailer();
+      const { repository, markDeadLetterMock } = createDeliveryRepository();
+      repository.claim = vi.fn().mockResolvedValue({ status: "dead-letter-pending" });
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+      await consumer.start();
+
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent, 3));
+
+      await vi.waitFor(() => {
+        expect(channel.ackMock).toHaveBeenCalledOnce();
+      });
+      expect(channel.sendToQueueMock).toHaveBeenCalledWith(
+        "todo.notifications.dlq",
+        expect.any(Buffer),
+        expect.objectContaining({ persistent: true }),
+      );
+      expect(channel.waitForConfirmsMock.mock.invocationCallOrder[0])
+        .toBeLessThan(markDeadLetterMock.mock.invocationCallOrder[0] ?? 0);
+      expect(sendTodoSharedEmailMock).not.toHaveBeenCalled();
+    });
+
+    it("does not acknowledge an unconfirmed DLQ handoff", async () => {
+      const channel = createChannel();
+      channel.waitForConfirmsMock.mockRejectedValueOnce(new Error("broker unavailable"));
+      const { mailer } = createMailer();
+      const { repository, markDeadLetterMock } = createDeliveryRepository();
+      repository.claim = vi.fn().mockResolvedValue({ status: "dead-letter-pending" });
+      const consumer = new TodoNotificationConsumer(channel.channel, mailer, repository);
+      await consumer.start();
+
+      const callback = channel.consumeMock.mock.calls[0]?.[1] as (
+        message: ConsumeMessage,
+      ) => void;
+      callback(createMessage(sharedEvent, 3));
+
+      await vi.waitFor(() => {
+        expect(channel.nackMock).toHaveBeenCalledWith(
+          expect.anything(), false, true,
+        );
+      });
+      expect(markDeadLetterMock).not.toHaveBeenCalled();
+      expect(channel.ackMock).not.toHaveBeenCalled();
+    });
 
     it(
       "acknowledges a completed duplicate without sending",

@@ -6,7 +6,7 @@ import {
 } from "vitest";
 
 import type {
-  Channel,
+  ConfirmChannel,
   ConsumeMessage,
 } from "amqplib";
 
@@ -42,6 +42,13 @@ function createMessage(
 
 function createDeliveryRepository(): NotificationDeliveryRepository {
   return {
+    withRecipientGuard: async <T>(_accountId: string, action: (session: {
+      findEmail: (accountId: string) => Promise<string | undefined>;
+      reserveAddress: (eventId: string, accountId: string, email: string) => Promise<boolean>;
+    }) => Promise<T>) => action({
+      findEmail: vi.fn().mockResolvedValue(undefined),
+      reserveAddress: vi.fn().mockResolvedValue(true),
+    }),
     claim:
       vi.fn().mockResolvedValue({
         status: "claimed",
@@ -50,6 +57,8 @@ function createDeliveryRepository(): NotificationDeliveryRepository {
     markSent:
       vi.fn().mockResolvedValue(undefined),
     markFailed:
+      vi.fn().mockResolvedValue(undefined),
+    markDeadLetter:
       vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -79,7 +88,7 @@ describe(
 
             nack:
               nackMock,
-          } as unknown as Channel;
+          } as unknown as ConfirmChannel;
 
         const mailer:
           NotificationMailer = {
@@ -162,7 +171,7 @@ describe(
 
             nack:
               nackMock,
-          } as unknown as Channel;
+          } as unknown as ConfirmChannel;
 
         const mailer:
           NotificationMailer = {

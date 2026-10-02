@@ -8,6 +8,8 @@ export interface CleanupCounts {
   passwordResetTokens: number;
   outboxEvents: number;
   notificationDeliveries: number;
+  notificationReservations: number;
+  mailModeAudits: number;
 }
 
 export interface CleanupCutoffs {
@@ -15,6 +17,7 @@ export interface CleanupCutoffs {
   token: Date;
   outbox: Date;
   notification: Date;
+  mailQuota: Date;
 }
 
 export class AccountCleanupRepository {
@@ -88,9 +91,31 @@ export class AccountCleanupRepository {
          WHERE event_id IN (
            SELECT event_id
            FROM notification_event_deliveries
-           WHERE status <> 'processing'
+           WHERE status IN ('sent', 'dead_letter', 'failed')
              AND updated_at < $1
            ORDER BY updated_at, event_id
+           LIMIT $2
+         )`,
+        [cutoffs.notification, batchSize],
+      );
+
+      const notificationReservations = await client.query(
+        `DELETE FROM notification_address_reservations
+         WHERE (event_id, email) IN (
+           SELECT event_id, email FROM notification_address_reservations
+           WHERE reserved_at < $1
+           ORDER BY reserved_at, event_id, email
+           LIMIT $2
+         )`,
+        [cutoffs.mailQuota, batchSize],
+      );
+
+      const mailModeAudits = await client.query(
+        `DELETE FROM notification_mail_mode_audit
+         WHERE id IN (
+           SELECT id FROM notification_mail_mode_audit
+           WHERE changed_at < $1
+           ORDER BY changed_at, id
            LIMIT $2
          )`,
         [cutoffs.notification, batchSize],
@@ -105,6 +130,8 @@ export class AccountCleanupRepository {
         outboxEvents: outboxEvents.rowCount ?? 0,
         notificationDeliveries:
           notificationDeliveries.rowCount ?? 0,
+        notificationReservations: notificationReservations.rowCount ?? 0,
+        mailModeAudits: mailModeAudits.rowCount ?? 0,
       };
     } catch (error) {
       await client.query("ROLLBACK");

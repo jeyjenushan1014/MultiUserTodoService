@@ -95,10 +95,32 @@ Automated compatibility evidence: `npm run test -w @todo/todo-service -- event-e
 
 | Email | Trigger | Recipient and content |
 |---|---|---|
-| Password reset | Account Service creates a reset request | Current account email; contains a one-time reset credential/link, never a password or access token |
-| TODO shared | Account notification consumer processes `todo.shared` | Recipient's current account email at send time; identifies the shared TODO and owner, but grants no continued access |
+| Password reset | Account Service publishes `account.password-reset-requested` | Current account email, only if it matches the event address; contains a reset token and expiry, never a password or access token |
+| TODO shared | Account notification consumer processes `todo.shared` | Recipient's current account email at send time; contains the TODO ID and `state-update` permission label, but no owner identity |
+| TODO share withdrawn | Account notification consumer processes `todo.share-withdrawn` | Recipient's current account email at send time; contains the TODO ID |
 
-Mailpit is the local SMTP sink. It captures every message at `http://localhost:8025`; no message leaves the developer machine. Failed delivery is retried and then dead-lettered for inspection.
+Mailpit is the current SMTP sink. It captures every message at `http://localhost:8025`;
+no message leaves the developer machine on the default configuration. A failed
+delivery enters `todo.notifications.retry` for a 30-second and then a 60-second
+delay; after three failed sends, it enters `todo.notifications.dlq`. The
+`x-notification-attempt` header carries the attempt across process restarts;
+malformed notification events dead-letter immediately. PostgreSQL delivery claims
+prevent simultaneous sends from two workers. The queue/DB handoffs use RabbitMQ
+publisher confirms; replay from the DLQ requires the operator command in
+`docs/operations.md`. Before each send, Account Service checks the current
+registered recipient and reserves one of five address slots per rolling 24
+hours; retries reuse the same slot. An over-limit message is set aside in the
+DLQ instead of being sent. Every listed email goes to exactly one configured
+destination, never both. Mailpit is the default; the external SMTP adapter is
+implemented but disabled by default and has not been demonstrated with a
+real mailbox.
+When an event first reaches delivery, its destination is pinned to the
+current shared mode (`sink` by default). Retries and DLQ replay keep that
+destination. A later mode change never redirects a sink-pinned event to the
+provider or a provider-pinned event to Mailpit; switching external off stops
+all further provider sends, and paused external events are eventually put
+in the DLQ. A provider adapter exists, but a real provider has not been
+qualified or demonstrated.
 
 # Workflow transport note
 

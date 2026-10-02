@@ -163,7 +163,24 @@ timeouts are bounded by `MAIL_CONNECTION_TIMEOUT_MS`, `MAIL_GREETING_TIMEOUT_MS`
 Failures remain in the existing retry/DLQ path and the originating business request is not held
 open by mail delivery.
 
-Manual proof commands:
+Automated local mail-dependency proof (no external provider or hand-started stack):
+
+```powershell
+npm run verify:mail
+```
+
+This command forces `MAIL_TEST_SINK_ONLY=true`, uses fresh generated credentials
+and ephemeral published ports for its own Compose project, and checks that
+Mailpit is the only configured SMTP host before sending a request. It registers
+one test account, stops Mailpit, requests a reset over the public Gateway API,
+asserts `202` without waiting for mail, observes retry and terminal DLQ state,
+restarts Mailpit, replays that event with the operator command, and confirms
+the message summary in Mailpit. It checks no token or mail body in its output,
+then removes only its own project and volumes. It is also called by
+`npm run verify:day4`. External provider throttling needs the separate live
+provider gate; this command must never contact one.
+
+For manual inspection of the same failure path:
 
 ```powershell
 docker compose up -d --build
@@ -175,8 +192,8 @@ docker compose start mailpit
 ```
 
 The mail portion passes when the triggering request completes without waiting for Mailpit,
-notification workers remain bounded, retries occur after Mailpit returns, and unrelated TODO
-reads/writes remain available. The chain portion remains pending until the BC chain worker exists.
+notification workers remain bounded, failed delivery is retried then dead-lettered,
+and operator replay delivers after Mailpit returns. The chain portion is verified separately.
 
 ## PF-8 and PF-9 capacity verification
 

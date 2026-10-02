@@ -37,6 +37,10 @@ export class PostgresAccountDeletionRepository implements AccountDeletionReposit
 
     try {
       await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [input.userId],
+      );
       const account = await client.query<{ id: string }>(
         "SELECT id FROM users WHERE id = $1 FOR UPDATE",
         [input.userId],

@@ -169,7 +169,7 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [x] DG-7 credentials and tokens are protected in current implemented paths
 - [x] DG-8 shared tasks/workspaces survive deletion
 - [x] DG-9 deletion continues during service outage through leased retry state
-- [x] DG-10 queued and future mail cancellation through delivery cleanup and broker/DLQ purge
+- [ ] DG-10 queued and future mail cancellation through delivery cleanup and broker/DLQ purge (mail-side proof passed; live deletion endpoint blocked by deployed legacy schema)
 - [x] Durable deletion workflow (`npm run verify:account-lifecycle` plus live `verify-account-erasure.mjs`)
 - [x] Idempotent repeated deletion (`requestDeletion` idempotency test and live repeated-key proof)
 - [x] Retention cleanup proof (`npm run verify:account-lifecycle` bounded-cutoff test)
@@ -177,16 +177,38 @@ Live process-stop, compensation, and operator proofs remain pending.
 # chagbt
 ### 7:30-10:00 PM: Mail and Operational Controls
 
+Implementation order, current gaps, and requirement-specific gates:
+`docs/mail-delivery-plan.md`. The items below remain open until the corresponding
+behavior and proof exist; the plan itself is not completion evidence.
+Stages 1 and 2 passed on 2026-10-02: 166 Account Service tests plus the live
+`verify-notification-retry.mjs` proof for two PostgreSQL claimants, lease recovery,
+ RabbitMQ delayed redelivery, terminal DLQ handoff, and isolated replay. Stage 5
+ now has `npm run verify:mail`: 34 mail tests and a real reset request during
+ a stopped Mailpit, two delayed retries, DLQ, restart and confirmed local replay.
+ No external provider was contacted; provider-specific 429/refusal proof remains.
+Stage 3 mail-side tests and the live `verify-notification-quota.mjs` passed: five
+distinct events per registered address per rolling day, retries do not consume
+another slot, and queued sends stop at pending deletion or address change.
+The running account database uses a different historical 011 deletion schema;
+full deletion-endpoint and `verify-account-erasure.mjs` proof remain blocked
+until that schema is reconciled with the current repository.
+Stage 4 has a shared PostgreSQL mail-mode switch, audit, sink-only default,
+per-event destination pinning, a provider-neutral SMTP adapter, and a
+read-only secret-file mount. `verify-mail-mode.mjs` passed against the live
+database with two repository instances and restored sink mode. The operator
+command rejected external mode without configuration. No real provider mail
+has been sent, so ML-3/ML-4/ML-6 and OP-7 remain unchecked pending live proof.
+
 - [ ] ML-1 external provider real-mail demonstration
 - [ ] ML-2 free-tier provider configuration
 - [ ] ML-3 runtime destination switch with Mailpit default
 - [ ] ML-4 provider credential protection
-- [ ] ML-5 provider retry and DLQ
+- [ ] ML-5 bounded delayed provider retry and DLQ (local live outage/replay verified; external provider refusal/throttling not yet demonstrated)
 - [ ] ML-6 provider replacement without business-rule changes
-- [ ] ML-7 registered-recipient validation and per-address limit
+- [ ] ML-7 registered-recipient validation and five-per-address/day limit (mail-side live proof passed; full running-stack proof pending)
 - [x] ML-8 automated tests do not send external mail
 - [x] OP-1 rebuild commands for every projection (BC-6 chain projection rebuildable via `npm run rebuild:chain-projection`)
-- [x] OP-2 existing DLQ behavior and retry paths
+- [ ] OP-2 notification DLQ replay command exists; inspection/replay for every DLQ remains pending
 - [ ] OP-3 targeted event replay
 - [ ] OP-6 consumer and chain lag visibility
 - [ ] OP-7 runtime feature flags
@@ -230,7 +252,7 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [ ] PR-1 every requirement mapped to an executable check
 - [ ] PR-2 tests use independent contracts
 - [ ] PR-3 producer/consumer compatibility checks
-- [ ] PR-4 automated dependency stop/restart tests
+- [ ] PR-4 automated dependency stop/restart tests (Mailpit stop/restart covered by `npm run verify:mail`; other dependencies pending)
 - [ ] PR-5 one clean-clone verification command
 - [ ] PR-6 documentation behavior checks
 - [ ] PR-7 isolated repeatable runs

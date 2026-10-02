@@ -56,6 +56,7 @@ async function run(): Promise<void> {
           notification: cutoff(
             env.NOTIFICATION_RETENTION_SECONDS,
           ),
+          mailQuota: cutoff(env.MAIL_QUOTA_RETENTION_SECONDS),
         },
         env.CLEANUP_BATCH_SIZE,
       );

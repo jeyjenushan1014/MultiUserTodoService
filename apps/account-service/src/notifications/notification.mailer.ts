@@ -48,25 +48,54 @@ export interface NotificationMailer {
   ): Promise<void>;
 }
 
+export interface SmtpMailerConfig {
+  readonly host: string;
+  readonly port: number;
+  readonly from: string;
+  readonly secure?: boolean;
+  readonly auth?: { readonly user: string; readonly pass: string };
+}
+
 export class SmtpNotificationMailer
 implements NotificationMailer {
-  private readonly transporter =
-    createTransport({
+  private readonly from: string;
+  private readonly transporter;
+
+  public constructor(
+    config: SmtpMailerConfig = {
       host: env.MAIL_HOST,
       port: env.MAIL_PORT,
-      secure: false,
+      from: env.MAIL_FROM,
+    },
+    private readonly sanitizeErrors = false,
+  ) {
+    this.from = config.from;
+    this.transporter = createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure ?? false,
+      requireTLS: config.auth !== undefined && config.secure !== true,
+      ...(config.auth === undefined ? {} : { auth: config.auth }),
       connectionTimeout: env.MAIL_CONNECTION_TIMEOUT_MS,
       greetingTimeout: env.MAIL_GREETING_TIMEOUT_MS,
       socketTimeout: env.MAIL_SOCKET_TIMEOUT_MS,
     });
+  }
 
   private async sendMail(
     message: Parameters<typeof this.transporter.sendMail>[0],
   ): Promise<void> {
-    await withTimeout(
-      this.transporter.sendMail(message),
-      env.MAIL_SOCKET_TIMEOUT_MS,
-    );
+    try {
+      await withTimeout(
+        this.transporter.sendMail(message),
+        env.MAIL_SOCKET_TIMEOUT_MS,
+      );
+    } catch (error) {
+      if (this.sanitizeErrors) {
+        throw new Error("Mail transport failed");
+      }
+      throw error;
+    }
   }
 
   public async sendTodoSharedEmail(
@@ -74,7 +103,7 @@ implements NotificationMailer {
     todoId: string,
   ): Promise<void> {
     await this.sendMail({
-      from: env.MAIL_FROM,
+      from: this.from,
       to: recipientEmail,
       subject: "A TODO was shared with you",
       text:
@@ -89,7 +118,7 @@ implements NotificationMailer {
     todoId: string,
   ): Promise<void> {
     await this.sendMail({
-      from: env.MAIL_FROM,
+      from: this.from,
       to: recipientEmail,
       subject: "TODO sharing was withdrawn",
       text:
@@ -104,7 +133,7 @@ implements NotificationMailer {
     expiresAt: string,
   ): Promise<void> {
     await this.sendMail({
-      from: env.MAIL_FROM,
+      from: this.from,
       to: recipientEmail,
       subject: "Reset your password",
       text:

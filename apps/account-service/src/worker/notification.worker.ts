@@ -19,6 +19,10 @@ import {
 } from "../notifications/notification.mailer.js";
 
 import {
+  NotificationTransportSelector,
+} from "../notifications/notification-transport.selector.js";
+
+import {
   TodoNotificationConsumer,
 } from "../notifications/notification.consumer.js";
 
@@ -28,16 +32,21 @@ const connection =
   );
 
 const channel =
-  await connection.createChannel();
+  await connection.createConfirmChannel();
 
 await channel.prefetch(
   env.RABBITMQ_NOTIFICATION_PREFETCH,
 );
 
+const sink = new SmtpNotificationMailer();
+const transportSelector = new NotificationTransportSelector(sink);
+
 const consumer =
   new TodoNotificationConsumer(
     channel,
-    new SmtpNotificationMailer(),
+    sink,
+    undefined,
+    (eventId) => transportSelector.select(eventId),
   );
 
 await consumer.initialize();

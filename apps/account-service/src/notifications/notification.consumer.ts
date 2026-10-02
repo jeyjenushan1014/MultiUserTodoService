@@ -1,5 +1,5 @@
 import type {
-  Channel,
+  ConfirmChannel,
   ConsumeMessage,
 } from "amqplib";
 
@@ -12,10 +12,6 @@ import type {
   TodoShareWithdrawnPayload,
   TodoSharedPayload,
 } from "@todo/contracts";
-
-import {
-  database,
-} from "../config/database.js";
 
 import {
   env,
@@ -49,6 +45,21 @@ const rawEventRequestIdSchema =
   z.object({
     requestId: z.uuid(),
   });
+
+const maxDeliveryAttempts = 3;
+const retryDelaysMilliseconds = [env.MAIL_RETRY_FIRST_MS, env.MAIL_RETRY_SECOND_MS] as const;
+
+class InvalidNotificationEventError extends Error {}
+class NotificationQuotaExceededError extends Error {}
+
+function deliveryAttempt(message: ConsumeMessage): number | undefined {
+  const rawAttempt: unknown = message.properties.headers?.["x-notification-attempt"];
+  const attempt = rawAttempt ?? 1;
+  return typeof attempt === "number" && Number.isInteger(attempt)
+    && attempt >= 1 && attempt <= maxDeliveryAttempts
+    ? attempt
+    : undefined;
+}
 
 const todoSharedNotificationSchema =
   z.object({
@@ -106,37 +117,14 @@ function parseMessage(
   ) as unknown;
 }
 
-async function findAccountEmail(
-  accountId: string,
-): Promise<string | undefined> {
-  const result =
-    await database.query<{
-      readonly email: string;
-    }>(
-      `
-        SELECT email
-        FROM users
-        WHERE id = $1
-          AND NOT EXISTS (
-            SELECT 1 FROM account_deletion_requests
-            WHERE user_id = users.id
-              AND status IN ('pending', 'running')
-          )
-        LIMIT 1
-      `,
-      [accountId],
-    );
-
-  return result.rows[0]?.email;
-}
-
 export class TodoNotificationConsumer {
   public constructor(
-    private readonly channel: Channel,
+    private readonly channel: ConfirmChannel,
     private readonly mailer: NotificationMailer,
     private readonly deliveryRepository:
       NotificationDeliveryRepository =
         new PostgresNotificationDeliveryRepository(),
+    private readonly selectMailer?: (eventId: string) => Promise<NotificationMailer>,
   ) {}
 
   public async initialize(): Promise<void> {
@@ -178,6 +166,21 @@ export class TodoNotificationConsumer {
         deadLetterRoutingKey:
           env.RABBITMQ_NOTIFICATION_DLQ_ROUTING_KEY,
       },
+    );
+
+    await this.channel.assertQueue(
+      `${env.RABBITMQ_NOTIFICATION_QUEUE}.retry`,
+      {
+        durable: true,
+        deadLetterExchange: env.RABBITMQ_EXCHANGE,
+        deadLetterRoutingKey: "notification.retry",
+      },
+    );
+
+    await this.channel.bindQueue(
+      env.RABBITMQ_NOTIFICATION_QUEUE,
+      env.RABBITMQ_EXCHANGE,
+      "notification.retry",
     );
 
     await this.channel.bindQueue(
@@ -254,6 +257,11 @@ export class TodoNotificationConsumer {
     event: unknown,
   ): Promise<void> {
     try {
+      if (deliveryAttempt(message) === undefined) {
+        this.channel.nack(message, false, false);
+        return;
+      }
+
       const shared =
         todoSharedNotificationSchema.safeParse(
           event,
@@ -263,19 +271,26 @@ export class TodoNotificationConsumer {
         await this.deliver(
           message,
           shared.data.eventId,
-          async () => {
+          async (selectedMailer) => this.deliveryRepository.withRecipientGuard(
+            shared.data.payload.recipientId,
+            async (session) => {
             const recipientEmail =
-              await findAccountEmail(
+              await session.findEmail(
                 shared.data.payload.recipientId,
               );
 
             if (recipientEmail !== undefined) {
-              await this.mailer.sendTodoSharedEmail(
+              if (!await session.reserveAddress(
+                shared.data.eventId, shared.data.payload.recipientId, recipientEmail,
+              )) {
+                throw new NotificationQuotaExceededError();
+              }
+              await selectedMailer.sendTodoSharedEmail(
                 recipientEmail,
                 shared.data.payload.todoId,
               );
             }
-          },
+          }),
         );
         return;
       }
@@ -289,19 +304,26 @@ export class TodoNotificationConsumer {
         await this.deliver(
           message,
           withdrawn.data.eventId,
-          async () => {
+          async (selectedMailer) => this.deliveryRepository.withRecipientGuard(
+            withdrawn.data.payload.recipientId,
+            async (session) => {
             const recipientEmail =
-              await findAccountEmail(
+              await session.findEmail(
                 withdrawn.data.payload.recipientId,
               );
 
             if (recipientEmail !== undefined) {
-              await this.mailer.sendTodoShareWithdrawnEmail(
+              if (!await session.reserveAddress(
+                withdrawn.data.eventId, withdrawn.data.payload.recipientId, recipientEmail,
+              )) {
+                throw new NotificationQuotaExceededError();
+              }
+              await selectedMailer.sendTodoShareWithdrawnEmail(
                 recipientEmail,
                 withdrawn.data.payload.todoId,
               );
             }
-          },
+          }),
         );
         return;
       }
@@ -312,7 +334,7 @@ export class TodoNotificationConsumer {
         );
 
       if (!passwordResetRequested.success) {
-        throw new Error(
+        throw new InvalidNotificationEventError(
           "Invalid notification event",
         );
       }
@@ -320,10 +342,18 @@ export class TodoNotificationConsumer {
       await this.deliver(
         message,
         passwordResetRequested.data.eventId,
-        async () => {
-          const accountEmail = await findAccountEmail(passwordResetRequested.data.payload.userId);
+        async (selectedMailer) => this.deliveryRepository.withRecipientGuard(
+          passwordResetRequested.data.payload.userId,
+          async (session) => {
+          const accountEmail = await session.findEmail(passwordResetRequested.data.payload.userId);
           if (accountEmail === passwordResetRequested.data.payload.email) {
-            await this.mailer.sendPasswordResetEmail(
+            if (!await session.reserveAddress(
+              passwordResetRequested.data.eventId, passwordResetRequested.data.payload.userId,
+              accountEmail,
+            )) {
+              throw new NotificationQuotaExceededError();
+            }
+            await selectedMailer.sendPasswordResetEmail(
               accountEmail,
               decryptPasswordResetToken(
                 passwordResetRequested.data.payload.encryptedResetToken,
@@ -331,12 +361,12 @@ export class TodoNotificationConsumer {
               passwordResetRequested.data.payload.expiresAt,
             );
           }
-        },
+        }),
       );
     } catch (error) {
       logger.error(
         {
-          error,
+          failure: "notification-processing",
         },
         "TODO notification processing failed",
       );
@@ -344,21 +374,76 @@ export class TodoNotificationConsumer {
       this.channel.nack(
         message,
         false,
-        false,
+        !(error instanceof InvalidNotificationEventError),
       );
     }
+  }
+
+  private async scheduleRetry(
+    message: ConsumeMessage,
+    attempt: number,
+    nextAttempt = attempt + 1,
+  ): Promise<void> {
+    const delay = retryDelaysMilliseconds[attempt - 1]
+      ?? retryDelaysMilliseconds[0];
+    if (nextAttempt > maxDeliveryAttempts) {
+      this.channel.nack(message, false, false);
+      return;
+    }
+
+    this.channel.sendToQueue(
+      `${env.RABBITMQ_NOTIFICATION_QUEUE}.retry`,
+      message.content,
+      {
+        persistent: true,
+        expiration: String(delay),
+        headers: { "x-notification-attempt": nextAttempt },
+      },
+    );
+    await this.channel.waitForConfirms();
+    this.channel.ack(message);
+  }
+
+  private async finishDeadLetter(message: ConsumeMessage, eventId: string): Promise<void> {
+    this.channel.sendToQueue(
+      env.RABBITMQ_NOTIFICATION_DLQ,
+      message.content,
+      {
+        persistent: true,
+        headers: { "x-notification-attempt": maxDeliveryAttempts },
+      },
+    );
+    await this.channel.waitForConfirms();
+    await this.deliveryRepository.markDeadLetter(eventId);
+    this.channel.ack(message);
   }
 
   private async deliver(
     message: ConsumeMessage,
     eventId: string,
-    send: () => Promise<void>,
+    send: (mailer: NotificationMailer) => Promise<void>,
   ): Promise<void> {
-    const claim =
-      await this.deliveryRepository.claim(eventId);
+    const attempt = deliveryAttempt(message);
+    if (attempt === undefined) {
+      this.channel.nack(message, false, false);
+      return;
+    }
 
-    if (claim.status === "completed") {
+    const claim =
+      await this.deliveryRepository.claim(eventId, attempt);
+
+    if (claim.status === "completed" || claim.status === "stale") {
       this.channel.ack(message);
+      return;
+    }
+
+    if (claim.status === "retry-pending") {
+      await this.scheduleRetry(message, attempt);
+      return;
+    }
+
+    if (claim.status === "dead-letter-pending") {
+      await this.finishDeadLetter(message, eventId);
       return;
     }
 
@@ -366,26 +451,33 @@ export class TodoNotificationConsumer {
       claim.status === "in-progress"
       || claim.processingToken === undefined
     ) {
-      this.channel.nack(message, false, false);
+      await this.scheduleRetry(message, attempt, attempt);
       return;
     }
 
     try {
-      await send();
+      const selectedMailer = this.selectMailer === undefined
+        ? this.mailer
+        : await this.selectMailer(eventId);
+      await send(selectedMailer);
       await this.deliveryRepository.markSent(
         eventId,
         claim.processingToken,
       );
       this.channel.ack(message);
     } catch (error) {
+      const overQuota = error instanceof NotificationQuotaExceededError;
       await this.deliveryRepository.markFailed(
         eventId,
         claim.processingToken,
-        error instanceof Error
-          ? error.message
-          : String(error),
+        overQuota ? "Recipient mail quota exceeded" : "Notification transport failed",
+        overQuota || attempt === maxDeliveryAttempts,
       );
-      throw error;
+      if (overQuota || attempt === maxDeliveryAttempts) {
+        await this.finishDeadLetter(message, eventId);
+      } else {
+        await this.scheduleRetry(message, attempt);
+      }
     }
   }
 }

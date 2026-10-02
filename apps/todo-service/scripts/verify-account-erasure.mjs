@@ -71,7 +71,7 @@ const gateway = await postJson("http://gateway:3000/internal/v1/account-deletion
 assert.equal(gateway.verified, true, "Gateway Redis still contains deletion-linked authorization state");
 
 const queueNames = (process.env.ACCOUNT_DELETION_BROKER_QUEUES ??
-  "todo.notifications,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership")
+  "todo.notifications,todo.notifications.retry,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership")
   .split(",").map((queue) => queue.trim()).filter(Boolean);
 const connection = await amqp.connect(process.env.RABBITMQ_URL);
 let brokerMessages = 0;

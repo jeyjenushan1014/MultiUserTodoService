@@ -103,6 +103,7 @@ export const verifyAccountErasure: RequestHandler = async (request, response): P
     sessions: number;
     reset_tokens: number;
     outbox_payloads: number;
+    notification_reservations: number;
   }>(
     `SELECT
        (SELECT COUNT(*)::integer FROM account_deletion_requests WHERE id = $1) AS request_count,
@@ -113,7 +114,8 @@ export const verifyAccountErasure: RequestHandler = async (request, response): P
        (SELECT COUNT(*)::integer FROM workspaces WHERE created_by = $3) AS workspaces,
        (SELECT COUNT(*)::integer FROM sessions WHERE user_id = $3) AS sessions,
        (SELECT COUNT(*)::integer FROM password_reset_tokens WHERE user_id = $3) AS reset_tokens,
-       (SELECT COUNT(*)::integer FROM outbox_events WHERE aggregate_id = $3 OR payload::text LIKE '%' || $3 || '%' OR payload::text ILIKE '%' || $4 || '%') AS outbox_payloads`,
+      (SELECT COUNT(*)::integer FROM outbox_events WHERE aggregate_id = $3 OR payload::text LIKE '%' || $3 || '%' OR payload::text ILIKE '%' || $4 || '%') AS outbox_payloads,
+      (SELECT COUNT(*)::integer FROM notification_address_reservations WHERE user_id = $3 OR email = $4) AS notification_reservations`,
     [parsed.data.deletionRequestId, userIdHash, parsed.data.userId, parsed.data.email],
   );
   const checks = result.rows[0];
@@ -128,7 +130,8 @@ export const verifyAccountErasure: RequestHandler = async (request, response): P
     && checks.workspaces === 0
     && checks.sessions === 0
     && checks.reset_tokens === 0
-    && checks.outbox_payloads === 0;
+    && checks.outbox_payloads === 0
+    && checks.notification_reservations === 0;
   const deletionRequestRow = await database.query<{ workspace_ids: string[] }>(
     "SELECT workspace_ids FROM account_deletion_requests WHERE id = $1",
     [parsed.data.deletionRequestId],

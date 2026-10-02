@@ -1,6 +1,44 @@
 # Questions and Challenges
 
-This is the Day 3 version of this document. Day 2's questions (Docker setup, single-service Redis
+## Day 4: mail delivery decisions (planning, 2026-10-02)
+
+This section records open Day 4 decisions, not evidence of a live provider send. The
+implementation order and checks are in `docs/mail-delivery-plan.md`. Nothing here
+changes the sink-only default.
+
+1. How can I enable external delivery without redeploying either notification worker?
+	A singleton PostgreSQL mode row and Docker-only operator command now control
+	delivery without changing business rules. Two readers and pinned event
+	destinations were verified against the live database. External provider
+	settings and a secret file must be prepared first; a real delivery has not
+	yet been demonstrated.
+2. Which free-tier external provider accepts a personally controlled sender without
+	a card or company domain? Brevo SMTP is a candidate, not a verified choice. Check
+	current signup/sender requirements and quota before configuring a real send. If
+	disqualified, choose another qualifying SMTP provider without changing the code
+	that decides which notification to send. No paid plan or company domain is allowed.
+3. What happens when the provider accepts a message but the worker dies before marking
+	it sent? The existing event-ID claim prevents concurrent workers sending together,
+	but not a duplicate after the lease expires. Find provider idempotency support or
+	document the residual duplicate risk; never call the existing delivery exactly once.
+4. How do retry, per-address quotas, and account deletion interact? At present a failed
+	notification is retried twice using a delayed queue (30 and 60 seconds), then
+	reaches the DLQ after the third failure. Account erasure scans that new retry
+	queue as well. Gateway's rate limits are still per caller, not per destination.
+	The five-per-24-hour atomic address quota and send/deletion lock have live
+	PostgreSQL proof. The local mail-dependency outage/replay proof passes via
+	`npm run verify:mail`; a real provider refusal/throttling proof is pending,
+	and the deployed database's older 011 deletion schema needs reconciliation
+	before the full account-erasure command can be trusted. Do not claim ML-5,
+	ML-7, or DG-10 from these partial checks alone.
+5. What is left out for now? No external account or credential has been provisioned,
+	no real inbox has been sent to. Stage 5 proves local Mailpit outages, not
+	real provider throttling or the complete ML-5 requirement.
+	Keep tests sink-only and report provider qualification or live-send blockers openly.
+
+## Day 3: historical questions
+
+The following is the Day 3 version of this document. Day 2's questions (Docker setup, single-service Redis
 caching) are superseded — the system is now three services plus five worker processes coordinated
 through Postgres, Redis, and RabbitMQ, and the hard problems moved with it.
 

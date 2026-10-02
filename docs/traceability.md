@@ -81,6 +81,39 @@ and the live `verify-account-erasure.mjs` proof. Public chain history is immutab
 local identity-linked state is removed or anonymized. These remaining gaps are documented and
 tracked; they are not claimed as covered by this commit.
 
+ML-5 and ML-8 have local mail-failure evidence: `npm run verify:mail` (34
+notification unit tests plus a disposable live Compose run) makes a real
+password-reset request while Mailpit is stopped, requires HTTP 202, observes
+two delayed retries and a terminal notification DLQ entry, restarts Mailpit,
+replays the specific event, and confirms a local message. It asserts the
+worker's Compose environment is sink-only with no external provider host,
+and neither this check nor the mocked unit tests send external mail.
+`docker compose run --build --rm --no-deps -T account-service node
+apps/account-service/scripts/verify-notification-retry.mjs` also tests lease
+recovery and competing PostgreSQL claims. Real-provider refusal/throttling is
+still unverified, so ML-5 is not claimed completely; PR-4 is covered for mail
+only, not all Day 3/4 failure dependencies.
+
+ML-7 and DG-10 have mail-side evidence: `docker compose run --build --rm
+--no-deps -T account-service node apps/account-service/scripts/verify-notification-quota.mjs`
+proves the shared five-per-24-hour quota, retry reuse, changed-account address
+checks, and send/deletion advisory lock against PostgreSQL. `npm run
+verify:account-lifecycle` covers code-level erasure. The live account database
+contains an older 011 deletion schema, so the deployed deletion endpoint and
+`verify-account-erasure.mjs` have not passed; neither full requirement is
+claimed from this partial proof.
+
+ML-3, ML-4, ML-6 and OP-7 have partial Stage 4 evidence: `npm run test -w
+@todo/account-service -- src/notifications/__tests__/notification.mailer.test.ts
+src/notifications/__tests__/notification.external.test.ts` checks pinning,
+test-mode refusal, file-only credentials, sanitization and provider replacement;
+`docker compose run --build --rm --no-deps -T account-service node
+apps/account-service/scripts/verify-mail-mode.mjs` checks live shared mode,
+two readers, audit and external kill switch without sending mail. The Docker
+operator command rejects enabling external without the provider file. No
+actual external inbox delivery or qualified free provider is proven yet, so
+these requirements remain outside the complete evidence table.
+
 ## Evidence file and test pointers
 
 - Policy source: `packages/contracts/src/authorization/workspace-authorization.ts`

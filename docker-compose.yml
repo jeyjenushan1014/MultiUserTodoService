@@ -77,8 +77,8 @@ services:
     image: rabbitmq:4-management-alpine
 
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
 
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
@@ -144,8 +144,8 @@ services:
     image: axllent/mailpit:v1.27
 
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_HTTP_PORT:-8025}:8025"
 
     healthcheck:
       test:
@@ -206,7 +206,7 @@ services:
       DATABASE_QUERY_TIMEOUT_MS: ${DATABASE_QUERY_TIMEOUT_MS:-2000}
       PASSWORD_HASH_ROUNDS: ${PASSWORD_HASH_ROUNDS:-12}
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      ACCOUNT_DELETION_BROKER_QUEUES: ${ACCOUNT_DELETION_BROKER_QUEUES:-todo.notifications,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership}
+      ACCOUNT_DELETION_BROKER_QUEUES: ${ACCOUNT_DELETION_BROKER_QUEUES:-todo.notifications,todo.notifications.retry,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-todo.events}
       RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
       RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
@@ -216,6 +216,11 @@ services:
       MAIL_HOST: ${MAIL_HOST:-mailpit}
       MAIL_PORT: ${MAIL_PORT:-1025}
       MAIL_FROM: ${MAIL_FROM:-no-reply@todo.local}
+      MAIL_PROVIDER_HOST: ${MAIL_PROVIDER_HOST:-}
+      MAIL_PROVIDER_PORT: ${MAIL_PROVIDER_PORT:-587}
+      MAIL_PROVIDER_FROM: ${MAIL_PROVIDER_FROM:-}
+      MAIL_PROVIDER_SECRET_FILE: /run/todo-mail-secrets/smtp.json
+      MAIL_TEST_SINK_ONLY: ${MAIL_TEST_SINK_ONLY:-true}
       MAIL_CONNECTION_TIMEOUT_MS: ${MAIL_CONNECTION_TIMEOUT_MS:-5000}
       MAIL_GREETING_TIMEOUT_MS: ${MAIL_GREETING_TIMEOUT_MS:-5000}
       MAIL_SOCKET_TIMEOUT_MS: ${MAIL_SOCKET_TIMEOUT_MS:-30000}
@@ -232,6 +237,8 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-todo-platform}
       ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
       REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
+    volumes:
+      - ${MAIL_SECRET_DIR:-./secrets/mail}:/run/todo-mail-secrets:ro
     expose:
       - "3001"
 
@@ -372,6 +379,7 @@ services:
       TOKEN_RETENTION_SECONDS: ${TOKEN_RETENTION_SECONDS:-2592000}
       OUTBOX_RETENTION_SECONDS: ${OUTBOX_RETENTION_SECONDS:-2592000}
       NOTIFICATION_RETENTION_SECONDS: ${NOTIFICATION_RETENTION_SECONDS:-2592000}
+      MAIL_QUOTA_RETENTION_SECONDS: ${MAIL_QUOTA_RETENTION_SECONDS:-86400}
       LOG_LEVEL: ${LOG_LEVEL:-info}
 
     depends_on:
@@ -402,7 +410,7 @@ services:
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
       RABBITMQ_URL: >-
         amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      ACCOUNT_DELETION_BROKER_QUEUES: ${ACCOUNT_DELETION_BROKER_QUEUES:-todo.notifications,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership}
+      ACCOUNT_DELETION_BROKER_QUEUES: ${ACCOUNT_DELETION_BROKER_QUEUES:-todo.notifications,todo.notifications.retry,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       REQUEST_BODY_LIMIT: ${REQUEST_BODY_LIMIT:-100kb}
       WORKSPACE_PROJECTION_FAIL_OPEN: ${WORKSPACE_PROJECTION_FAIL_OPEN:-false}
@@ -523,9 +531,16 @@ services:
       RABBITMQ_NOTIFICATION_QUEUE: ${RABBITMQ_NOTIFICATION_QUEUE:-todo.notifications}
       RABBITMQ_DEAD_LETTER_EXCHANGE: ${RABBITMQ_DEAD_LETTER_EXCHANGE:-todo.events.dlx}
       RABBITMQ_NOTIFICATION_DLQ: ${RABBITMQ_NOTIFICATION_DLQ:-todo.notifications.dlq}
+      MAIL_RETRY_FIRST_MS: ${MAIL_RETRY_FIRST_MS:-30000}
+      MAIL_RETRY_SECOND_MS: ${MAIL_RETRY_SECOND_MS:-60000}
       MAIL_HOST: ${MAIL_HOST:-mailpit}
       MAIL_PORT: ${MAIL_PORT:-1025}
       MAIL_FROM: ${MAIL_FROM:-no-reply@todo.local}
+      MAIL_PROVIDER_HOST: ${MAIL_PROVIDER_HOST:-}
+      MAIL_PROVIDER_PORT: ${MAIL_PROVIDER_PORT:-587}
+      MAIL_PROVIDER_FROM: ${MAIL_PROVIDER_FROM:-}
+      MAIL_PROVIDER_SECRET_FILE: /run/todo-mail-secrets/smtp.json
+      MAIL_TEST_SINK_ONLY: ${MAIL_TEST_SINK_ONLY:-true}
       MAIL_CONNECTION_TIMEOUT_MS: ${MAIL_CONNECTION_TIMEOUT_MS:-5000}
       MAIL_GREETING_TIMEOUT_MS: ${MAIL_GREETING_TIMEOUT_MS:-5000}
       MAIL_SOCKET_TIMEOUT_MS: ${MAIL_SOCKET_TIMEOUT_MS:-30000}
@@ -540,6 +555,8 @@ services:
       ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
       REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ${MAIL_SECRET_DIR:-./secrets/mail}:/run/todo-mail-secrets:ro
     depends_on:
       account-postgres:
         condition: service_healthy

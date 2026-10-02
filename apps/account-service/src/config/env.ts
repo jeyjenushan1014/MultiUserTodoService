@@ -55,7 +55,7 @@ RABBITMQ_NOTIFICATION_DLQ:
     .default("todo.notifications.dlq"),
 
 ACCOUNT_DELETION_BROKER_QUEUES: z.string().min(1).default(
-  "todo.notifications,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership",
+  "todo.notifications,todo.notifications.retry,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership",
 ),
 
 OUTBOX_BATCH_SIZE:
@@ -314,6 +314,9 @@ ACCOUNT_OUTBOX_WORKER_ID:
         .max(31_536_000)
         .default(2_592_000),
 
+    MAIL_QUOTA_RETENTION_SECONDS: z.coerce
+      .number().int().min(86_400).max(172_800).default(86_400),
+
     LOG_LEVEL: z
       .enum([
         "fatal",
@@ -366,6 +369,12 @@ RABBITMQ_NOTIFICATION_PREFETCH: z.coerce
   .max(100)
   .default(10),
 
+MAIL_RETRY_FIRST_MS: z.coerce
+  .number().int().min(500).max(86_400_000).default(30_000),
+
+MAIL_RETRY_SECOND_MS: z.coerce
+  .number().int().min(500).max(86_400_000).default(60_000),
+
 RABBITMQ_NOTIFICATION_DLQ_ROUTING_KEY:
   z.string()
     .min(1)
@@ -374,6 +383,12 @@ RABBITMQ_NOTIFICATION_DLQ_ROUTING_KEY:
 MAIL_FROM: z
   .email()
   .default("no-reply@todo.local"),
+
+MAIL_PROVIDER_HOST: z.string().default(""),
+MAIL_PROVIDER_PORT: z.coerce.number().int().min(1).max(65_535).default(587),
+MAIL_PROVIDER_FROM: z.string().default(""),
+MAIL_PROVIDER_SECRET_FILE: z.string().min(1).default("/run/todo-mail-secrets/smtp.json"),
+MAIL_TEST_SINK_ONLY: z.enum(["true", "false"]).default("false"),
 
   })
 

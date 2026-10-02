@@ -26,6 +26,7 @@ describe("PostgresAccountDeletionRepository", () => {
     const requestedAt = new Date("2026-10-01T12:00:00.000Z");
     clientMocks.query
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: "account-id" }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ id: "deletion-request-id", requested_at: requestedAt }] })
@@ -43,13 +44,14 @@ describe("PostgresAccountDeletionRepository", () => {
 
     expect(result).toEqual({ id: "deletion-request-id", requestedAt });
     expect(clientMocks.query.mock.calls[0]?.[0]).toBe("BEGIN");
-    expect(clientMocks.query.mock.calls[1]?.[0]).toContain("SELECT id FROM users WHERE id = $1 FOR UPDATE");
-    expect(clientMocks.query.mock.calls[2]?.[0]).toContain("status IN ('pending', 'running')");
-    expect(clientMocks.query.mock.calls[3]?.[0]).toContain("ON CONFLICT (user_id, idempotency_key_hash) DO NOTHING");
-    expect(clientMocks.query.mock.calls[4]?.[0]).toContain("SELECT id FROM sessions WHERE user_id = $1");
-    expect(clientMocks.query.mock.calls[5]?.[0]).toContain("UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP");
-    expect(clientMocks.query.mock.calls[6]?.[0]).toContain("SET session_ids = $2::jsonb");
-    expect(clientMocks.query.mock.calls[7]?.[0]).toContain("INSERT INTO outbox_events");
+    expect(clientMocks.query.mock.calls[1]?.[0]).toContain("pg_advisory_xact_lock");
+    expect(clientMocks.query.mock.calls[2]?.[0]).toContain("SELECT id FROM users WHERE id = $1 FOR UPDATE");
+    expect(clientMocks.query.mock.calls[3]?.[0]).toContain("status IN ('pending', 'running')");
+    expect(clientMocks.query.mock.calls[4]?.[0]).toContain("ON CONFLICT (user_id, idempotency_key_hash) DO NOTHING");
+    expect(clientMocks.query.mock.calls[5]?.[0]).toContain("SELECT id FROM sessions WHERE user_id = $1");
+    expect(clientMocks.query.mock.calls[6]?.[0]).toContain("UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP");
+    expect(clientMocks.query.mock.calls[7]?.[0]).toContain("SET session_ids = $2::jsonb");
+    expect(clientMocks.query.mock.calls[8]?.[0]).toContain("INSERT INTO outbox_events");
     expect(clientMocks.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
     expect(clientMocks.release).toHaveBeenCalledOnce();
   });
@@ -57,6 +59,7 @@ describe("PostgresAccountDeletionRepository", () => {
   it("returns the original request for an idempotent retry without revoking twice", async () => {
     const requestedAt = new Date("2026-10-01T12:00:00.000Z");
     clientMocks.query
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: "account-id" }] })
       .mockResolvedValueOnce({ rows: [{ id: "existing-request-id", requested_at: requestedAt }] })
@@ -69,9 +72,10 @@ describe("PostgresAccountDeletionRepository", () => {
     });
 
     expect(result).toEqual({ id: "existing-request-id", requestedAt });
-    expect(clientMocks.query).toHaveBeenCalledTimes(4);
-    expect(clientMocks.query.mock.calls[2]?.[0]).toContain("SELECT id, requested_at FROM account_deletion_requests");
-    expect(clientMocks.query.mock.calls[2]?.[1]).toEqual([
+    expect(clientMocks.query).toHaveBeenCalledTimes(5);
+    expect(clientMocks.query.mock.calls[1]?.[0]).toContain("pg_advisory_xact_lock");
+    expect(clientMocks.query.mock.calls[3]?.[0]).toContain("SELECT id, requested_at FROM account_deletion_requests");
+    expect(clientMocks.query.mock.calls[3]?.[1]).toEqual([
       "account-id",
     ]);
     expect(clientMocks.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");

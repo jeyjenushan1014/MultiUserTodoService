@@ -86,6 +86,10 @@ implements EmailChangeRepository {
 
     try {
       await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [data.userId],
+      );
 
       const updateResult =
         await client

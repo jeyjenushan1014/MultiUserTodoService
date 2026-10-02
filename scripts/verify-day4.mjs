@@ -56,6 +56,7 @@ try {
   run(npmCommand, ["run", "test:docs"], "API documentation verification");
   run(npmCommand, ["run", "verify:authorization"], "AUT-1 through AUT-5 verification");
   run(npmCommand, ["run", "test:e2e", "-w", "@todo/gateway"], "Complete live E2E suite");
+  run(npmCommand, ["run", "verify:mail"], "Sink-only mail failure, DLQ and replay verification");
   run(
     "docker",
     ["compose", "exec", "-T", "account-service", "node", "apps/account-service/scripts/verify-workspace-concurrency.mjs"],

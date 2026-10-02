@@ -120,7 +120,7 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [x] BC-3 bounded public task-history reads and count (local contract tests passed; public-network demonstration pending)
 - [x] BC-4 authorized writer only (local contract test passed; backend key safety pending)
 - [x] BC-5 local Hardhat deployment and tests (8 tests passed; chain 31337 address recorded)
-- [ ] BC-5 public testnet deployment
+- [x] BC-5 public Sepolia deployment (chain 11155111; address and verified source recorded in `docs/onchain.md`)
 - [x] BC-15 private-key protection (`SecureSignerKeyProvider`, logger redaction, env validation & unit tests passed)
 - [x] BC-16 local gas measurements: append 75,583 gas with 1 and 1,000 prior task records
 - [x] BC-17 backend build artifact for ABI **and** deployed address (`task-history.abi.json` & `task-history.deployment.json` exported and verified)
@@ -275,10 +275,10 @@ and ML-6.
 ### 10:30 AM-12:00 PM: Public Deployment and Restore
 
 # chatgbt
-- [ ] Deploy contract to Sepolia or equivalent
-- [ ] Record public contract address
-- [ ] Read records directly from the public testnet
-- [ ] Record gas measurements and contract version
+- [x] Deploy contract to Sepolia or equivalent (`TaskHistory` v1, source verified on Etherscan, Blockscout, and Sourcify)
+- [x] Record public contract address (`docs/onchain.md`)
+- [x] Read records directly from the public testnet (`npm run demo:sepolia`; synthetic record, 2 confirmations)
+- [x] Record gas measurements and contract version (local comparative gas plus Sepolia demo receipt in `docs/onchain.md`)
 - [ ] Back up both databases
 - [ ] Restore into clean databases
 - [ ] Time and record restore

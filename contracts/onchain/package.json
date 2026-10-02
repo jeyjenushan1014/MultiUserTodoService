@@ -8,7 +8,8 @@
     "test": "hardhat test",
     "test:gas": "hardhat test nodejs --gas-stats --gas-stats-json gas-stats.json",
     "deploy:local": "hardhat ignition deploy ignition/modules/TaskHistory.ts",
-    "deploy:localhost": "hardhat ignition deploy ignition/modules/TaskHistory.ts --network localhost"
+    "deploy:localhost": "hardhat ignition deploy ignition/modules/TaskHistory.ts --network localhost",
+    "demo:sepolia": "hardhat run scripts/demo-sepolia.ts --network sepolia"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.1.8",

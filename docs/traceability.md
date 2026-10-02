@@ -23,8 +23,9 @@ as full automated coverage, as required by TRC-2.
 | WF-10 | Covered | `npm run verify:workflow:compensation` | The proof aged a compensating workflow and observed degraded workflow health before recovery. |
 | BC-1 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | All task creations, updates, and deletions enqueue privacy-safe chain commands into durable `chain_submissions` within the same database transaction. |
 | BC-2 | Covered | `npm run test -w @todo/todo-service -- privacy-gate.test.ts` | `PrivacyGate` strictly validates opaque RFC4122 UUIDs and rejects any title, description, email, user ID, or hashes. |
-| BC-3 | Covered (contract) | `cd contracts/onchain; npm test` | Public view functions count records and return pages bounded to 50; direct public-testnet reading is a separate ONC-3 gate. |
+| BC-3 | Covered (contract and public demo) | `cd contracts/onchain; npm test`; operator-run `npm run demo:sepolia` | Local tests prove bounded reads; the Sepolia demo wrote a synthetic record after two confirmations and read count/history directly from Sepolia. |
 | BC-4 | Covered (contract) | `cd contracts/onchain; npm test` | Configured writer can append; an unauthorized signer is rejected. Backend key custody remains a separate BC-15 gate. |
+| BC-5 | Manual public deployment demonstrated | `cd contracts/onchain; npx hardhat ignition deploy ignition/modules/TaskHistory.ts --network sepolia`; operator-run `npm run demo:sepolia` | Sepolia chain 11155111 deployment at `0xF9b72407696e8D30FB43E17c77dB8B77bDb231E7`; source verified on Etherscan, Blockscout, and Sourcify; synthetic record read back after two confirmations. Evidence details are in `docs/onchain.md`. |
 | BC-6 | Covered | `npm run rebuild:chain-projection` | Clears projection tables and rebuilds from chain logs starting at deployment block; verified live on container and unit-tested in `task-history-projection.test.ts`. |
 | BC-7 | Covered | `npm run test -w @todo/todo-service -- task-history-projection.test.ts` | Unit-tested: `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING` guarantees duplicate event processing leaves identical state. |
 | BC-8 | Covered | `npm run test -w @todo/todo-service -- task-history-projection.test.ts` | Unit-tested: reorg detection identifies common ancestor and `rollbackAfterBlock` removes orphaned events and block records above the ancestor. |
@@ -35,7 +36,7 @@ as full automated coverage, as required by TRC-2.
 | BC-13 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Outage resilience: mutations persist to DB even during chain/RPC outage. |
 | BC-14 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Exponential backoff retry and DLQ routing on repeated failures. |
 | BC-15 | Covered | `npm run test -w @todo/todo-service -- signer-key-provider.test.ts` | `SecureSignerKeyProvider` with runtime in-memory protection, address validation, and logger redaction. |
-| BC-16 | Covered (local gas) | `cd contracts/onchain; npm run test:gas` | The append used 75,583 gas with 1 and 1,000 existing records for the same task; reads and deployment costs are recorded in `docs/onchain.md`. |
+| BC-16 | Covered (local comparison and public sample) | `cd contracts/onchain; npm run test:gas`; operator-run `npm run demo:sepolia` | Local append used 75,583 gas with 1 and 1,000 existing records; the Sepolia v1 synthetic demo write used 91,881 gas. |
 | BC-17 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Independent Hardhat project exports `task-history.abi.json` and `task-history.deployment.json`; consumed dynamically by backend without hardcoded addresses. |
 | PF-7 | Covered (chain isolation) | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Slow or failing chain RPC calls do not affect API response time; mutations write to Postgres in milliseconds. |
 | OP-1 | Covered (chain copy) | `npm run rebuild:chain-projection` | One documented command rebuilds the local relational chain projection from chain source while services are running, without manual database edits. |
@@ -66,7 +67,6 @@ a reported chain-31337 Ignition deployment, a working local projection indexer w
 reorg rollback, and confirmation gating (BC-6, BC-7, BC-8, BC-9, OP-1), backend durable anchoring with privacy gate
 (BC-1, BC-2), asynchronous submission with state machine, multi-worker nonce coordination, and DLQ (BC-10..BC-14),
 signer key custody (BC-15), gas measurements (BC-16), deployment artifact verification (BC-17), and RPC isolation (PF-7).
-BC-5 (public testnet deployment) remains pending live testnet demonstration.
 EV-8's protocol compatibility is unit-tested, but a live rolling deployment with
 old and new service images is not demonstrated because the repository does not
 contain a retained old image/tag or versioned Compose deployment fixture.

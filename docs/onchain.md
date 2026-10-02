@@ -1,14 +1,18 @@
 # On-Chain Task History
 
-**Status (2026-10-01):** The standalone Hardhat contract builds and passes local tests. A local
-Ignition deployment was reported at `0x5FbDB2315678afecb367f032d93F642f64180aa3` on
-Hardhat chain 31337. This is not a public testnet deployment. No production task mutation
-currently submits a transaction or indexes contract events.
+**Status (2026-10-02):** The standalone Hardhat contract builds and passes local tests. It is
+deployed locally on chain 31337 and publicly on Sepolia (chain 11155111). The operator verified
+the Sepolia source on Etherscan, Blockscout, and Sourcify, then used the demo script to write a
+synthetic record, wait for two confirmations, and read the count/history directly from Sepolia.
+The backend chain submission and indexer implementation exists, but production TODO traffic has
+not been demonstrated writing to this public deployment.
 
 ## 1. Purpose
 
-The contract can hold a minimal history of task creation, updates, and deletion. Backend
-integration is not yet implemented.
+The contract holds a minimal history of task creation, updates, and deletion. Backend
+submission and projection components are implemented, but production TODO traffic has not
+been demonstrated writing to the public Sepolia deployment. The Sepolia record below is a
+manual synthetic-data demonstration only.
 
 Blockchain records cannot be deleted after they are written. Therefore, task content and information that identifies a person must never be written on-chain.
 
@@ -26,10 +30,11 @@ Each activity record in `contracts/onchain/contracts/TaskHistory.sol` contains t
 Task and workspace IDs must be opaque, random application identifiers. They must not be derived from an account ID or calculated from personal information such as an email address or name.
 
 `TaskActionRecorded` emits exactly these four values; task and workspace IDs are indexed.
-`writer` is an immutable address and `MAX_PAGE_SIZE` is 50. **Privacy release gate:** Before
-writing records to a public testnet, verify that the IDs cannot identify a person or reveal
-personal information. Hashing an ID is not an acceptable privacy solution. The local contract
-tests establish schema shape, not the privacy of IDs supplied by a future backend.
+`writer` is an immutable address and `MAX_PAGE_SIZE` is 50. **Privacy release gate:** The Sepolia
+demonstration used only the fixed synthetic IDs listed below. Before writing production-derived
+IDs to a public chain, verify they cannot identify a person or reveal personal information.
+Hashing an ID is not an acceptable privacy solution. Local contract tests establish schema
+shape, not the privacy of future backend inputs.
 
 ## 3. Data that must never be written on-chain
 
@@ -113,8 +118,10 @@ npm run test:gas
 The project compiles Solidity 0.8.28 (Cancun EVM target). `npm run build` exports the ABI
 from Hardhat's compiled artifact using `scripts/export-abi.mjs` into
 `apps/todo-service/src/blockchain/generated/task-history.abi.json`. It is a generated build
-artifact, not a manually maintained interface; it does **not** yet include a backend address.
-The deploy module `ignition/modules/TaskHistory.ts` uses local Hardhat account 0 for the writer.
+artifact, not a manually maintained interface. Deployment metadata is also generated at
+`apps/todo-service/src/blockchain/generated/task-history.deployment.json`; services must consume
+that artifact rather than retyping a contract address. The deploy module
+`ignition/modules/TaskHistory.ts` uses the configured network account as the writer.
 
 For the persistent local network, start `npx hardhat node` in one terminal and run the following
 in another, both from `contracts/onchain`:
@@ -127,8 +134,43 @@ npm run deploy:localhost
 local deployment printed `0x5FbDB2315678afecb367f032d93F642f64180aa3` and Ignition wrote
 it to `contracts/onchain/ignition/deployments/chain-31337/deployed_addresses.json`. This is
 local Hardhat chain 31337 and is only valid for that node's current state; a node reset may
-invalidate it. A public testnet address, public read instructions, and backend address build
-artifact do not exist yet. Never send a transaction to mainnet.
+invalidate it. Never send a transaction to mainnet.
+
+### Sepolia deployment (BC-5, ONC-3, ONC-5)
+
+Reported by the operator on 2026-10-02. Network: Sepolia, chain ID `11155111`. Contract:
+`TaskHistory` v1, Solidity `0.8.28`, Cancun EVM target. The constructor's writer and deployer
+address is `0xbdB7D00C2de2eDDE69cd50B6a7E408C24BCcb336`.
+
+| Evidence | Value |
+|---|---|
+| Public contract address | `0xF9b72407696e8D30FB43E17c77dB8B77bDb231E7` |
+| Deployment transaction | `0xca2df0b16776ddc7704c342d9b57a72a0f6e0e4883d84dc5bc932fe072c6e8f7` |
+| Deployment block | `11828284` |
+| Source verification | [Etherscan](https://sepolia.etherscan.io/address/0xF9b72407696e8D30FB43E17c77dB8B77bDb231E7#code), [Blockscout](https://eth-sepolia.blockscout.com/address/0xF9b72407696e8D30FB43E17c77dB8B77bDb231E7#code), and Sourcify |
+
+The operator ran `npm run build`, `npm test` (8 tests passed), and `npm run demo:sepolia`.
+The demo verified that the configured signer matched `writer()`, checked a zero record count,
+wrote one synthetic `Created` record, waited for two confirmations, then read the count and
+history directly through the Sepolia RPC:
+
+| Demo evidence | Value |
+|---|---|
+| Synthetic task ID | `0x11111111111111111111111111111111` |
+| Synthetic workspace ID | `0x22222222222222222222222222222222` |
+| Action | `Created` (`0`) |
+| Transaction | `0xb3e3d885eaf61adae475ab9d247513aebb88b3ec832d5d32294077610ffacb2f` |
+| Confirmed block | `11829028` |
+| Confirmations waited | `2` |
+| Gas used | `91881` |
+| Read-back | Count changed from `0` to `1`; `getHistory(taskId, 0, 50)` returned the synthetic record. |
+
+The equivalent demo command is `npm run demo:sepolia` from `contracts/onchain`. It submits
+another append using the same synthetic task ID each time, so the count will increase on each
+run. Do not rerun it unless intentionally making another public testnet record. The deployed
+address is in `contracts/onchain/ignition/deployments/chain-11155111/deployed_addresses.json`.
+The private key and RPC URL are local Hardhat keystore values and must never be copied into this
+document, source control, or chat. Only synthetic IDs were used for this public demonstration.
 
 ## 9. Measured gas
 
@@ -146,8 +188,10 @@ for the **same task**:
 | Deployment, 8 deployments | 762,101 |
 
 The append test supports constant gas with respect to existing record count; a page read costs
-more for larger pages but is capped at 50 records. These are local Hardhat measurements, not
-public testnet receipts. The contract has one write function; its action parameter represents
+more for larger pages but is capped at 50 records. The local comparative gas measurements above
+establish constant append cost. The separate Sepolia demo transaction used `91881` gas for one
+synthetic `Created` record; a single public sample is not a substitute for the local 1-versus-
+1,000-record comparison. The contract has one write function; its action parameter represents
 creation, update, and deletion.
 
 ## 10. Contract replacement and old records
@@ -216,10 +260,10 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 | Requirement | Current evidence | Remaining gate |
 |---|---|---|
 | BC-1 | Backend mutation repositories (`PostgresTodoRepository`, `PostgresUpdateTodoRepository`, `PostgresDeleteTodoRepository`) atomically enqueue chain commands to `chain_submissions`. | Public testnet anchor verification. |
-| BC-2 | Automated `PrivacyGate` strictly rejects titles, descriptions, emails, account IDs, and hashes. Unit-tested in `privacy-gate.test.ts`. | Public testnet demonstration. |
-| BC-3 | Local tests pass for count, bounded pages, invalid sizes, and empty pages. | Demonstrate direct reads against the public testnet. |
+| BC-2 | Automated `PrivacyGate` strictly rejects titles, descriptions, emails, account IDs, and hashes. Unit-tested in `privacy-gate.test.ts`; the Sepolia demo used synthetic opaque IDs only. | Validate privacy of production-derived identifiers before public backend writes. |
+| BC-3 | Local tests pass for count and bounded pages; `npm run demo:sepolia` read count and history directly from Sepolia after a synthetic write. | Public testnet read demonstrated for the synthetic task. |
 | BC-4 | Local writer succeeds, another signer reverts. Backend custody protected by `SecureSignerKeyProvider`. | Keep writer control safe in production secrets. |
-| BC-5 | Local tests and chain-31337 deployment demonstrated. | Public testnet deployment and demonstration pending. |
+| BC-5 | Local tests, chain-31337 deployment, and verified Sepolia deployment; `npm run demo:sepolia` waited two confirmations and read the record back. | Public deployment demonstrated on 2026-10-02. |
 | BC-6 | `npm run rebuild:chain-projection` and unit tests verify clearing and rescan from chain. | Demonstrated against local RPC. |
 | BC-7 | Unit-tested: `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING`. | Demonstrated. |
 | BC-8 | Unit-tested: common ancestor reconciliation and `rollbackAfterBlock` removes reorged events. | Demonstrated. |
@@ -230,7 +274,7 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 | BC-13 | Outage resilience: mutations persist to DB even during chain/RPC outage. | Demonstrated. |
 | BC-14 | Exponential backoff retry and DLQ routing on repeated failures. | Demonstrated. |
 | BC-15 | `SecureSignerKeyProvider` with runtime in-memory protection and logger redaction. | Demonstrated. |
-| BC-16 | Same-task append gas: 75,583 with 1 and 1,000 existing records. | Record final deployed version and any public-network measurements when available. |
+| BC-16 | Local same-task append gas: 75,583 with 1 and 1,000 existing records. Sepolia demo v1 write used 91,881 gas. | Local constant-cost comparison is the scaling evidence; public sample receipt is additionally recorded above. |
 | BC-17 | Independent Hardhat project exports `task-history.abi.json` and `task-history.deployment.json`; consumed dynamically by backend without hardcoded addresses. | Demonstrated. |
 
 ## 13. Integration decisions and Chain Submission Architecture (BC-10, BC-11, BC-12, BC-13, BC-14)

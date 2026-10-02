@@ -34,6 +34,7 @@
     "verify:workflow:compensation": "node scripts/verify-workflow-compensation.mjs",
     "verify:workflow:boundaries": "node scripts/verify-workflow-boundaries.mjs",
     "verify:workflow:correlation": "node scripts/verify-workflow-correlation.mjs",
+    "deploy:sepolia":"hardhat ignition deploy --network sepolia ignition/modules/TaskHistory.ts",
     "test:workflow-resume": "node scripts/verify-workflow-resume.mjs",
     "start:outbox-worker": "node dist/src/workers/outbox-worker.js",
     "verify:day4": "node scripts/verify-day4.mjs",

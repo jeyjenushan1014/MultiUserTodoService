@@ -82,6 +82,20 @@ implements NotificationMailer {
     });
   }
 
+  public async verify(): Promise<void> {
+    try {
+      await withTimeout(
+        this.transporter.verify(),
+        env.MAIL_SOCKET_TIMEOUT_MS,
+      );
+    } catch (error) {
+      if (this.sanitizeErrors) {
+        throw new Error("Mail transport verification failed");
+      }
+      throw error instanceof Error ? error : new Error("Mail transport verification failed");
+    }
+  }
+
   private async sendMail(
     message: Parameters<typeof this.transporter.sendMail>[0],
   ): Promise<void> {

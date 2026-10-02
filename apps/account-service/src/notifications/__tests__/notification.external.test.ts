@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   readFile: vi.fn(),
   createTransport: vi.fn(),
   sendMail: vi.fn(),
+  verify: vi.fn(),
 }));
 
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
@@ -32,8 +33,10 @@ describe("external SMTP adapter", () => {
     mocks.readFile.mockReset();
     mocks.createTransport.mockReset();
     mocks.sendMail.mockReset();
-    mocks.createTransport.mockReturnValue({ sendMail: mocks.sendMail });
+    mocks.verify.mockReset();
+    mocks.createTransport.mockReturnValue({ sendMail: mocks.sendMail, verify: mocks.verify });
     mocks.sendMail.mockResolvedValue({ messageId: "test-message-id" });
+    mocks.verify.mockResolvedValue(true);
   });
 
   it("loads a credential from the mounted file for SMTP transport", async () => {
@@ -65,6 +68,30 @@ describe("external SMTP adapter", () => {
     mocks.readFile.mockResolvedValueOnce(JSON.stringify({ username: "test-operator" }));
     await expect(loadExternalMailer()).rejects.toThrow("External mail is not configured");
     expect(mocks.createTransport).not.toHaveBeenCalled();
+  });
+
+  it("verifies SMTP connectivity without sending a message", async () => {
+    mocks.readFile.mockResolvedValue(JSON.stringify({
+      username: "test-operator",
+      password: "test-only-password",
+    }));
+    const mailer = await loadExternalMailer();
+
+    await mailer.verify();
+
+    expect(mocks.verify).toHaveBeenCalledOnce();
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes SMTP verification failures", async () => {
+    mocks.readFile.mockResolvedValue(JSON.stringify({
+      username: "test-operator",
+      password: "test-only-password",
+    }));
+    mocks.verify.mockRejectedValue(new Error("SMTP rejected test-only-password"));
+    const mailer = await loadExternalMailer();
+
+    await expect(mailer.verify()).rejects.toThrow("Mail transport verification failed");
   });
 
   it("never exposes a provider error containing a credential", async () => {

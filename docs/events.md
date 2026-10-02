@@ -112,15 +112,18 @@ registered recipient and reserves one of five address slots per rolling 24
 hours; retries reuse the same slot. An over-limit message is set aside in the
 DLQ instead of being sent. Every listed email goes to exactly one configured
 destination, never both. Mailpit is the default; the external SMTP adapter is
-implemented but disabled by default and has not been demonstrated with a
-real mailbox.
+implemented and disabled by default. On 2026-10-02 the operator reported
+receiving a password-reset message through external mode and successfully
+confirming its one-time token with HTTP 204; the sink-mode reset flow was also
+tested. No recipient address, token, or message content is recorded here.
 When an event first reaches delivery, its destination is pinned to the
 current shared mode (`sink` by default). Retries and DLQ replay keep that
 destination. A later mode change never redirects a sink-pinned event to the
 provider or a provider-pinned event to Mailpit; switching external off stops
 all further provider sends, and paused external events are eventually put
-in the DLQ. A provider adapter exists, but a real provider has not been
-qualified or demonstrated.
+in the DLQ. The operator reports Brevo Free allows 300 messages per day;
+no-card/no-domain eligibility still needs to be recorded in the Stage 6
+evidence before ML-2 is complete.
 
 # Workflow transport note
 

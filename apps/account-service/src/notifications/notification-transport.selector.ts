@@ -23,7 +23,7 @@ function externalAllowed(): boolean {
   return env.NODE_ENV !== "test" && env.MAIL_TEST_SINK_ONLY !== "true";
 }
 
-export async function loadExternalMailer(): Promise<NotificationMailer> {
+export async function loadExternalMailer(): Promise<SmtpNotificationMailer> {
   if (!externalAllowed() || env.MAIL_PROVIDER_HOST.length === 0 ||
       !z.email().safeParse(env.MAIL_PROVIDER_FROM).success) {
     throw new Error("External mail is not configured");

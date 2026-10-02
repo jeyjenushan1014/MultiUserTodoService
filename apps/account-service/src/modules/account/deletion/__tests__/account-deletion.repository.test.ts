@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PostgresAccountDeletionRepository } from "../account-deletion.repository.js";
@@ -181,6 +183,11 @@ describe("PostgresAccountDeletionRepository", () => {
     expect(clientMocks.query.mock.calls[4]?.[0]).toContain("DELETE FROM notification_event_deliveries");
     expect(clientMocks.query.mock.calls[5]?.[0]).toContain("DELETE FROM outbox_events");
     expect(clientMocks.query.mock.calls[6]?.[0]).toBe("DELETE FROM users WHERE id = $1");
+    expect(clientMocks.query.mock.calls.at(-2)?.[0]).toContain("user_id_hash = COALESCE(user_id_hash, $2)");
+    expect(clientMocks.query.mock.calls.at(-2)?.[1]).toEqual([
+      "deletion-request-id",
+      createHash("sha256").update("account-id").digest("hex"),
+    ]);
     expect(clientMocks.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
   });
 });

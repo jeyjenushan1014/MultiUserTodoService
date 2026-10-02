@@ -293,6 +293,9 @@ export class PostgresAccountDeletionRepository implements AccountDeletionReposit
         [requestId],
       );
       const userId = result.rows[0]?.user_id;
+      const userIdHash = userId === undefined || userId === null
+        ? null
+        : createHash("sha256").update(userId).digest("hex");
       if (userId !== undefined && userId !== null) {
         const account = await client.query<{ email: string }>(
           "SELECT email FROM users WHERE id = $1 FOR UPDATE",
@@ -335,10 +338,10 @@ export class PostgresAccountDeletionRepository implements AccountDeletionReposit
       await client.query(
         `UPDATE account_deletion_requests SET status = 'completed', user_id = NULL,
            current_step = 'account-cleanup', completed_at = CURRENT_TIMESTAMP,
-           session_ids = '[]'::jsonb,
+           session_ids = '[]'::jsonb, user_id_hash = COALESCE(user_id_hash, $2),
            lease_owner = NULL, lease_expires_at = NULL, last_error = NULL
          WHERE id = $1`,
-        [requestId],
+        [requestId, userIdHash],
       );
       await client.query("COMMIT");
     } catch (error) {

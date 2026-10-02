@@ -2,21 +2,21 @@
 
 ## Day 4: mail delivery decisions (planning, 2026-10-02)
 
-This section records open Day 4 decisions, not evidence of a live provider send. The
-implementation order and checks are in `docs/mail-delivery-plan.md`. Nothing here
-changes the sink-only default.
+This section records Day 4 decisions and remaining proof. Automated mail checks
+remain sink-only; manual external delivery is recorded separately below.
 
 1. How can I enable external delivery without redeploying either notification worker?
 	A singleton PostgreSQL mode row and Docker-only operator command now control
 	delivery without changing business rules. Two readers and pinned event
-	destinations were verified against the live database. External provider
-	settings and a secret file must be prepared first; a real delivery has not
-	yet been demonstrated.
-2. Which free-tier external provider accepts a personally controlled sender without
-	a card or company domain? Brevo SMTP is a candidate, not a verified choice. Check
-	current signup/sender requirements and quota before configuring a real send. If
-	disqualified, choose another qualifying SMTP provider without changing the code
-	that decides which notification to send. No paid plan or company domain is allowed.
+	destinations were verified against the live database. The operator reported
+	external and sink password-reset flows succeeding; the external reset token
+	was accepted with HTTP 204, and mode was returned to sink afterward.
+2. Does Brevo meet the free-tier requirement without a card or company domain?
+	The operator reports Brevo Free allows 300 messages per day and that the
+	configured sender is verified; signup required only a personal email, with
+	no card or company domain supplied. A real reset message was reported
+	delivered. The SMTP key was replaced after setup. Sender address and key are
+	intentionally omitted from tracked documentation.
 3. What happens when the provider accepts a message but the worker dies before marking
 	it sent? The existing event-ID claim prevents concurrent workers sending together,
 	but not a duplicate after the lease expires. Find provider idempotency support or
@@ -26,15 +26,16 @@ changes the sink-only default.
 	reaches the DLQ after the third failure. Account erasure scans that new retry
 	queue as well. Gateway's rate limits are still per caller, not per destination.
 	The five-per-24-hour atomic address quota and send/deletion lock have live
-	PostgreSQL proof. The local mail-dependency outage/replay proof passes via
-	`npm run verify:mail`; a real provider refusal/throttling proof is pending,
-	and the deployed database's older 011 deletion schema needs reconciliation
-	before the full account-erasure command can be trusted. Do not claim ML-5,
-	ML-7, or DG-10 from these partial checks alone.
-5. What is left out for now? No external account or credential has been provisioned,
-	no real inbox has been sent to. Stage 5 proves local Mailpit outages, not
-	real provider throttling or the complete ML-5 requirement.
-	Keep tests sink-only and report provider qualification or live-send blockers openly.
+	PostgreSQL proof. Account and Todo migrations were reconciled and completed
+	on 2026-10-02; rerun lifecycle verification against that schema before
+	claiming the full DG-10 deployed flow. The local mail outage/replay proof
+	passes via `npm run verify:mail`; provider refusal/throttling remains open for ML-5.
+5. What remains open? The operator reports a successful external reset email,
+   a successful sink reset, Brevo Free's 300/day allowance, personal-email-only
+   signup, no card/company domain, and replacement of the setup SMTP key. Stage 5
+   proves local Mailpit outages, not real provider refusal/throttling; ML-5 remains
+   open and automated tests must stay sink-only. Provider replacement ML-6 is also
+   not demonstrated.
 
 ## Day 3: historical questions
 

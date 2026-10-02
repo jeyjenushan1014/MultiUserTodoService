@@ -79,6 +79,141 @@ This proof insists on `MAIL_TEST_SINK_ONLY=true`, checks two readers, pinning,
 audit and the kill switch, and returns the configured mode to sink without
 sending a message. It does not demonstrate a real inbox delivery (ML-1).
 
+### Manual free-provider qualification and inbox proof (Stage 6)
+
+This is deliberately an operator-run procedure; no automated test or
+`verify:day4` command sends external mail. Do not start until the sink-only
+gates pass: `npm run verify:mail`, the mail unit tests, the live `verify-mail-mode.mjs`
+and `verify-notification-quota.mjs` checks. The last check uses the deployed
+Account PostgreSQL schema, so stop if it reports a migration/schema mismatch.
+
+The operator reports that on 2026-10-02 a password-reset message reached a
+registered, operator-controlled inbox through Brevo external mode, and the
+one-time token was accepted by the confirmation endpoint (HTTP 204). The
+operator also exercised the reset flow in sink mode. The operator reports
+Brevo Free allows 300 messages per day and signup required only a personal
+email, without a card or company domain. The operator also reports replacing
+the SMTP key used during setup. This is manual evidence; retain a redacted
+provider receipt outside the repository without an address, token, message
+content, or credential. The sender address remains intentionally omitted from
+tracked documentation and environment examples.
+
+Use only a registered recipient account whose inbox the operator controls, and
+an existing unshared TODO owned by an operator-controlled account. The public
+share operation resolves the supplied email to an account; the notification
+worker independently checks that account and its current address before send.
+It sends a TODO-share notice, not a password-reset message, so no reset token is
+involved. The message contains the TODO ID; use a disposable test TODO and do
+not put personal data in its title or description.
+
+1. Configure these non-secret values in the local Compose environment. The
+   sender value is operator-reported as verified; retain the sink-only guard
+   until ready for the manual test:
+
+	```dotenv
+	MAIL_PROVIDER_HOST=smtp-relay.brevo.com
+	MAIL_PROVIDER_PORT=587
+	MAIL_PROVIDER_FROM=
+	MAIL_TEST_SINK_ONLY=true
+	MAIL_SECRET_DIR=./secrets/mail
+	```
+
+	Put SMTP `username`
+	and `password` in `./secrets/mail/smtp.json` (or the configured
+	`MAIL_SECRET_DIR`) using a local secret manager or secure editor. Do not put
+	credentials in `.env`, command arguments, shell history, logs, screenshots,
+	or repository files. The mounted file is read-only inside the containers.
+2. Set `MAIL_TEST_SINK_ONLY=false` in the local Compose environment and
+	recreate only the notification consumers so both replicas load that
+	explicit live-send permission:
+
+	```powershell
+	docker compose up -d --build --force-recreate account-notification-consumer
+	docker compose ps account-notification-consumer
+	```
+
+	Confirm two healthy consumer replicas. Do not use `docker compose config`,
+	`docker inspect`, or environment-dumping commands because they may disclose
+	configuration. Keep the shared mode at sink until the following checks.
+3. Read the mode, then enable external delivery with the audited operator
+	command. Enabling first opens and authenticates an SMTP connection with a
+	bounded timeout; it sends no message and sanitizes provider errors. These
+	commands print only the configured/effective mode:
+
+	```powershell
+	$env:MAIL_OPERATOR_ID = $env:USERNAME
+	docker compose run --rm --no-deps -T account-service node apps/account-service/scripts/mail-mode.mjs status
+	docker compose run --rm --no-deps -T -e MAIL_OPERATOR_ID=$env:MAIL_OPERATOR_ID account-service node apps/account-service/scripts/mail-mode.mjs external
+	docker compose run --rm --no-deps -T account-service node apps/account-service/scripts/mail-mode.mjs status
+	```
+
+	Continue only if the final read-back is `configuredMode=external` and
+	`effectiveMode=external`. If SMTP verification fails, the command does not
+	change the shared mode; stop and keep the system in sink mode. Do not print
+	the secret file or provider environment to diagnose it. A successful SMTP
+	verification proves connectivity/authentication only; it does not prove
+	sender approval, provider free-tier terms, or inbox delivery.
+
+The operator's reported completed trial used the password-reset flow; the
+one-time token was submitted privately and the confirmation endpoint returned
+HTTP 204. Do not repeat the request just to create another test email. If a
+future operator has no external receipt yet, trigger exactly one normal share
+notification as below.
+
+4. Trigger exactly one normal share notification. Enter values interactively
+	rather than putting them literally in a command. Do not run PowerShell
+	transcription or terminal/session recording during this step. The owner
+	token and inbox address remain in process memory only; the response output
+	is restricted to non-address identifiers:
+
+	```powershell
+	$ownerTokenSecure = Read-Host "TODO owner access token" -AsSecureString
+	$ownerToken = [System.Net.NetworkCredential]::new("", $ownerTokenSecure).Password
+	$todoId = Read-Host "ID of an existing unshared test TODO"
+	$recipientEmail = Read-Host "Registered operator-controlled inbox address"
+	$body = @{ recipientEmail = $recipientEmail } | ConvertTo-Json -Compress
+	$share = Invoke-RestMethod -Method Post `
+	  -Uri "http://localhost:3000/api/v1/todos/$todoId/shares" `
+	  -Headers @{ Authorization = "Bearer $ownerToken" } `
+	  -ContentType "application/json" -Body $body
+	$share | Select-Object id, todoId, recipientId, permission, sharedAt
+	Remove-Variable ownerTokenSecure, ownerToken, recipientEmail, body
+	```
+
+	Do not retry the request if its result is uncertain: first check the share
+	state and inbox, because a retry can create another notification after
+	cleanup. The per-address limit is five distinct notification events per
+	rolling 24 hours; retries of the same event reuse its reservation.
+5. Confirm the message in the controlled inbox and the provider's delivery
+	activity. Save evidence outside the repository, or record only provider,
+	UTC time, delivery outcome, and a redacted receipt reference. Redact the
+	recipient address and any message content from screenshots. Never capture a
+	bearer token, SMTP credential, full provider response, or reset token. The
+	application logs should contain neither recipient address nor credentials;
+	do not use raw broker payloads or database rows as evidence.
+6. Immediately disable external delivery and read it back. Then restore the
+	sink-only guard and recreate the two consumers:
+
+	```powershell
+	docker compose run --rm --no-deps -T -e MAIL_OPERATOR_ID=$env:MAIL_OPERATOR_ID account-service node apps/account-service/scripts/mail-mode.mjs sink
+	docker compose run --rm --no-deps -T account-service node apps/account-service/scripts/mail-mode.mjs status
+	```
+
+	Confirm both values are `sink`. Set `MAIL_TEST_SINK_ONLY=true` in the local
+	Compose environment, then run:
+
+	```powershell
+	docker compose up -d --build --force-recreate account-notification-consumer
+	docker compose ps account-notification-consumer
+	docker compose run --rm --no-deps -T account-service node apps/account-service/scripts/mail-mode.mjs status
+	```
+
+	Confirm two healthy replicas and `configuredMode=sink`,
+	`effectiveMode=sink`. Revoke or rotate the temporary provider credential
+	after the demonstration, and remove the local secret file when no longer
+	needed. Record ML-1 and ML-2 as proven only after the inbox receipt and
+	provider terms have both been witnessed; this procedure alone is not proof.
+
 ### Recipient quota and live verification (Stage 3)
 
 Mail only goes to the current address of a registered, non-deleting account.
@@ -99,24 +234,19 @@ docker compose run --build --rm --no-deps -T account-service node apps/account-s
 It creates and removes one test-only account, proves two workers share the
 same limit, that retries do not count again, and that a pending deletion
 prevents future sends. It neither starts a mail worker nor contacts a provider.
-On the current running database, the historical 011 deletion migration has a
-different schema from this checkout. The isolated 012 quota and 013 transport
-migrations were applied; the full deletion endpoint and account-erasure verifier still
-need a separate schema migration and live proof. Do not treat this verifier
-as evidence that the deployed deletion workflow works.
-
-On a clean database, `npm run migrate:account` applies the normal file-based
-migrations. For the existing database with the conflicting historical 011
-record, each command below was first dry-run with `--dry-run`, then used to
-apply only its named migration without faking or editing any previous row:
+On 2026-10-02 the deployed migration history was reconciled with the tracked
+Account and Todo migration files. Both normal migration runs completed:
 
 ```powershell
-docker compose run --build --rm --no-deps -T account-migrations npm run migrate -- --no-check-order --use-glob -m "migrations/012_create_notification_address_reservations.cjs" --no-verbose
-docker compose run --build --rm --no-deps -T account-migrations npm run migrate -- --no-check-order --use-glob -m "migrations/013_add_notification_transport_controls.cjs" --no-verbose
+docker compose run --rm --build account-migrations
+docker compose run --rm --build todo-migrations
 ```
 
-Do not use the single-file option to skip the legacy deletion-schema repair
-when deploying the account-deletion workflow itself.
+Use normal ordered migrations; do not bypass order checks or selectively skip
+the deletion-workflow upgrade. The account deletion migration refuses to run
+if legacy deletion requests exist, requiring an explicit state-preserving plan.
+The deployed account-erasure verifier still needs to be rerun against the
+reconciled schema before claiming full DG-10.
 
 ### Retry and DLQ replay (Stage 2)
 

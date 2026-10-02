@@ -1,9 +1,15 @@
 # Day 4 Mail Delivery Implementation Plan
 
-Status: Stages 1, 2, 4 and the Stage 5 sink-only outage/replay proof verified
-on 2026-10-02; Stage 3 mail-side quota verified separately. A real external
-provider/inbox send, provider throttling proof, and the deployed legacy
-deletion workflow remain open.
+Status: Stages 1-5 have their previously recorded implementation and sink-only
+proofs. On 2026-10-02 the operator reported one external Brevo password-reset
+email delivered to a controlled registered inbox; its token was accepted and
+the confirmation endpoint returned HTTP 204. The sink reset flow was also
+tested. The operator reports Brevo Free permits 300 messages per day and signup
+required only a personal email, with no card or company domain supplied; the
+SMTP key was replaced after setup. Retaining a redacted receipt and external
+provider refusal/throttling evidence remain open. Account and Todo migrations completed
+after reconciling the deployed history; lifecycle verification against that
+schema remains to be rerun.
 Scope: ML-1 through ML-8, including the Day 3 notification and password-reset behavior.
 
 ## Current baseline and constraints
@@ -39,11 +45,16 @@ Scope: ML-1 through ML-8, including the Day 3 notification and password-reset be
   address lookup and send; account deletion requests and email changes acquire
   the matching transaction lock before their user mutation.
 - The existing running account database records an older, incompatible 011
-  deletion migration. The 012 quota and 013 transport migrations were applied individually after
-  a dry run; `verify-notification-quota.mjs` tested the mail-side fence against
-  a temporary pending request. It does not prove the deployed deletion endpoint
-  or the full erasure verifier, which still require a separate schema reconciliation.
+  deletion migration. Its history was reconciled with the tracked Account and
+  Todo migrations on 2026-10-02, and both normal migration runs completed. The
+  deletion request table was confirmed empty before the guarded schema upgrade.
+  Rerun `verify:account-lifecycle` and the live account-erasure verifier before
+  claiming the deployed DG-10 flow.
 - Automated runs must remain sink-only even if the operator has external credentials.
+- The operator reports that the Brevo sender is verified and Brevo Free allows
+  300 messages per day. The sender address is intentionally omitted from tracked
+  files. The operator reports signup required only a personal email, without a
+  card or company domain.
 - Stage 4 uses one PostgreSQL mode row shared across notification replicas and a
   per-event `destination` that is pinned on first attempted send. The operator
   command is Docker-only and records each mode change without storing credentials.
@@ -52,7 +63,10 @@ Scope: ML-1 through ML-8, including the Day 3 notification and password-reset be
   Turning external mode off never sends a pinned external event to Mailpit;
   it is retried and eventually set aside in the DLQ. A pinned sink event stays
   in Mailpit even if the shared mode changes to external. Provider SMTP username
-  and password are read only from a read-only mounted file when needed.
+  and password are read only from a read-only mounted file when needed. The
+  manual external-mode command performs a bounded SMTP connectivity/authentication
+  check before changing shared mode; it does not send an email and exposes only a
+  generic failure.
 
 ## Delivery design to implement
 
@@ -60,9 +74,10 @@ Scope: ML-1 through ML-8, including the Day 3 notification and password-reset be
    Keep the existing `NotificationMailer` boundary; introduce a transport selector under
    it so business rules do not name a provider. Mailpit remains the default and the only
    automated-test transport. Add an external SMTP adapter using a verified sender on a
-   free-tier account controlled by the operator. Brevo free SMTP is the first candidate;
-   before selecting it, verify current signup, sender verification, daily quota, card,
-   and domain rules without purchasing anything. If it fails the no-card/no-domain gate,
+  free-tier account controlled by the operator. Brevo SMTP is the selected candidate;
+  the operator reports a verified sender and a 300-message daily allowance. Before
+  qualifying it, verify current signup, free quota, card and domain rules without
+  purchasing anything. If it fails the no-card/no-domain gate,
    use another qualifying provider with the same adapter contract. Never use production
    addresses for the demonstration except an inbox controlled by the operator.
 2. Add an operator-only runtime control backed by shared state (Redis or an existing
@@ -110,11 +125,11 @@ Scope: ML-1 through ML-8, including the Day 3 notification and password-reset be
 |---|---|---|
 | 1 (done) | Refusal/timeout regression tests added and now pass; invalid events still dead-letter without retry. | ML-5 (partial), ML-8 |
 | 2 (done) | Durable retry queue, confirmed publish, fenced PostgreSQL claims, terminal DLQ handoff and operator replay; unit tests plus live DB/RabbitMQ verifier passed. | ML-5 (partial), ML-8 |
-| 3 (mail-side done; erasure gate open) | Active-account lookup, atomic address quota and account/email-change fence; live two-worker database proof and lifecycle unit suite passed. Full erasure verification blocked by legacy deployed deletion schema. | ML-7 (partial), DG-10 (partial), ML-8 |
-| 4 (implemented; real-provider gate open) | PostgreSQL runtime switch and audit, provider-neutral SMTP adapter, mounted secret, pinned destination and kill switch; unit and live sink-only shared-state proofs passed. An external provider has not been qualified or sent mail. | ML-3 (partial), ML-4 (partial), ML-6 (partial), OP-7 (partial), ML-8 |
-| 5 (sink-only proof done) | `npm run verify:mail` runs 34 mail unit tests, starts an isolated two-consumer stack with forced Mailpit/blank provider configuration, stops Mailpit during a real reset request, observes two retries and DLQ, restarts it, and confirms local replay. Real-provider refusal/throttling remains a separate Stage 6 proof. | ML-5 (local path covered; external pending), ML-8, PR-4 (mail dependency) |
-| 6 | Only after all sink-mode gates pass, qualify a no-card/no-domain free provider, enable it manually, send one event to a registered account/inbox controlled by the operator, capture receipt without address, token, or credential in logs, then turn external delivery off and verify read-back. Manual inbox evidence is necessary for ML-1 and cannot be substituted by a unit test. | ML-1, ML-2, ML-3, ML-4, ML-7 |
-| 7 | Update `docs/events.md`, `docs/operations.md`, `docs/capacity.md`, `docs/testing.md`, `docs/QUESTIONS.md`, and `docs/traceability.md` with actual commands, limits, failure modes, measured evidence and honest coverage. Mark ML items complete in `docs/day-4-checklist.md` only after their checks pass. | ML-1..ML-8, EVT-12, OPS-5, PR-1 |
+| 3 (mail-side done; erasure verification pending) | Active-account lookup, atomic address quota and account/email-change fence; live two-worker database proof and lifecycle unit suite passed. Migration history is reconciled; rerun full erasure verification against the updated schema. | ML-7 (mail path covered), DG-10 (deployed proof pending), ML-8 |
+| 4 (implemented; provider qualification reported) | PostgreSQL runtime switch and audit, provider-neutral SMTP adapter, mounted secret, pinned destination and kill switch; manual enable performs bounded SMTP preflight. Operator tested external and sink reset flows; reports 300/day, personal-email-only signup, no card/company domain, and replacement SMTP key. | ML-2, ML-3, ML-4 (operator-confirmed), ML-6 (replacement proof open), OP-7, ML-8 |
+| 5 (sink-only proof done) | `npm run verify:mail` runs 34 mail unit tests, starts an isolated two-consumer stack with forced Mailpit/blank provider configuration, stops Mailpit during a real reset request, observes two retries and DLQ, restarts it, and confirms local replay. External provider refusal/throttling is not demonstrated. | ML-5 (local path covered; external pending), ML-8, PR-4 (mail dependency) |
+| 6 (manual delivery performed) | Operator reports a Brevo reset email reached a controlled registered inbox on 2026-10-02; its token was accepted (HTTP 204). Sink reset also worked. Operator reports Brevo Free's 300/day limit, personal-email-only signup, no card/company domain, and replacement SMTP key. Retain a redacted receipt outside the repository and leave external mode off after testing. | ML-1, ML-2, ML-3, ML-4, ML-7 (operator-reported manual evidence) |
+| 7 (documentation updated) | Updated `docs/events.md`, `docs/operations.md`, `docs/capacity.md`, `docs/testing.md`, `docs/QUESTIONS.md`, `docs/traceability.md`, and `docs/day-4-checklist.md` with observed results, mail limits, commands, failure modes, and remaining evidence gaps. | ML-1..ML-8, EVT-12, OPS-5, PR-1 |
 
 ## Verification contract
 
@@ -125,6 +140,7 @@ before making any request; unit tests mock Nodemailer and reject external mode.
 The command stops and restores only its disposable Compose project, never the
 operator's running stack or provider. It prints event state but no reset-token
 payload, credential or message body.
-External live-send proof is deliberately separate from every automated command and
-requires explicit operator action. Record actual provider terms and the witnessed
-delivery only after verification; until then ML-1 through ML-7 are uncovered.
+External live-send proof remains separate from every automated command. ML-1 through
+ML-4 are operator-reported as demonstrated; ML-5 remains partial until provider
+refusal/throttling is demonstrated, and ML-6 remains partial until replacement by
+another provider is demonstrated. Automated tests remain sink-only.

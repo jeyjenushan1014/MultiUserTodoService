@@ -1,6 +1,6 @@
 # Day 4 Two-Day Execution Checklist
 
-Updated: 2026-09-30
+Updated: 2026-10-02
 Branch: `main`
 
 This is the current execution checklist for the Day 4 requirements. `[x]` means the
@@ -152,7 +152,7 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [x] EV-6 independent producer/consumer compatibility checks (`event-evolution.compatibility.test.ts` validates production factory output against Todo consumer schema)
 - [x] EV-7 previous API compatibility (registration preserves legacy `data.id/email/createdAt` alongside `data.user`)
 - [x] EV-8 old and new service versions together (`docker-compose.ev8.yml` ran distinct old/new Account images concurrently against one DB; `verify:ev8-live` confirmed both writes and v1/v2 outbox rows)
-- [x] EV-9 reversible migration test (`npm run verify:evolution:schema` audits 27/27 migrations with working `down()` functions)
+- [x] EV-9 reversible migration test (`npm run verify:evolution:schema` audits all 35 migrations with working `down()` functions)
 - [x] EV-10 rollback without database restore (reversals drop column/table cleanly without database restore)
 - [x] EV-11 contract replacement preserves old verification (multi-contract support unit-tested in `backend-chain-integration.test.ts`)
 - [x] Update `docs/events.md` and `docs/architecture.md` for event-version rollout and compatibility rules
@@ -189,24 +189,31 @@ Stages 1 and 2 passed on 2026-10-02: 166 Account Service tests plus the live
 Stage 3 mail-side tests and the live `verify-notification-quota.mjs` passed: five
 distinct events per registered address per rolling day, retries do not consume
 another slot, and queued sends stop at pending deletion or address change.
-The running account database uses a different historical 011 deletion schema;
-full deletion-endpoint and `verify-account-erasure.mjs` proof remain blocked
-until that schema is reconciled with the current repository.
+Account and Todo migration histories were reconciled and both normal migration
+runs completed on 2026-10-02. The deployed account-erasure verifier should be
+rerun against the reconciled schema before claiming full DG-10.
 Stage 4 has a shared PostgreSQL mail-mode switch, audit, sink-only default,
 per-event destination pinning, a provider-neutral SMTP adapter, and a
 read-only secret-file mount. `verify-mail-mode.mjs` passed against the live
 database with two repository instances and restored sink mode. The operator
-command rejected external mode without configuration. No real provider mail
-has been sent, so ML-3/ML-4/ML-6 and OP-7 remain unchecked pending live proof.
+also reports a successful external password-reset email and a sink-mode reset.
+Brevo's 300/day quota, personal-email-only signup, no card/company domain, and
+SMTP-key replacement are operator-reported.
 
-- [ ] ML-1 external provider real-mail demonstration
-- [ ] ML-2 free-tier provider configuration
-- [ ] ML-3 runtime destination switch with Mailpit default
-- [ ] ML-4 provider credential protection
+- [x] ML-1 external provider real-mail demonstration (operator reports reset email received; token confirmation returned HTTP 204)
+- [x] ML-2 free-tier provider configuration (operator reports Brevo Free allows 300/day and signup required only a personal email; no card or company domain supplied)
+- [x] ML-3 runtime destination switch with Mailpit default (sink and external reset flows exercised)
+- [x] ML-4 provider credential protection (operator reports replacing the SMTP key shared during setup; keep the replacement only in the local secret file)
 - [ ] ML-5 bounded delayed provider retry and DLQ (local live outage/replay verified; external provider refusal/throttling not yet demonstrated)
 - [ ] ML-6 provider replacement without business-rule changes
-- [ ] ML-7 registered-recipient validation and five-per-address/day limit (mail-side live proof passed; full running-stack proof pending)
+- [x] ML-7 registered-recipient validation and five-per-address/day limit (live quota verifier plus controlled registered-account reset)
 - [x] ML-8 automated tests do not send external mail
+
+Stage 6's external reset and sink reset were reported successful on 2026-10-02.
+The operator reports Brevo Free allows 300/day, signup used only a personal
+email, and the SMTP key was replaced. Keep a redacted provider receipt outside
+the repository. Provider refusal and replacement evidence remain open for ML-5
+and ML-6.
 - [x] OP-1 rebuild commands for every projection (BC-6 chain projection rebuildable via `npm run rebuild:chain-projection`)
 - [ ] OP-2 notification DLQ replay command exists; inspection/replay for every DLQ remains pending
 - [ ] OP-3 targeted event replay

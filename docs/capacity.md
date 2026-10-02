@@ -23,6 +23,7 @@ explicit rather than inherited from library defaults.
 | Auth rate limit | 10 requests / 60 seconds | per caller | 10 per caller/window | Shared Redis counter |
 | Password-reset rate limit | 5 requests / 900 seconds | per caller | 5 per caller/window | Shared Redis counter |
 | Mail recipient quota | 5 distinct events / rolling 24 hours | 2 consumers | 5 per normalized address across both | PostgreSQL address advisory transaction lock plus unique `(event_id, email)` reservation; retry reuses a slot. Each worker holds one DB client during send, so the two consumers share a maximum of 20 pool connections. |
+| Brevo Free provider quota | 300 messages / day (operator-reported) | 1 provider account | Provider-account limit, separate from the application quota | Operator reports signup required only a personal email, with no card or company domain; the application does not enforce the provider daily cap. |
 
 Database pool totals stay below the default PostgreSQL connection budget reserved for the two
 application databases. RabbitMQ prefetch and batch sizes bound in-flight work; PostgreSQL row locks,

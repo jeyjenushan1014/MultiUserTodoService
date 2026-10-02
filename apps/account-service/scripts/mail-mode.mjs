@@ -15,7 +15,8 @@ try {
       throw new Error("MAIL_OPERATOR_ID must identify the operator (1-100 characters)");
     }
     if (command === "external") {
-      await loadExternalMailer();
+      const mailer = await loadExternalMailer();
+      await mailer.verify();
     }
     await store.setMode(command, operator);
   }

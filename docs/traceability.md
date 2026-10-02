@@ -1,9 +1,8 @@
 # Day 4 Traceability
 
-Only a completely implemented requirement is allowed in the evidence table. A partial
-implementation, design, planned test, or manual code reading is not evidence. Incomplete
-requirements stay out of the evidence table and are listed separately as coverage gaps, as required
-by TRC-2.
+Only completely implemented requirements belong in the completed evidence table. Partial or
+operator-reported results are listed separately with their remaining gaps and are not presented
+as full automated coverage, as required by TRC-2.
 
 ## Completed requirements and evidence
 
@@ -42,7 +41,7 @@ by TRC-2.
 | OP-1 | Covered (chain copy) | `npm run rebuild:chain-projection` | One documented command rebuilds the local relational chain projection from chain source while services are running, without manual database edits. |
 | EV-1 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Schema changes are non-blocking and additive; concurrent queries continue serving traffic during migration without failures. |
 | EV-2 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Old application code (which omits new columns) continues executing correctly against evolved schemas via defaults and nullable fields. |
-| EV-9 | Covered | `npm run verify:evolution:schema` | 100% of migrations across Account Service (10) and Todo Service (17) define reversible `exports.down` handlers; verified automatically. |
+| EV-9 | Covered | `npm run verify:evolution:schema` | 100% of migrations across Account Service (15) and Todo Service (20) define reversible `exports.down` handlers; verified automatically. |
 | EV-10 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Reversals drop added schema components cleanly without corrupting core data or requiring database restore. |
 | EV-11 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Replacing a contract retains verifiable historical records anchored by previous addresses. |
 | EV-7 | Covered | `npm run test -w @todo/account-service -- registration.controller.test.ts` and `npm run test -w @todo/gateway -- registration.controller.compatibility.test.ts` | Registration returns the previous flat `data.id/email/createdAt` fields and current `data.user` shape. |
@@ -74,46 +73,31 @@ contain a retained old image/tag or versioned Compose deployment fixture.
 
 The following remain outside Day 4 evidence: full ARC-8 propagation latency numbers, real-container
 workflow stop/restart automation required by PR-4, workflow database/HTTP integration assertions
-called out in the workflow table below, and several unrelated requirement groups (BC-*, EV-*,
-remaining PF-*, OP-*, PR-*, ML-*, DOC-*, EVT-*, ONC-*, OPS-*, and TRC-*). DG-1 through DG-10
-are covered by `npm run verify:account-lifecycle`, export contract/build checks, retention implementation,
-and the live `verify-account-erasure.mjs` proof. Public chain history is immutable and opaque;
-local identity-linked state is removed or anonymized. These remaining gaps are documented and
-tracked; they are not claimed as covered by this commit.
+called out in the workflow table below, and unrelated requirement groups (BC-*, EV-*, remaining PF-*,
+OP-*, PR-*, DOC-*, EVT-*, ONC-*, OPS-*, and TRC-*). Account and Todo migrations were reconciled and
+completed on 2026-10-02; rerun the deployed account-erasure verifier against the reconciled schema
+before claiming full DG-10. Public chain history remains immutable and opaque.
 
-ML-5 and ML-8 have local mail-failure evidence: `npm run verify:mail` (34
-notification unit tests plus a disposable live Compose run) makes a real
-password-reset request while Mailpit is stopped, requires HTTP 202, observes
-unrelated TODO read/write HTTP 200/201, two delayed retries and a terminal
-notification DLQ entry, restarts Mailpit,
-replays the specific event, and confirms a local message. It asserts the
-worker's Compose environment is sink-only with no external provider host,
-and neither this check nor the mocked unit tests send external mail.
-`docker compose run --build --rm --no-deps -T account-service node
-apps/account-service/scripts/verify-notification-retry.mjs` also tests lease
-recovery and competing PostgreSQL claims. Real-provider refusal/throttling is
-still unverified, so ML-5 is not claimed completely; PR-4 is covered for mail
-only, not all Day 3/4 failure dependencies.
+## Mail Status (Stage 7)
 
-ML-7 and DG-10 have mail-side evidence: `docker compose run --build --rm
---no-deps -T account-service node apps/account-service/scripts/verify-notification-quota.mjs`
-proves the shared five-per-24-hour quota, retry reuse, changed-account address
-checks, and send/deletion advisory lock against PostgreSQL. `npm run
-verify:account-lifecycle` covers code-level erasure. The live account database
-contains an older 011 deletion schema, so the deployed deletion endpoint and
-`verify-account-erasure.mjs` have not passed; neither full requirement is
-claimed from this partial proof.
+This status table includes manual and partial results; only rows explicitly marked covered are
+complete. External delivery is operator-reported and is never exercised by automated tests.
 
-ML-3, ML-4, ML-6 and OP-7 have partial Stage 4 evidence: `npm run test -w
-@todo/account-service -- src/notifications/__tests__/notification.mailer.test.ts
-src/notifications/__tests__/notification.external.test.ts` checks pinning,
-test-mode refusal, file-only credentials, sanitization and provider replacement;
-`docker compose run --build --rm --no-deps -T account-service node
-apps/account-service/scripts/verify-mail-mode.mjs` checks live shared mode,
-two readers, audit and external kill switch without sending mail. The Docker
-operator command rejects enabling external without the provider file. No
-actual external inbox delivery or qualified free provider is proven yet, so
-these requirements remain outside the complete evidence table.
+| Requirement | Status | Evidence / check | Remaining gap |
+|---|---|---|---|
+| ML-1 | Manual delivery reported complete | On 2026-10-02 the operator reported receiving a Brevo password-reset email for a registered, operator-controlled inbox; the one-time token was accepted and confirmation returned HTTP 204. Recipient and token are intentionally omitted. | Keep the provider receipt redacted and outside the repository. |
+| ML-2 | Operator-confirmed | Operator reports Brevo Free permits 300 messages per day and signup required only a personal email; no card or company domain was supplied. | Keep a redacted record of the plan and signup terms outside the repository. |
+| ML-3 | Covered | `npm run test -w @todo/account-service -- src/notifications/__tests__/notification.mailer.test.ts src/notifications/__tests__/notification.external.test.ts`; live `verify-mail-mode.mjs`; operator reported successful sink and external reset flows. | Keep sink as the default and verify read-back after the trial. |
+| ML-4 | Operator-confirmed | Unit tests cover mounted-file credentials and sanitized provider errors; external SMTP preflight succeeded; operator reports replacing the exposed SMTP key. | Keep the replacement key only in the local secret file and never commit it. |
+| ML-5 | Partial | `npm run verify:mail` exercises Mailpit outage, retries, DLQ, and replay; originating operation remains asynchronous. | External provider refusal, throttling, and outage proof remain open. |
+| ML-6 | Partial | Provider-neutral transport selector and provider adapter tests exist. | Live provider replacement without business-rule changes is not demonstrated. |
+| ML-7 | Covered (mail path) | `docker compose run --build --rm --no-deps -T account-service node apps/account-service/scripts/verify-notification-quota.mjs` proves the shared five-per-24-hour quota and recipient/deletion fences; operator reset test used a registered account. | Re-run quota verification after any schema or mail-policy change. |
+| ML-8 | Covered | `npm run verify:mail` forces sink-only configuration; mail unit tests mock Nodemailer. | Automated tests must continue to reject external transport. |
+
+`npm run verify:mail` is the automated sink-only outage proof; it does not send
+external mail. The Stage 6 external reset was a manual operator action, not an
+automated test. Brevo's daily quota and the sender verification are operator-
+reported, not independently verified by this repository.
 
 ## Evidence file and test pointers
 

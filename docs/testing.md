@@ -181,6 +181,18 @@ then removes only its own project and volumes. It is also called by
 `npm run verify:day4`. External provider throttling needs the separate live
 provider gate; this command must never contact one.
 
+### Stage 6 manual delivery result
+
+On 2026-10-02 the operator reported receiving a password-reset email through
+Brevo external mode at a registered, operator-controlled inbox. The one-time
+token was used privately and the confirm endpoint returned HTTP 204. The same
+reset flow was also tested in sink mode. This manual result is separate from
+automated tests: `npm run verify:mail` remains sink-only and no test contacts
+Brevo. Retain any receipt outside the repository in redacted form; do not record
+the recipient address, token, message body, SMTP key, or raw provider response.
+Brevo Free's 300-message daily quota, personal-email-only signup without a
+card or company domain, and post-test SMTP-key replacement are operator-reported.
+
 For manual inspection of the same failure path:
 
 ```powershell

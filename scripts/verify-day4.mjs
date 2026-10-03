@@ -25,9 +25,9 @@ export function isSnapshotSource(path, untracked = false) {
   const parts = path.split(/[\\/]/);
   if (parts.some((part) => !part || part === ".." || [
     ".git", ".verification", "node_modules", "dist", "coverage", "secrets", ".secrets",
-    "tmp", "temp", ".vscode", ".idea", "cache", "typechain-types",
+    "tmp", "temp", ".vscode", ".idea", "typechain-types",
   ].includes(part.toLowerCase()))) return false;
-  if (parts.slice(0, 3).join("/").toLowerCase() === "contracts/onchain/artifacts") return false;
+  if (["contracts/onchain/artifacts", "contracts/onchain/cache"].includes(parts.slice(0, 3).join("/").toLowerCase())) return false;
   const name = parts.at(-1);
   if ((name.startsWith(".env") && name !== ".env.example") ||
     /\.(?:pem|key|pfx|p12|dump|bak|log|tsbuildinfo)$/i.test(name) ||
@@ -158,6 +158,7 @@ export function redactVerificationOutput(output, env) {
     "INTERNAL_SERVICE_SECRET", "JWT_SECRET"]) {
     if (env[key]) text = text.replaceAll(env[key], "[REDACTED]");
   }
+  text = text.replace(/\b(?:postgres(?:ql)?|amqps?|rediss?|https?):\/\/[^\s"'<>]+/gi, "[REDACTED_URL]");
   return text;
 }
 
@@ -220,6 +221,17 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     }
     return result.stdout ?? "";
   };
+  const runRedacted = (command, args, label, timeout = commandTimeoutMs) => {
+    console.log(`=== ${label} ===`);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error("Verification exceeded its 30-minute total deadline");
+    const result = spawnSync(command, args, {
+      cwd: clone, env, encoding: "utf8", timeout: Math.min(timeout, remaining), maxBuffer: 16 * 1024 * 1024,
+    });
+    const output = redactVerificationOutput(`${result.stdout ?? ""}${result.stderr ?? ""}`, env);
+    if (output.trim()) console.log(output.trim());
+    if (result.error || result.status !== 0) throw new Error(`${label} failed (${result.error?.code ?? result.status})`);
+  };
   await mkdir(scratch, { recursive: true });
   try {
     const source = workingTree
@@ -248,7 +260,9 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       volumes: config.volumes, networks: config.networks,
     }, null, 2));
     console.log(`Source: ${source.sourceKind}; base revision: ${revision}; isolated project: ${project}; no host ports`);
-    dc(["build"], "Build runtime images from isolated clean source");
+    for (const service of ["account-migrations", "todo-migrations", "account-service", "todo-service", "gateway"]) {
+      dc(["build", service], `Build isolated ${service} image (one target at a time)`);
+    }
     const todoImage = `multi-user-todo-platform-todo-service:${release}`;
     dc(["--profile", "verification", "build", "validation"], "Build Node 24 locked-dependency validation image");
     stackAttempted = true;
@@ -266,6 +280,10 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       "fetch('http://127.0.0.1:3000/health/dependencies',{signal:AbortSignal.timeout(10000)}).then(async r=>{const b=await r.json();if(!r.ok||b.status!=='healthy')process.exit(1)}).catch(()=>process.exit(1))"],
     "Verify complete dependency health");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:e2e"], "Complete live E2E suite");
+    for (const script of ["verify-mail-mode.mjs", "verify-notification-retry.mjs", "verify-notification-quota.mjs"]) {
+      runRedacted("docker", [...compose, "exec", "-T", "account-service", "node", `apps/account-service/scripts/${script}`],
+        `Sink-only notification verification: ${script}`, 120_000);
+    }
     dc(["exec", "-T", "account-service", "node", "apps/account-service/scripts/verify-workspace-concurrency.mjs"], "Workspace PostgreSQL concurrency proof");
     for (let pass = 1; pass <= 2; pass++) {
       dc(["exec", "-T", "todo-service", "sh", "-c",
@@ -277,20 +295,16 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       "exec", "-T", "todo-service", "node", "apps/todo-service/scripts/progress-status.mjs", "--require-ready",
     ], undefined, { capture: true, timeout: 20_000 })));
     console.log(JSON.stringify({ check: "ops:progress", result: "passed", ...progress }));
-    console.log("=== Operator replay, DLQ and progress rehearsal ===");
-    const operatorResult = spawnSync(process.execPath, [join(clone, "scripts", "verify-operations.mjs")], {
-      cwd: clone, env, encoding: "utf8", timeout: Math.max(1, Math.min(commandTimeoutMs, deadline - Date.now())),
-      maxBuffer: 16 * 1024 * 1024,
-    });
-    const operatorOutput = redactVerificationOutput(`${operatorResult.stdout ?? ""}${operatorResult.stderr ?? ""}`, env);
-    if (operatorOutput.trim()) console.log(operatorOutput.trim());
-    if (operatorResult.error || operatorResult.status !== 0) {
-      throw new Error(`Operator replay, DLQ and progress rehearsal failed (${operatorResult.error?.code ?? operatorResult.status})`);
-    }
+    runRedacted(process.execPath, [join(clone, "scripts", "verify-operations.mjs")], "Operator replay, DLQ and progress rehearsal");
+    const finalProgress = await waitForProgress(() => JSON.parse(dc([
+      "exec", "-T", "todo-service", "node", "apps/todo-service/scripts/progress-status.mjs", "--require-ready",
+    ], undefined, { capture: true, timeout: 20_000 })));
+    console.log(JSON.stringify({ check: "ops:progress-after-restart", result: "passed", ...finalProgress }));
     if (Date.now() >= deadline) throw new Error("Verification exceeded its 30-minute command budget");
     const rollback = await verifyRollback({ sourceImage: todoImage, cwd: clone, env });
     evidence = { result: "passed", ...source, project, cleanCommittedSource: !workingTree,
-      isolatedLocalChain: true, sinkOnlyMail: true, rollback };
+      isolatedLocalChain: true, sinkOnlyMail: true, mailModeRetryQuotaVerified: true,
+      progressVerifiedAfterConsumerRestart: true, rollback };
     await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
     console.log(JSON.stringify(evidence));
     return evidence;

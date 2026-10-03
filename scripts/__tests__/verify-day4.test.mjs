@@ -44,6 +44,7 @@ test("operator stdout and stderr redact credential values", () => {
   assert.equal(redactVerificationOutput("postgres://private secret-value visible", {
     ACCOUNT_DATABASE_URL: "postgres://private", JWT_SECRET: "secret-value",
   }), "[REDACTED] [REDACTED] visible");
+  assert.equal(redactVerificationOutput("failed at http://local:1234/path postgres://other:secret@db/name", {}), "failed at [REDACTED_URL] [REDACTED_URL]");
 });
 test("refuses published ports, shared resources and host escape", () => {
   const valid = { name: "isolated", services: { api: {} }, volumes: { db: { name: "isolated_db" } } };
@@ -115,12 +116,13 @@ test("real clean clone uses only committed source, excluding edited files and lo
 test("snapshot exclusions apply even to tracked secret and generated paths", () => {
   for (const path of [".env", ".env.local", "apps/a/.env.production", "secrets/mail/smtp.json",
     "apps/a/node_modules/module.js", "apps/a/dist/server.js", ".verification/source.js", "../outside.txt",
-    "private-key.json", "tls.pem", "account.dump", ".git/config", "contracts/onchain/artifacts/compiled.json"]) {
+    "private-key.json", "tls.pem", "account.dump", ".git/config", "contracts/onchain/artifacts/compiled.json", "contracts/onchain/cache/generated.json"]) {
     assert.equal(isSnapshotSource(path), false, path);
   }
   for (const path of [".env.example", "scripts/new-script.mjs", "apps/a/src/server.ts",
     "contracts/onchain/ignition/deployments/chain-31337/build-info/fixture.json",
-    "contracts/onchain/ignition/deployments/chain-31337/artifacts/TaskHistoryModule#TaskHistory.json"]) {
+    "contracts/onchain/ignition/deployments/chain-31337/artifacts/TaskHistoryModule#TaskHistory.json",
+    "apps/todo-service/src/modules/todo/cache/redis.todo.read.cache.ts"]) {
     assert.equal(isSnapshotSource(path), true, path);
   }
   assert.equal(isSnapshotSource("unreviewed.json", true), false);

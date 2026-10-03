@@ -78,7 +78,7 @@ try {
   const sink = probe("account-service", `
 import { env } from "./apps/account-service/dist/config/env.js";
 console.log(JSON.stringify({ sinkOnly: env.MAIL_TEST_SINK_ONLY }));`);
-  assert.equal(sink.sinkOnly, true, "Rehearsal must never send external mail");
+  assert.equal(sink.sinkOnly, "true", "Rehearsal must never send external mail");
   const deadline = Date.now() + 30_000;
   while (Object.values(queueCounts()).some((count) => count !== 0)) {
     if (Date.now() > deadline) throw new Error("Consumer queues did not drain before rehearsal");

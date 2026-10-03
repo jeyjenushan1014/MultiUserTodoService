@@ -1,62 +1,16 @@
-import { connect } from "amqplib";
-import { z } from "zod";
+import { main } from "./dlq-operations.mjs";
 
-import { database } from "../dist/config/database.js";
-import { env } from "../dist/config/env.js";
-import { PostgresNotificationDeliveryRepository } from "../dist/notifications/postgres-notification-delivery.repository.js";
-
-const eventId = z.uuid().parse(process.argv[2]);
-const connection = await connect(env.RABBITMQ_URL);
-const channel = await connection.createConfirmChannel();
-const repository = new PostgresNotificationDeliveryRepository();
-const held = [];
-let selected;
-
-function matchesEvent(message) {
-  try {
-    const event = JSON.parse(message.content.toString("utf8"));
-    return typeof event === "object" && event !== null && event.eventId === eventId;
-  } catch {
-    return false;
-  }
-}
-
-try {
-  const state = await channel.checkQueue(env.RABBITMQ_NOTIFICATION_DLQ);
-  if (state.messageCount > 1000) {
-    throw new Error("Notification DLQ exceeds the bounded replay scan (1000 messages)");
-  }
-
-  for (let index = 0; index < state.messageCount; index += 1) {
-    const message = await channel.get(env.RABBITMQ_NOTIFICATION_DLQ, { noAck: false });
-    if (message === false) break;
-    if (matchesEvent(message)) {
-      selected = message;
-      break;
-    }
-    held.push(message);
-  }
-
-  if (selected === undefined) {
-    throw new Error(`Notification ${eventId} was not found in the DLQ`);
-  }
-
-  const result = await repository.resetForReplay(eventId);
-  if (result.status === "ready") {
-    channel.sendToQueue(env.RABBITMQ_NOTIFICATION_QUEUE, selected.content, {
-      persistent: true,
-      headers: { "x-notification-attempt": 1 },
-    });
-    await channel.waitForConfirms();
-    await repository.markReplayQueued(eventId, result.processingToken);
-  }
-  channel.ack(selected);
-  selected = undefined;
-  console.log(result.status === "ready" ? "Notification queued for replay" : "Already queued or delivered; stale DLQ copy removed");
-} finally {
-  if (selected !== undefined) channel.nack(selected, false, true);
-  for (const message of held) channel.nack(message, false, true);
-  await channel.close();
-  await connection.close();
-  await database.end();
+const args = process.argv.slice(2);
+if (args.length !== 1) {
+  console.error("Usage: replay-notification-dlq.mjs <event-id>; DLQ_OPERATOR_ID is required");
+  process.exitCode = 1;
+} else {
+  main([
+    "replay",
+    "--queue", process.env.RABBITMQ_NOTIFICATION_DLQ ?? "todo.notifications.dlq",
+    "--event-id", args[0],
+  ]).catch((error) => {
+    console.error(error instanceof Error ? error.message : "Notification replay failed");
+    process.exitCode = 1;
+  });
 }

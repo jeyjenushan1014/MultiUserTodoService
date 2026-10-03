@@ -262,7 +262,7 @@ try {
   });
 
   runDocker([
-    "exec", "-T", "account-service", "node",
+    "exec", "-T", "-e", "DLQ_OPERATOR_ID=isolated-mail-rehearsal", "account-service", "node",
     "apps/account-service/scripts/replay-notification-dlq.mjs", exhausted.eventId,
   ], { quiet: true });
   console.log("Mailpit restarted; DLQ event replayed to the local sink.");

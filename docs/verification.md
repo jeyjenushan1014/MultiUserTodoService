@@ -43,6 +43,19 @@ tests, API and authorization checks, live E2E, workspace concurrency and repeate
 backfill dry-run, repeated chain projection rebuild, operator replay/DLQ/progress
 rehearsals, and retained-image rollback mechanics.
 
+The local mail checks explicitly run `verify-mail-mode.mjs`,
+`verify-notification-retry.mjs`, and `verify-notification-quota.mjs` inside Account
+with sink-only delivery. The mode test exercises audited mode changes and the
+external kill switch without contacting an external provider. After the operator
+rehearsal restarts its consumers, the verifier again waits for all six queues to
+drain and the chain reader to be caught up. Captured operator/mail diagnostics
+redact ephemeral credentials and URLs; the success receipt contains neither.
+
+The separate OP-8 restricted-login scratch rehearsal is not automatically run
+against service databases: its loopback scratch-name guard must remain intact.
+Public-chain transactions, external mail-provider checks, and real incident
+actions require separate approvals and are outside this local automated scope.
+
 The operator rehearsal runs on the host from the isolated clone or source snapshot. It receives
 the ephemeral verification environment, isolated-project guards, both Compose
 file selectors, and the empty env-file selector. Its Docker commands execute

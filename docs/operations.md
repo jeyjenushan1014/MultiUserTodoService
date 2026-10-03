@@ -209,7 +209,8 @@ failure before replay. For a known notification event ID, the supported targeted
 
 ```powershell
 $env:EVENT_ID = Read-Host "Notification event UUID"
-docker compose run --rm --no-deps -T account-service node apps/account-service/scripts/replay-notification-dlq.mjs "$env:EVENT_ID"
+$env:DLQ_OPERATOR_ID = $env:USERNAME
+npm run ops:dlq -- replay --queue todo.notifications.dlq --event-id "$env:EVENT_ID"
 ```
 
 The script targets one notification event, preserves nonmatching messages, checks terminal
@@ -657,9 +658,12 @@ For one known notification event already in `todo.notifications.dlq`, set
 `$env:EVENT_ID` to its event UUID and run:
 
 ```powershell
-docker compose run --build --rm --no-deps -T account-service node apps/account-service/scripts/replay-notification-dlq.mjs "$env:EVENT_ID"
+$env:DLQ_OPERATOR_ID = $env:USERNAME
+npm run ops:dlq -- replay --queue todo.notifications.dlq --event-id "$env:EVENT_ID"
 ```
 
+The legacy `replay-notification-dlq.mjs <event-id>` delegates to the same audited CLI
+and also requires `DLQ_OPERATOR_ID`; it is not an unaudited bypass.
 This scans at most 1,000 messages, holding nonmatching entries unacknowledged until
 the scan finishes and then returning them to the DLQ. Only a terminal delivery
 can be reset for replay; an already sent event is acknowledged without resending.

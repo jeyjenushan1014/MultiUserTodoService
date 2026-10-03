@@ -1,6 +1,6 @@
 # Day 4 Two-Day Execution Checklist
 
-Updated: 2026-10-03
+Updated: 2026-10-04
 Branch: `main`
 
 This is the current execution checklist for the Day 4 requirements. `[x]` means the
@@ -12,8 +12,10 @@ requirement.
 
 ```powershell
 npm run check
+npm run test:contracts
 npm run test:docs
 npm run verify:authorization
+npm run verify:traceability
 npm run test:e2e -w @todo/gateway
 npm run verify:day4
 

@@ -129,6 +129,60 @@ The grouped statuses above intentionally do not mark PR-1, PR-3, PR-4, PR-5, PR-
 PR-7, PR-8, DOC-12, EVT-8..EVT-11, ARC-8, OPS-1..OPS-6, or TRC-1..TRC-5 as fully
 complete. No missing check is inferred from documentation alone.
 
+## Exact requirement-level status matrix
+
+The rows below map each requested identifier to a standalone executable check where one
+exists. `Partial` means the check covers a real slice but not the complete requirement.
+`Uncovered` means no automated check currently exists; the em dash is intentional.
+`npm run verify:traceability` rejects missing/duplicate identifiers, invalid statuses,
+missing evidence notes, and non-existent root npm scripts. It does not convert partial
+evidence into completion.
+
+| Requirement | Status | Check | Evidence / remaining gap |
+|---|---|---|---|
+| PR-1 | Partial | `npm run verify:traceability` | Verifies this requested-ID matrix; a full row for every requirement in the source training document is still outstanding. |
+| PR-2 | Partial | `npm run test` | Independent event compatibility tests exist; there is no independent contract for every producer/consumer pair. |
+| PR-3 | Partial | `npm run test` | Registration and event compatibility tests run without co-starting producers and consumers; the full pairwise compatibility matrix is missing. |
+| PR-4 | Partial | `npm run verify:day4` | Mailpit stop/retry/restart is exercised; automated stop/recovery coverage for every dependency and workflow process is not complete. |
+| PR-5 | Partial | `npm run verify:day4` | Clean committed-clone isolation is implemented; successful aggregate clean-clone and second-run evidence is required before upgrading this status. |
+| PR-6 | Partial | `npm run test:docs` | API endpoint and section presence is checked; behavior statements across all operational/design documents are not content-verified. |
+| PR-7 | Partial | `npm run verify:day4` | Each invocation creates a unique Compose project and cleans it; an automated repeated-run equivalence comparison is not implemented. |
+| PR-8 | Uncovered | — | The eight controlled breakages, observed failures, detection times, and restored state have not been recorded. |
+| DOC-10 | Partial | `npm run test:docs` | API endpoints are enumerated; all capability documentation is not verified against behavior. |
+| DOC-11 | Partial | `npm run test:docs` | Legacy registration compatibility has a regression test; complete version lifecycle and sunset-date checks are absent. |
+| DOC-12 | Partial | `npm run test:docs` | Endpoint presence is checked; documented status codes are not exhaustively compared with route responses. |
+| EVT-8 | Partial | `npm run test` | Compatibility tests cover selected event versions, not every version/consumer pair. |
+| EVT-9 | Partial | `npm run test` | Selected compatibility behavior is executable; catalogue rules are not exhaustively validated against all changes. |
+| EVT-10 | Partial | `npm run test` | Shared schemas and selected payload tests run; there is no exhaustive documentation-to-schema field comparison. |
+| EVT-11 | Partial | `npm run test` | Chain projection/reorganization tests run; catalogue coverage for every contract event/consumer is not exhaustive. |
+| EVT-12 | Partial | `npm run verify:mail` | Sink-only mail failure/retry is exercised; complete mail catalogue checks and external-provider refusal are outstanding. |
+| ARC-8 | Partial | `npm run verify:day4` | Isolated replicas and authorization propagation are checked; end-to-end maximum revocation timing is not part of this aggregate yet. |
+| ARC-9 | Partial | `npm run verify:day4` | Workflow state/retry unit coverage runs; ordered live participant/undo/operator-observation coverage is incomplete. |
+| ARC-10 | Partial | `npm run verify:day4` | Two instances of stateless processes/workers are required at runtime; behavior and correctness assertions for every process are incomplete. |
+| ARC-11 | Partial | `npm run verify:day4` | Local chain submission, crash recovery, and projection checks run; public-chain finality/user-window behavior is not automated. |
+| AUT-2 | Covered | `npm run verify:authorization` | The single contracts policy source and its Gateway/Todo enforcement points are checked. |
+| AUT-3 | Covered | `npm run verify:authorization` | The last-administrator, no-workspace, and legacy-task exceptions are checked against docs and source. |
+| AUT-4 | Covered | `npm run verify:day4` | The aggregate runs the live Gateway E2E suite, including permission-change propagation checks. |
+| AUT-5 | Covered | `npm run verify:day4` | The aggregate runs the live Gateway E2E suite, including hidden-resource non-disclosure checks. |
+| ONC-1 | Partial | `npm run test:contracts` | Local contract tests run; documentation parity for every function, parameter, event, and revert condition is not checked. |
+| ONC-2 | Partial | `npm run test:contracts` | Contract storage behavior is tested; exhaustive documentation-to-storage/privacy parity is not checked. |
+| ONC-3 | Partial | `npm run test:contracts` | Local read behavior is tested; independent public-testnet read is not run by the clean-clone suite. |
+| ONC-4 | Partial | `npm run test:contracts` | Contract project build/tests run; clean-clone deployment/ABI handoff documentation is not behavior-checked. |
+| ONC-5 | Partial | `npm run test:contracts` | Local contract tests run; address/network/version/redeployment record validation is not automated. |
+| ONC-6 | Partial | `npm run test:contracts` | Gas unit tests run; date/load/version measurement documentation is not automatically compared. |
+| ONC-7 | Partial | `npm run test:contracts` | Contract tests run; signing-key lifecycle and loss/leak runbook assertions are not covered. |
+| OPS-1 | Partial | `npm run verify:day4` | Isolated command rehearsals cover selected operations; every command's effects and success signal are not audited. |
+| OPS-2 | Partial | `npm run verify:day4` | Selected isolated runbooks execute; all symptom-first runbooks are not tested. |
+| OPS-3 | Partial | `npm run verify:day4` | Scratch backup/restore is rehearsed; the documented operator restore timing/behavior is not reproduced for every supported path. |
+| OPS-4 | Partial | `npm run verify:day4` | Chain rebuild and targeted replay are exercised; all replay/rebuild idempotency and safety conditions are not tested. |
+| OPS-5 | Partial | `npm run verify:day4` | Sink-mode enforcement is checked; operator authorization and all live destination transitions are not fully automated. |
+| OPS-6 | Partial | `npm run verify:day4` | The verifier itself runs in a clean clone; all commands listed in `docs/operations.md` are not individually clean-clone tested. |
+| TRC-1 | Partial | `npm run verify:traceability` | Every identifier explicitly requested in this matrix has an exact row; the complete source-document inventory is not present here. |
+| TRC-2 | Partial | `npm run verify:traceability` | Explicit gaps are retained as `Uncovered` or `Partial`; complete source-document reconciliation remains. |
+| TRC-3 | Uncovered | — | No timed record of eight deliberate breakages exists. |
+| TRC-4 | Uncovered | — | No PR-8 result exists from which to list undetected behaviors. |
+| TRC-5 | Partial | `npm run verify:day4` | Load measurements are produced by the aggregate; PF-10 and BC-16 measured evidence are not all generated by this command. |
+
 ## Mail Status (Stage 7)
 
 This status table includes manual and partial results; only rows explicitly marked covered are

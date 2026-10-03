@@ -11,6 +11,19 @@ import { isolatedHostEnvironment } from "./verification-environment.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const commandTimeoutMs = 600_000;
+export const twoInstanceServices = [
+  "gateway", "account-service", "todo-service", "todo-outbox-worker", "account-outbox-worker",
+  "workflow-worker", "account-cleanup-worker", "chain-writer", "chain-indexer",
+  "todo-owner-consumer", "account-notification-consumer", "todo-history-worker", "todo-cleanup-worker",
+];
+
+export function assertTwoInstances(counts) {
+  for (const service of twoInstanceServices) {
+    if (counts[service] !== 2) {
+      throw new Error(`Expected two running ${service} containers, found ${counts[service] ?? 0}`);
+    }
+  }
+}
 
 export function cleanupComposeConfig(config, project) {
   return {
@@ -195,6 +208,8 @@ export function redactVerificationOutput(output, env) {
     "INTERNAL_SERVICE_SECRET", "JWT_SECRET"]) {
     if (env[key]) text = text.replaceAll(env[key], "[REDACTED]");
   }
+  text = text.replace(/\b0x[a-f0-9]{64}\b/gi, "[REDACTED_PRIVATE_KEY]");
+  text = text.replace(/\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g, "[REDACTED_TOKEN]");
   text = text.replace(/\b(?:postgres(?:ql)?|amqps?|rediss?|https?):\/\/[^\s"'<>]+/gi, "[REDACTED_URL]");
   return text;
 }
@@ -259,29 +274,30 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
   let compose;
   let stackAttempted = false;
   let evidence;
-  const deadline = Date.now() + 30 * 60_000;
+  const verificationChecks = {};
+  let replicaCounts;
+  let loadEvidence;
+  const deadline = Date.now() + 60 * 60_000;
   const run = (command, args, label, { cwd = clone, capture = false, timeout = commandTimeoutMs } = {}) => {
     if (label) console.log(`=== ${label} ===`);
     const remaining = deadline - Date.now();
-    if (remaining <= 0) throw new Error("Verification exceeded its 30-minute total deadline");
+    if (remaining <= 0) throw new Error("Verification exceeded its 60-minute total deadline");
     const result = spawnSync(command, args, {
       cwd, env, encoding: "utf8", timeout: Math.min(timeout, remaining),
       maxBuffer: 16 * 1024 * 1024,
-      stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
     });
+    const output = redactVerificationOutput(`${result.stdout ?? ""}${result.stderr ?? ""}`, env);
+    if (output.trim()) console.log(output.trim());
     if (result.error || result.status !== 0) {
-      if (capture) {
-        const diagnostic = redactVerificationOutput(`${result.stdout ?? ""}${result.stderr ?? ""}`, env);
-        if (diagnostic.trim()) console.error(diagnostic.trim());
-      }
       throw new Error(`${label ?? command} failed (${result.error?.code ?? result.status}); command deadline ${timeout}ms`);
     }
-    return result.stdout ?? "";
+    return capture ? result.stdout ?? "" : "";
   };
   const runRedacted = (command, args, label, timeout = commandTimeoutMs, commandEnv = env) => {
     console.log(`=== ${label} ===`);
     const remaining = deadline - Date.now();
-    if (remaining <= 0) throw new Error("Verification exceeded its 30-minute total deadline");
+    if (remaining <= 0) throw new Error("Verification exceeded its 60-minute total deadline");
     const result = spawnSync(command, args, {
       cwd: clone, env: commandEnv, encoding: "utf8", timeout: Math.min(timeout, remaining), maxBuffer: 16 * 1024 * 1024,
     });
@@ -289,6 +305,15 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     if (output.trim()) console.log(output.trim());
     if (result.error || result.status !== 0) throw new Error(`${label} failed (${result.error?.code ?? result.status})`);
   };
+  const serializeSafeEvidence = (value) => {
+    const serialized = JSON.stringify(value, null, 2);
+    if (redactVerificationOutput(serialized, env) !== serialized) {
+      throw new Error("Verification evidence contains a credential, token, or URL");
+    }
+    return serialized;
+  };
+  const saveEvidence = async (path, value) => writeFile(path, serializeSafeEvidence(value));
+  const logEvidence = (value) => console.log(serializeSafeEvidence(value));
   await mkdir(scratch, { recursive: true });
   try {
     const source = workingTree
@@ -328,7 +353,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       assert.equal(queryPlans.passed, true);
       evidence = { result: "passed", scope: "PF-10", ...source, project,
         cleanCommittedSource: !workingTree, queryPlans };
-      await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
+      await saveEvidence(join(scratch, "result.json"), evidence);
       console.log(`PF-10 passed: ${queryPlans.cases.length} cases; full SQL, parameters and plans saved in receipt`);
       return evidence;
     }
@@ -342,6 +367,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     if (!operationsOnly) {
       dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "check"],
         "Lint, build and all unit tests");
+      verificationChecks.buildLintAndUnitTests = true;
     } else {
       dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:operations"],
         "Focused operations and verifier unit tests");
@@ -354,6 +380,23 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       "scripts/__tests__/rollback-release.test.mjs", "scripts/__tests__/verify-day4.test.mjs"], "Operational verifier unit tests");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:docs"], "API documentation verification");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "verify:authorization"], "Authorization verification");
+    dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "verify:traceability"], "Requirement-to-check traceability verification");
+    verificationChecks.documentation = true;
+    verificationChecks.traceability = true;
+    if (!operationsOnly) {
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:contracts"],
+        "Independent Solidity contract build and test suite", { timeout: 600_000 });
+      verificationChecks.contractTests = true;
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "verify:account-lifecycle"],
+        "Account and Todo lifecycle unit tests", { timeout: 300_000 });
+      verificationChecks.lifecycleTests = true;
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "verify:mail:unit"],
+        "Mail failure, retry and sink-only unit tests", { timeout: 300_000 });
+      verificationChecks.mailFailureTests = true;
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test", "-w", "@todo/account-service", "--", "src/workflow/__tests__/workflow.orchestrator.test.ts"],
+        "Workflow crash recovery and bounded retry tests", { timeout: 300_000 });
+      verificationChecks.workflowCrashRetryTests = true;
+    }
     if (!operationsOnly) {
       const mailEnvironment = { ...env };
       for (const key of ["COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR", "COMPOSE_ENV_FILES", "COMPOSE_DISABLE_ENV_FILE"]) {
@@ -361,6 +404,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       }
       runRedacted(process.execPath, [join(clone, "scripts", "verify-mail-live.mjs")],
         "PR-4 Mailpit outage, retry, restart and replay before the main stack starts", 600_000, mailEnvironment);
+      verificationChecks.mailpitOutageRestart = true;
     }
     dc(["up", "-d", "--no-build", "--wait", "--wait-timeout", "180",
       "account-postgres", "todo-postgres", "redis", "rabbitmq", "mailpit",
@@ -368,10 +412,19 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     "Start and health-check disposable infrastructure before starting workers", { timeout: 240_000 });
     dc(["run", "--rm", "--no-deps", "-T", "todo-service", "node", "scripts/setup-day4-chain.mjs"],
       "Deploy and validate TaskHistory on isolated local chain", { timeout: 120_000 });
-    dc(["up", "-d", "--no-build", "--wait", "--wait-timeout", "180"], "Start and health-check all replicas", { timeout: 240_000 });
+    const scales = twoInstanceServices.flatMap((service) => ["--scale", `${service}=2`]);
+    dc(["up", "-d", "--no-build", "--wait", "--wait-timeout", "180", ...scales],
+      "Start and health-check two instances of every stateless service and worker", { timeout: 240_000 });
+    replicaCounts = Object.fromEntries(twoInstanceServices.map((service) => [
+      service, dc(["ps", "-q", service], undefined, { capture: true }).trim().split(/\r?\n/).filter(Boolean).length,
+    ]));
+    assertTwoInstances(replicaCounts);
+    verificationChecks.twoInstanceDockerTests = true;
+    console.log(JSON.stringify({ check: "two-instance-topology", result: "passed", replicas: replicaCounts }));
     if (!performanceOnly && !operationsOnly) {
       dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "node",
         "scripts/verify-evolution-schema.mjs"], "Execute all real migration reversals and previous-code HTTP traffic", { timeout: 240_000 });
+      verificationChecks.migrationUpDownTests = true;
     }
     const dependencyHealth = await waitForDependencyHealth(() => JSON.parse(dc([
       "exec", "-T", "gateway", "node", "-e",
@@ -380,6 +433,20 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     console.log(JSON.stringify({ check: "health/dependencies", result: "passed", ...dependencyHealth }));
     if (!performanceOnly) {
       dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:e2e"], "Complete live E2E suite");
+      verificationChecks.e2eTests = true;
+    }
+    if (!performanceOnly && !operationsOnly) {
+      const runLoad = (script, label, timeout) => parseLastJsonLine(dc([
+        "--profile", "verification", "run", "--rm", "--no-deps", "-T",
+        "-e", "PERFORMANCE_VERIFY_ISOLATED=1", "validation", "node", `scripts/${script}`,
+      ], label, { capture: true, timeout }), label);
+      const roundTrips = runLoad("verify-round-trips.mjs", "PF-3 actual endpoint PostgreSQL round trips", 180_000);
+      assert.equal(roundTrips.passed, true);
+      const load = runLoad("verify-performance.mjs", "PF-4/PF-5 measured load and deliberate threshold breach", 900_000);
+      assert.equal(load.passed, true);
+      loadEvidence = { roundTrips, load };
+      verificationChecks.loadTests = true;
+      console.log(JSON.stringify({ check: "measured-load", result: "passed", roundTrips, load }));
     }
     if (performanceOnly) {
       const runPerformance = (script, label, timeout) => parseLastJsonLine(dc([
@@ -392,8 +459,8 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       assert.equal(performance.passed, true);
       evidence = { result: "passed", scope: "PF-3/PF-4/PF-5", ...source, project,
         cleanCommittedSource: !workingTree, liveGatewayE2ePassed: false, roundTrips, performance };
-      await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
-      console.log(JSON.stringify(evidence));
+      await saveEvidence(join(scratch, "result.json"), evidence);
+      logEvidence(evidence);
       return evidence;
     }
     if (paginationOnly) {
@@ -404,8 +471,8 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       assert.equal(pagination.passed, true);
       evidence = { result: "passed", scope: "PF-2", ...source, project, cleanCommittedSource: !workingTree,
         liveGatewayE2ePassed: true, pagination };
-      await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
-      console.log(JSON.stringify(evidence));
+      await saveEvidence(join(scratch, "result.json"), evidence);
+      logEvidence(evidence);
       return evidence;
     }
     if (!operationsOnly) {
@@ -428,6 +495,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       "Reconcile durable transaction after process death", { timeout: 240_000 });
     dc(["exec", "-T", "todo-service", "node", "scripts/verify-chain-live.mjs"],
       "Real application chain pipeline, concurrent writers and replacement contracts", { timeout: 360_000 });
+    verificationChecks.chainPipelineTests = true;
     }
     for (const script of ["verify-mail-mode.mjs", "verify-notification-retry.mjs", "verify-notification-quota.mjs"]) {
       runRedacted("docker", [...compose, "exec", "-T", "-e", `DLQ_OPERATOR_ID=day4-verifier:${project}`,
@@ -480,15 +548,16 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       "exec", "-T", "todo-service", "node", "apps/todo-service/scripts/progress-status.mjs", "--require-ready",
     ], undefined, { capture: true, timeout: 20_000 })));
     console.log(JSON.stringify({ check: "ops:progress-after-restart", result: "passed", ...finalProgress }));
-    if (Date.now() >= deadline) throw new Error("Verification exceeded its 30-minute command budget");
+    if (Date.now() >= deadline) throw new Error("Verification exceeded its 60-minute command budget");
     const rollback = await verifyRollback({ sourceImage: todoImage, cwd: clone, env });
     evidence = { result: "passed", scope: operationsOnly ? "OP-2/OP-3/OP-6/OP-7/OP-8/OP-9" : "day4", ...source, project, cleanCommittedSource: !workingTree,
+      checks: verificationChecks, replicaCounts, loadEvidence,
       isolatedLocalChain: true, sinkOnlyMail: true, mailModeRetryQuotaVerified: true,
       progressVerifiedAfterConsumerRestart: true, dlqAndReplayVerified: true,
       operatorBoundaryVerifiedOnScratchDatabases: true, backupRestoreCommandsVerified: true,
       migrationReversalsVerified: !operationsOnly, rollback };
-    await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
-    console.log(JSON.stringify(evidence));
+    await saveEvidence(join(scratch, "result.json"), evidence);
+    logEvidence(evidence);
     return evidence;
   } catch (error) {
     evidence = {
@@ -524,7 +593,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
         }
       }
       // Keep a non-secret result outside the deleted clone; never retain generated credentials.
-      if (evidence) await writeFile(join(repository, ".verification", `${project}-result.json`), JSON.stringify(evidence, null, 2));
+      if (evidence) await writeFile(join(repository, ".verification", `${project}-result.json`), serializeSafeEvidence(evidence));
       if (!cleanupError) await rm(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     } else {
       console.log(`--keep: isolated stack/clone retained at ${scratch}. Cleanup: docker compose --project-name ${project} -f "${join(scratch, "cleanup.compose.json")}" down --volumes --remove-orphans`);

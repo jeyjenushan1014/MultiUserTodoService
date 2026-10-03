@@ -52,11 +52,35 @@ workers and historical-schema checks. A transient startup response is not a pass
 the endpoint must actually return HTTP 200 and `healthy`. Persistent degradation
 fails with its dependency status in the retained redacted diagnostic.
 
-Each command has a deadline (at most ten minutes, or twenty for the full validation-image build); main verification commands have
-a 30-minute budget, with separately bounded rollback rehearsal and cleanup. Checks include lint/build/unit
-tests, API and authorization checks, live E2E, workspace concurrency and repeated
-backfill dry-run, repeated chain projection rebuild, operator replay/DLQ/progress
+Each command has a deadline (at most ten minutes, or twenty for the full validation-image build); the aggregate has a 60-minute budget, with separately bounded rollback rehearsal and cleanup. Checks include lint/build/unit
+tests, Solidity contract tests, API/authorization/traceability checks, migration up/down
+tests, two-instance topology, live E2E, measured endpoint round trips and load thresholds,
+workflow crash/retry unit coverage, account/Todo lifecycle tests, workspace concurrency
+and repeated backfill dry-runs, repeated chain projection rebuild, operator replay/DLQ/progress
 rehearsals, and retained-image rollback mechanics.
+
+The full scope is `npm run verify:day4` on the committed source. It builds the isolated
+validation image with locked Solidity-project dependencies and explicitly requires two
+running replicas for every stateless service and worker before E2E. It runs the actual
+contract test suite, migration reversal/historical-code suite, mail failure tests, workflow
+restart/retry unit tests and PF-3/PF-4/PF-5 measurement checks. Its receipt records each
+passed gate, replica counts and load measurements. The `--operations-only` and
+`--performance-only` shortcuts do not claim the full Day 4 scope.
+
+`npm run verify:traceability` validates the exact rows for the 42 requirement identifiers
+requested in the current checklist, verifies each listed root npm script exists, and
+rejects duplicate/missing rows or a claimed check on an `Uncovered` row. It reports gaps
+as gaps; a passing traceability-structure check is not evidence that every requirement is
+implemented. The eight deliberate-breakage record (PR-8), complete documentation behavior
+checks, and repeated-run equivalence automation remain open and are identified in
+`docs/traceability.md`.
+
+Run the aggregate twice, as separate invocations, to demonstrate clean-state isolation.
+Each run has a unique Compose project, generated config and ephemeral credentials, and
+removes only its own Compose resources. Do not run `docker compose down -v` against the
+default project: that can delete non-verification database state. The full receipt includes
+random run identifiers and measured timings, so equivalence means all required gates pass
+against the same committed revision, not byte-for-byte identical result files.
 
 The local mail checks explicitly run `verify-mail-mode.mjs`,
 `verify-notification-retry.mjs`, and `verify-notification-quota.mjs` inside Account

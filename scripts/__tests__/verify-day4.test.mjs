@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { delimiter, resolve, join } from "node:path";
-import { assertIsolatedConfig, cleanupComposeConfig, cloneCommittedSource, isolatedComposeEnvironment, isSnapshotSource, parseLastJsonLine, parseOptions, redactVerificationOutput, snapshotCurrentSource, verificationEnvironment, waitForDependencyHealth, waitForProgress } from "../verify-day4.mjs";
+import { assertIsolatedConfig, assertTwoInstances, cleanupComposeConfig, cloneCommittedSource, isolatedComposeEnvironment, isSnapshotSource, parseLastJsonLine, parseOptions, redactVerificationOutput, snapshotCurrentSource, twoInstanceServices, verificationEnvironment, waitForDependencyHealth, waitForProgress } from "../verify-day4.mjs";
 
 test("cleanup retains named-volume references without secret bind mounts", () => {
   const data = { type: "volume", source: "data", target: "/data" };
@@ -25,6 +25,14 @@ test("cleanup retains named-volume references without secret bind mounts", () =>
     volumes: config.volumes,
     networks: config.networks,
   });
+});
+
+test("requires exactly two running instances of every stateless process", () => {
+  const passing = Object.fromEntries(twoInstanceServices.map((service) => [service, 2]));
+  assert.doesNotThrow(() => assertTwoInstances(passing));
+  for (const service of twoInstanceServices) {
+    assert.throws(() => assertTwoInstances({ ...passing, [service]: 1 }), new RegExp(`two running ${service}`));
+  }
 });
 
 test("rejects legacy/unsafe command-line overrides", () => {
@@ -91,6 +99,8 @@ test("operator stdout and stderr redact credential values", () => {
   assert.equal(redactVerificationOutput("postgres://private secret-value visible", {
     ACCOUNT_DATABASE_URL: "postgres://private", JWT_SECRET: "secret-value",
   }), "[REDACTED] [REDACTED] visible");
+  assert.equal(redactVerificationOutput(`0x${"a".repeat(64)} eyJhbGci.eyJzdWI.abc`, {}),
+    "[REDACTED_PRIVATE_KEY] [REDACTED_TOKEN]");
   assert.equal(redactVerificationOutput("failed at http://local:1234/path postgres://other:secret@db/name", {}), "failed at [REDACTED_URL] [REDACTED_URL]");
 });
 test("refuses published ports, shared resources and host escape", () => {

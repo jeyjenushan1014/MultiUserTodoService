@@ -36,6 +36,8 @@
     "verify:mail:unit": "npm run test -w @todo/account-service -- src/notifications/__tests__/notification.consumer.test.ts src/notifications/__tests__/notification.failure.test.ts src/notifications/__tests__/notification.mailer.test.ts src/notifications/__tests__/notification.external.test.ts",
     "verify:mail": "npm run verify:mail:unit && node scripts/verify-mail-live.mjs",
     "rebuild:chain-projection": "docker compose exec -T todo-service npm run rebuild:chain-projection -w @todo/todo-service",
+    "test:contracts": "npm test --prefix contracts/onchain",
+    "verify:traceability": "node scripts/verify-traceability.mjs",
     "verify:capacity": "node scripts/verify-capacity.mjs",
     "verify:workflow:wf2": "node scripts/verify-workflow-half-applied.mjs",
     "verify:workflow:wf3": "node scripts/verify-workflow-process-stop.mjs",

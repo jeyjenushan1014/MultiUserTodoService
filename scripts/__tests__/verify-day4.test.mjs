@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { delimiter, resolve, join } from "node:path";
-import { assertIsolatedConfig, cleanupComposeConfig, cloneCommittedSource, isolatedComposeEnvironment, isSnapshotSource, parseOptions, redactVerificationOutput, snapshotCurrentSource, verificationEnvironment, waitForProgress } from "../verify-day4.mjs";
+import { assertIsolatedConfig, cleanupComposeConfig, cloneCommittedSource, isolatedComposeEnvironment, isSnapshotSource, parseLastJsonLine, parseOptions, redactVerificationOutput, snapshotCurrentSource, verificationEnvironment, waitForProgress } from "../verify-day4.mjs";
 
 test("cleanup retains named-volume references without secret bind mounts", () => {
   const data = { type: "volume", source: "data", target: "/data" };
@@ -35,8 +35,17 @@ test("rejects legacy/unsafe command-line overrides", () => {
   assert.deepEqual(parseOptions(["--working-tree", "--pagination-only"]), {
     ref: "HEAD", keep: false, workingTree: true, paginationOnly: true,
   });
+  assert.deepEqual(parseOptions(["--working-tree", "--performance-only"]), {
+    ref: "HEAD", keep: false, workingTree: true, performanceOnly: true,
+  });
+  assert.throws(() => parseOptions(["--pagination-only", "--performance-only"]));
   assert.deepEqual(parseOptions(["--clean-clone"]), { ref: "HEAD", keep: false, workingTree: true });
   assert.throws(() => parseOptions(["--clean-clone", "--ref", "HEAD"]));
+});
+test("performance script parser reads trailing JSON line", () => {
+  const output = "warning: warmup jitter\n{\"passed\":true,\"requirement\":\"PF-3\"}\n";
+  assert.deepEqual(parseLastJsonLine(output, "PF-3"), { passed: true, requirement: "PF-3" });
+  assert.throws(() => parseLastJsonLine("warning only", "PF-3"), /non-JSON trailing output/);
 });
 test("ephemeral verification environment does not inherit live selectors/secrets", () => {
   const env = verificationEnvironment("isolated", "tag", "scratch", "clone", {

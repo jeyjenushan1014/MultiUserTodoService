@@ -29,12 +29,25 @@ export function parseOptions(args) {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--keep") options.keep = true;
     else if (args[i] === "--pagination-only") options.paginationOnly = true;
+    else if (args[i] === "--performance-only") options.performanceOnly = true;
     else if (args[i] === "--working-tree" || args[i] === "--clean-clone") options.workingTree = true;
     else if (args[i] === "--ref" && args[i + 1] && !args[i + 1].startsWith("-")) options.ref = args[++i];
-    else throw new Error("Usage: verify-day4.mjs [--ref <committed-revision> | --working-tree] [--pagination-only] [--keep]");
+    else throw new Error("Usage: verify-day4.mjs [--ref <committed-revision> | --working-tree] [--pagination-only | --performance-only] [--keep]");
   }
   if (options.workingTree && args.includes("--ref")) throw new Error("--working-tree snapshots the current source and cannot be combined with --ref");
+  if (options.paginationOnly && options.performanceOnly) throw new Error("Choose one verification scope");
   return options;
+}
+
+export function parseLastJsonLine(output, label) {
+  const lines = String(output).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) throw new Error(`${label} produced no JSON output`);
+  const candidate = lines.at(-1);
+  try {
+    return JSON.parse(candidate);
+  } catch (error) {
+    throw new Error(`${label} produced non-JSON trailing output: ${error.message}`);
+  }
 }
 
 export function isSnapshotSource(path, untracked = false) {
@@ -215,7 +228,7 @@ export async function waitForProgress(check, { timeoutMs = 60_000, sleep = (ms) 
 }
 
 export async function verifyDay4(options = {}, { repository = sourceRoot } = {}) {
-  const { ref = "HEAD", keep = false, workingTree = false, paginationOnly = false } = options;
+  const { ref = "HEAD", keep = false, workingTree = false, paginationOnly = false, performanceOnly = false } = options;
   if (workingTree && ref !== "HEAD") throw new Error("--working-tree cannot select a historical revision");
   const id = `${Date.now()}-${randomBytes(5).toString("hex")}`;
   const project = `todo-day4-verify-${id}`;
@@ -236,6 +249,10 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
     });
     if (result.error || result.status !== 0) {
+      if (capture) {
+        const diagnostic = redactVerificationOutput(`${result.stdout ?? ""}${result.stderr ?? ""}`, env);
+        if (diagnostic.trim()) console.error(diagnostic.trim());
+      }
       throw new Error(`${label ?? command} failed (${result.error?.code ?? result.status}); command deadline ${timeout}ms`);
     }
     return result.stdout ?? "";
@@ -294,16 +311,36 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     dc(["run", "--rm", "--no-deps", "-T", "todo-service", "node", "scripts/setup-day4-chain.mjs"],
       "Deploy and validate TaskHistory on isolated local chain", { timeout: 120_000 });
     dc(["up", "-d", "--no-build", "--wait", "--wait-timeout", "180"], "Start and health-check all replicas", { timeout: 240_000 });
-    dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "node",
-      "scripts/verify-evolution-schema.mjs"], "Execute all real migration reversals and previous-code HTTP traffic", { timeout: 240_000 });
+    if (!performanceOnly) {
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "node",
+        "scripts/verify-evolution-schema.mjs"], "Execute all real migration reversals and previous-code HTTP traffic", { timeout: 240_000 });
+    }
     dc(["exec", "-T", "gateway", "node", "-e",
       "fetch('http://127.0.0.1:3000/health/dependencies',{signal:AbortSignal.timeout(10000)}).then(async r=>{const b=await r.json();if(!r.ok||b.status!=='healthy')process.exit(1)}).catch(()=>process.exit(1))"],
     "Verify complete dependency health");
-    dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:e2e"], "Complete live E2E suite");
+    if (!performanceOnly) {
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:e2e"], "Complete live E2E suite");
+    }
+    if (performanceOnly) {
+      const runPerformance = (script, label, timeout) => parseLastJsonLine(dc([
+        "--profile", "verification", "run", "--rm", "--no-deps", "-T",
+        "-e", "PERFORMANCE_VERIFY_ISOLATED=1", "validation", "node", `scripts/${script}`,
+      ], label, { capture: true, timeout }), label);
+      const roundTrips = runPerformance("verify-round-trips.mjs", "PF-3 actual endpoint PostgreSQL round trips", 120_000);
+      assert.equal(roundTrips.passed, true);
+      const performance = runPerformance("verify-performance.mjs", "PF-4/PF-5 concurrent API latency and deliberate breach", 600_000);
+      assert.equal(performance.passed, true);
+      evidence = { result: "passed", scope: "PF-3/PF-4/PF-5", ...source, project,
+        cleanCommittedSource: !workingTree, liveGatewayE2ePassed: false, roundTrips, performance };
+      await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
+      console.log(JSON.stringify(evidence));
+      return evidence;
+    }
     if (paginationOnly) {
-      const pagination = JSON.parse(dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T",
+      const pagination = parseLastJsonLine(dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T",
         "-e", `PF2_DATABASE_URL=${env.EV_DATABASE_URL}`, "validation", "node", "scripts/verify-pagination.mjs"],
-      "Real PF-2 access/filter/direction timing matrix", { capture: true, timeout: 600_000 }));
+      "Real PF-2 access/filter/direction timing matrix", { capture: true, timeout: 600_000 }),
+      "Real PF-2 access/filter/direction timing matrix");
       assert.equal(pagination.passed, true);
       evidence = { result: "passed", scope: "PF-2", ...source, project, cleanCommittedSource: !workingTree,
         liveGatewayE2ePassed: true, pagination };

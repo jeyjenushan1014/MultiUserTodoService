@@ -20,6 +20,14 @@ See [pagination.md](pagination.md) for focused unit commands, the real
 Gateway/cache E2E command. Database timing is not mocked and is not a substitute
 for full HTTP load objectives. Never point the scratch verifier at production.
 
+### PF-3/PF-4/PF-5 endpoint and load evidence
+
+`npm run verify:performance` runs actual endpoint pg-call counting and a
+20-authenticated-user paced read/write measurement in the isolated Day-4 stack.
+Fixed latency limits, dataset, sample/error guards and a deliberate non-zero-exit
+threshold breach are described in [performance.md](performance.md). It must pass
+before checklist completion; no production database or external provider is used.
+
 ### Day 4 verification isolation
 
 `npm run verify:day4` creates a fresh local clone of the selected committed revision

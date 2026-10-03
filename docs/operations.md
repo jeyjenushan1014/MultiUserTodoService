@@ -378,9 +378,10 @@ also seeds an isolated deletion tombstone and confirms the event is not queued o
 audited as `account_deleted_tombstone`. Its output contains counts only. The rehearsal requires the
 owner consumer to be running and must use isolated databases and broker resources.
 
-The operator reports running the targeted notification replay command successfully. This confirms
-that command path only; it does not verify inspection/replay for the history, owner-projection, or
-other service DLQs.
+The earlier operator-reported notification replay proved that path only. The subsequent
+committed clean-clone operational rehearsal at `5515a4c` passed real inspection/replay for
+all three configured DLQs and actual owner-consumer idempotency/audit, as recorded in
+[operator-verification.md](operator-verification.md). It does not cover arbitrary other queues.
 
 The unified allow-listed command is available for all three configured service DLQs:
 `todo.notifications.dlq`, `todo.owner-projection.dlq`, and `todo.history.dlq`. It emits only
@@ -411,6 +412,9 @@ checks redacted inspection, all three dedicated replay queues, publisher confirm
 retry-header reset, preservation of unrelated DLQ messages, half-open history range boundaries,
 dry-run nonpublication, and duplicate history/notification delivery claims. It never sends
 external mail or stops consumers in the normal operator stack.
+The completed clean-clone rehearsal also stopped/restarted its isolated broker,
+proved durable API registration/outbox delivery and an actual owner-consumer receipt,
+and finished with all six consumer queues drained and zero chain lag.
 
 ### Transaction appears stuck
 

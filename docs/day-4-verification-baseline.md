@@ -2,11 +2,56 @@
 
 ## 2026-10-03 requested operational completion work
 
+`npm run verify:day4 -- --clean-clone --operations-only` passed with exit code 0
+at committed revision `5515a4ce9d1547463095ed9adc4d8a6fd57ecf08`.
+Project: `todo-day4-verify-1791048283836-6e7b4a89b9`. The non-secret receipt
+is `.verification/todo-day4-verify-1791048283836-6e7b4a89b9-result.json`
+and records `sourceKind: committed-clean-clone`, `cleanCommittedSource: true`.
+
+Measured passing surfaces:
+
+- Node 24 workspace compilation, 40 operations tests, ten targeted owner-replay
+  tests, documentation/authorization checks and 30 live Gateway E2E tests.
+- All three actual DLQs: redacted inspection, selected-event replay, unrelated
+  message preservation, retry-header reset, confirmation and durable audit.
+- History half-open range selection, exact 100/101 cap and duplicate suppression;
+  owner replay with actual consumer receipts, repeat suppression, deletion
+  tombstones, cross-consumer isolation and queued/already-processed audit.
+- RabbitMQ stop/restart: actual Gateway registration remained durable in the
+  unpublished Account outbox, then reached the real owner consumer on recovery.
+- Audited sink-only mail mode/retry/quota, workspace concurrency, two backfill
+  dry-runs and two real projection rebuilds with running indexers.
+- Six consumers reported ready/unacknowledged counts of zero and two consumers
+  each, both before and after restart. Chain 31337 latest block 34,
+  safe head/checkpoint block 33, lag zero.
+- Actual Account/Todo `pg_dump`, scratch `createdb`, `pg_restore --exit-on-error`,
+  nonempty source/restored row-count comparison, dump catalogue validation,
+  restricted-login CLI, denied raw access, append-only break-glass and `dropdb`.
+- Three-replica retained-tag switch and deliberate failed-health restoration.
+  This remains same-build mechanics, not genuine historical-release proof.
+
+All verification containers, networks and named volumes were removed. No host
+ports, external mail, public-chain transactions or live application data resets
+were used. This closes the requested operational command inventory, not the
+separately excluded full chain-fault/historical migration suite or exhaustive
+repository-wide OP-10/PR proof. Historical failed runs below remain preserved.
+
+A subsequent full committed-clone run,
+`todo-day4-verify-1791049391940-9d511ad083`, passed lint/build/unit checks,
+all real migration reversals and previous-code HTTP traffic, but failed the
+then-one-shot aggregate dependency health check before E2E. Cleanup passed;
+no full-suite success is inferred. Dependency readiness now uses a bounded
+two-minute wait requiring an actual HTTP 200/healthy result, with persistent
+failure diagnostics. The operations suite now has 41 passing tests, including
+degraded/connection-failure recovery and deadline rejection. Broker-user
+diagnostics are also wired into the normal Compose healthcheck and separate
+mail rehearsal, without recreating an existing live service.
+
 The earlier owner-replay PostgreSQL `42P08` failure was traced to inconsistent
 inference of audit status parameter `$5`. Both uses now explicitly cast to
 `varchar`. All ten targeted owner-replay Vitest tests and all ten focused
-verifier-isolation Node tests pass. Live broker rehearsal remains the required
-check of this database fix, not the mocked unit tests alone.
+verifier-isolation Node tests pass. The committed live broker rehearsal above
+also passes this database fix; it is not inferred from mocked unit tests.
 
 The verifier now treats `--clean-clone` as committed source, never as an alias
 of `--working-tree`, and offers a separately scoped `--operations-only` run.

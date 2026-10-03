@@ -213,25 +213,39 @@ export function cloneCommittedSource(repository, clone, ref = "HEAD", run = (com
   return revision;
 }
 
-export async function waitForProgress(check, { timeoutMs = 60_000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now = Date.now } = {}) {
+async function waitForReadiness(check, validate, label, { timeoutMs = 60_000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now = Date.now } = {}) {
   const deadline = now() + timeoutMs;
   let lastError;
   do {
     try {
-      const progress = await check();
-      if (progress.chainReader?.status !== "caught-up" ||
-        !Array.isArray(progress.consumers) || progress.consumers.length !== 6 ||
-        progress.consumers.some((consumer) =>
-          consumer.status !== "available" || !Number.isSafeInteger(consumer.consumers) || consumer.consumers < 1 ||
-          consumer.ready !== 0 || consumer.unacknowledged !== 0)) {
-        throw new Error("Every consumer must be available and drained, and chain projection caught up");
-      }
-      return progress;
+      const result = await check();
+      validate(result);
+      return result;
     } catch (error) { lastError = error; }
     if (now() >= deadline) break;
     await sleep(Math.min(1000, deadline - now()));
   } while (now() < deadline);
-  throw new Error(`Operator progress readiness timed out: ${lastError?.message}`);
+  throw new Error(`${label} readiness timed out: ${lastError?.message}`);
+}
+
+export async function waitForProgress(check, options) {
+  return waitForReadiness(check, (progress) => {
+    if (progress.chainReader?.status !== "caught-up" ||
+      !Array.isArray(progress.consumers) || progress.consumers.length !== 6 ||
+      progress.consumers.some((consumer) =>
+        consumer.status !== "available" || !Number.isSafeInteger(consumer.consumers) || consumer.consumers < 1 ||
+        consumer.ready !== 0 || consumer.unacknowledged !== 0)) {
+      throw new Error("Every consumer must be available and drained, and chain projection caught up");
+    }
+  }, "Operator progress", options);
+}
+
+export async function waitForDependencyHealth(check, options) {
+  return waitForReadiness(check, (health) => {
+    if (health?.httpStatus !== 200 || health.status !== "healthy") {
+      throw new Error(`Gateway dependencies HTTP ${health?.httpStatus}, status ${health?.status}: ${JSON.stringify(health?.dependencies ?? {})}`);
+    }
+  }, "Gateway dependency health", { timeoutMs: 120_000, ...options });
 }
 
 export async function verifyDay4(options = {}, { repository = sourceRoot } = {}) {
@@ -353,9 +367,11 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "node",
         "scripts/verify-evolution-schema.mjs"], "Execute all real migration reversals and previous-code HTTP traffic", { timeout: 240_000 });
     }
-    dc(["exec", "-T", "gateway", "node", "-e",
-      "fetch('http://127.0.0.1:3000/health/dependencies',{signal:AbortSignal.timeout(10000)}).then(async r=>{const b=await r.json();if(!r.ok||b.status!=='healthy')process.exit(1)}).catch(()=>process.exit(1))"],
-    "Verify complete dependency health");
+    const dependencyHealth = await waitForDependencyHealth(() => JSON.parse(dc([
+      "exec", "-T", "gateway", "node", "-e",
+      "fetch('http://127.0.0.1:3000/health/dependencies',{signal:AbortSignal.timeout(10000)}).then(async r=>{const b=await r.json();console.log(JSON.stringify({httpStatus:r.status,status:b.status,dependencies:b.dependencies}))}).catch(e=>{console.error(e.message);process.exit(1)})",
+    ], undefined, { capture: true, timeout: 20_000 })));
+    console.log(JSON.stringify({ check: "health/dependencies", result: "passed", ...dependencyHealth }));
     if (!performanceOnly) {
       dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:e2e"], "Complete live E2E suite");
     }

@@ -75,3 +75,21 @@ tested source, run `npm run verify:day4 -- --clean-clone --operations-only`.
 The former never counts as committed-clean-clone evidence. The latter covers
 the operational inventory above, not the separately excluded full chain fault,
 Mailpit outage or historical migration compatibility suites.
+
+### Completed committed-source rehearsal
+
+On 2026-10-03, `npm run verify:day4 -- --clean-clone --operations-only`
+passed with exit code 0 at `5515a4ce9d1547463095ed9adc4d8a6fd57ecf08`.
+Receipt: `.verification/todo-day4-verify-1791048283836-6e7b4a89b9-result.json`.
+All inventory rows above passed against real isolated services, including
+the owner consumer's actual processed-event receipt and per-event audit.
+The run included 30 live Gateway E2E tests, two projection rebuilds and progress
+before/after broker restart. All six queues were drained with two consumers
+each; chain lag was zero. Account/Todo nonempty scratch restores and restricted
+logins passed, and rollback switched all three replicas then restored them
+after deliberately failed health. Verification resources were cleaned up.
+
+Live local OP-8 provisioning and approved migration-maintenance receipts are
+separate persistent evidence in [operations-access.md](operations-access.md).
+The earlier decisions/failures are superseded only for these measured surfaces,
+not for the wider full-Day-4 or repository-wide command requirements.

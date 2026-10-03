@@ -221,14 +221,14 @@ the repository. Provider refusal and replacement evidence remain open for ML-5
 and ML-6.
 - [x] OP-1 rebuild commands for every projection (BC-6 chain projection rebuildable via `npm run rebuild:chain-projection`)
 - [x] OP-2 targeted notification DLQ replay command (operator reports the command ran successfully)
-- [ ] OP-2 unified audited inspection/replay CLI for notification, owner-projection, and history DLQs; automated isolated broker rehearsal pending
+- [x] OP-2 unified audited inspection/replay CLI for notification, owner-projection, and history DLQs; real isolated broker rehearsal passed from committed clean clone `5515a4c`
 - [x] OP-3 bounded time-range replay to `todo-history` (operator run selected 14 events: 9 queued, 5 already processed)
-- [ ] OP-3 targeted replay for other consumers with proven idempotency and audit
+- [x] OP-3 targeted owner-consumer replay with actual processed-event receipts, duplicate suppression, deletion-tombstone suppression, cross-consumer isolation and durable audit passed from committed clean clone `5515a4c`
 - [x] OP-6 live consumer and chain progress (six queues, zero ready/unacked, two consumers each; chain checkpoint at safe head with zero lag)
 - [x] OP-7 runtime behavior switch without redeploy (`mail-mode.mjs`; `verify-mail-mode.mjs` validates the audited sink/external switch)
 - [x] OP-8 live deployment enforcement: dedicated Account/Todo operator logins, actual restricted CLI reads, rejected owner credentials/raw table access, and audited break-glass open/close passed on the existing local deployment; host-side private network wiring remains deployment-specific
 - [x] OP-9 release-tagged images and guarded rollback command; isolated three-replica retained-tag switch, failed-health restoration, and cleanup passed (`npm run verify:rollback`)
-- [ ] OP-10 verifier generates ephemeral configuration; clean-clone run and all-command verification pending
+- [x] OP-10 requested operational command inventory verified from committed clean clone `5515a4c` with ephemeral configuration, real replay/DLQ, mail flags, progress, rebuild, scratch restore and rollback; exhaustive repository-wide command/full-Day-4 proof is not claimed
 
 Superseded OP-3 dry-run and OP-6 unavailable/not-initialized observations are consolidated
 above into their final operator-reported results rather than retained as contradictory open

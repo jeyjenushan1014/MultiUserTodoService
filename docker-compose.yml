@@ -90,6 +90,8 @@ services:
     healthcheck:
       test:
         - CMD
+        - su-exec
+        - rabbitmq
         - rabbitmq-diagnostics
         - -q
         - ping

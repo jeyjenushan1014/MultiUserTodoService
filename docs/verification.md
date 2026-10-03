@@ -39,10 +39,16 @@ No host ports are published. The existing default stack, host `node_modules`,
 `.env`, database volumes, and chain node are never reset or reused. Do not invoke
 legacy live verifiers separately against your default stack as a substitute.
 
-The isolated RabbitMQ healthcheck runs as `rabbitmq`, not root. This prevents
+RabbitMQ healthchecks and the mail verifier's startup diagnostic run as `rabbitmq`, not root. This prevents
 the diagnostic client from creating a root-owned Erlang cookie while the broker
-is still starting on a fresh volume. It changes only the disposable overlay,
-not the already-running broker or its cookie.
+is still starting on a fresh volume. The Compose definition and isolated overlay
+use the same broker-user check. No already-running broker was recreated and no
+existing cookie was read or changed.
+
+Gateway dependency readiness is polled for up to two minutes after infrastructure,
+workers and historical-schema checks. A transient startup response is not a pass:
+the endpoint must actually return HTTP 200 and `healthy`. Persistent degradation
+fails with its dependency status in the retained redacted diagnostic.
 
 Each command has a deadline (at most ten minutes, or twenty for the full validation-image build); main verification commands have
 a 30-minute budget, with separately bounded rollback rehearsal and cleanup. Checks include lint/build/unit

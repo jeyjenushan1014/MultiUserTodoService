@@ -149,7 +149,7 @@ try {
   ], { capture: true });
   await waitFor(() => {
     const status = runDocker([
-      "exec", "-T", "rabbitmq", "rabbitmq-diagnostics", "-q", "ping",
+      "exec", "-T", "rabbitmq", "su-exec", "rabbitmq", "rabbitmq-diagnostics", "-q", "ping",
     ], { capture: true });
     return status.length > 0;
   }, "stable RabbitMQ before worker startup", 90_000);

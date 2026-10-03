@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { delimiter, resolve, join } from "node:path";
-import { assertIsolatedConfig, cleanupComposeConfig, cloneCommittedSource, isolatedComposeEnvironment, isSnapshotSource, parseLastJsonLine, parseOptions, redactVerificationOutput, snapshotCurrentSource, verificationEnvironment, waitForProgress } from "../verify-day4.mjs";
+import { assertIsolatedConfig, cleanupComposeConfig, cloneCommittedSource, isolatedComposeEnvironment, isSnapshotSource, parseLastJsonLine, parseOptions, redactVerificationOutput, snapshotCurrentSource, verificationEnvironment, waitForDependencyHealth, waitForProgress } from "../verify-day4.mjs";
 
 test("cleanup retains named-volume references without secret bind mounts", () => {
   const data = { type: "volume", source: "data", target: "/data" };
@@ -201,4 +201,24 @@ test("progress readiness requires the real caught-up checkpoint and every draine
     return healthy;
   }, { timeoutMs: 2000, now: () => clock, sleep: async (ms) => { clock += ms; } });
   assert.equal(calls, 2);
+});
+
+test("dependency readiness retries startup degradation and fails closed at its deadline", async () => {
+  const healthy = { httpStatus: 200, status: "healthy" };
+  let clock = 0;
+  let calls = 0;
+  const result = await waitForDependencyHealth(async () => {
+    calls++;
+    if (calls === 1) throw new Error("Connection not ready");
+    if (calls === 2) return { httpStatus: 503, status: "degraded", dependencies: { workers: "unavailable" } };
+    return healthy;
+  }, { timeoutMs: 3000, now: () => clock, sleep: async (ms) => { clock += ms; } });
+  assert.equal(result, healthy);
+  assert.equal(calls, 3);
+  for (const health of [null, { httpStatus: 503, status: "healthy" }, { httpStatus: 200, status: "degraded" }]) {
+    await assert.rejects(waitForDependencyHealth(async () => health, { timeoutMs: 0 }), /dependency health readiness timed out/);
+  }
+  await assert.rejects(waitForDependencyHealth(async () => {
+    throw new Error("Connection not ready");
+  }, { timeoutMs: 0 }), /Connection not ready/);
 });

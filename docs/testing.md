@@ -12,6 +12,14 @@ npm run verify:account-lifecycle
 
 `npm run check` runs lint, TypeScript builds, and unit tests without requiring manually started infrastructure. `npm run test:e2e` exercises the public Gateway path against the Docker stack.
 
+### PF-2 cursor pagination
+
+See [pagination.md](pagination.md) for focused unit commands, the real
+100,000-row PostgreSQL verifier (`npm run verify:pagination` with dedicated
+`PF2_DATABASE_URL`), its fixed first/deep-page comparison threshold, and the live
+Gateway/cache E2E command. Database timing is not mocked and is not a substitute
+for full HTTP load objectives. Never point the scratch verifier at production.
+
 ### Day 4 verification isolation
 
 `npm run verify:day4` creates a fresh local clone of the selected committed revision

@@ -212,12 +212,36 @@ Lists visible TODOs. Query parameters:
 |---|---|---|---|
 | `page` | integer | minimum 1, default 1 | 1-based page |
 | `pageSize` | integer | 1-100, default 20 | items per page |
+| `cursor` | string | optional opaque token returned as `nextCursor` | seek after the previous page; requires `page=1`, `sortBy=createdAt`, and unchanged `sortOrder` |
 | `state` | string | `pending`, `in_progress`, `completed`, `cancelled` | optional filter |
 | `access` | string | `owned`, `shared`, `all` (default) | ownership view |
 | `sortBy` | string | `createdAt`, `dueDate` (default `createdAt`) | sort field |
 | `sortOrder` | string | `asc`, `desc` (default `desc`) | sort direction |
 
 Response `200` has `{ "items": [], "pagination": { "page": 1, "pageSize": 20, "totalItems": 0, "totalPages": 0 } }`. Each item includes TODO fields plus `accessType` (`owner` or `shared`), `owner: { id, email }`, and `sharedWith: [{ id, email }]`. TODO `version` is a positive integer that changes on every update. Invalid query values return `400 VALIDATION_ERROR`.
+
+For `createdAt` sorting, start with `page=1` (or omit `page`). If more items exist,
+the response includes top-level `nextCursor`. Pass that token as `cursor` on the
+next request, retaining the same access/state filters and sort direction. Omission
+of `nextCursor` means traversal is complete. Keep `page=1` throughout cursor
+traversal: pagination totals describe the complete filtered list, not the cursor's
+ordinal position. Example:
+
+```text
+GET /api/v1/todos?pageSize=20&access=owned&sortBy=createdAt&sortOrder=desc
+GET /api/v1/todos?pageSize=20&access=owned&sortBy=createdAt&sortOrder=desc&cursor=<nextCursor>
+```
+
+The keyset uses `(created_at, id)` with PostgreSQL microsecond precision, including
+equal timestamps. Tokens are positions, not credentials; every query still scopes
+results to the authenticated caller. Malformed tokens, direction mismatch, cursor
+with `page>1`, and cursor with `dueDate` sorting return `400 VALIDATION_ERROR`.
+Cursor pages use no SQL `OFFSET`. Existing numbered pages (`page>1`) and `dueDate`
+sorting retain their previous offset behavior; they do not provide PF-2 evidence.
+Reads use per-request snapshots, not a snapshot spanning all pages: concurrent
+inserts/deletes may change totals, and newer inserts before a cursor are not part
+of that forward traversal. The exact count is still computed on each request;
+keyset pagination avoids depth-dependent skips, not all dataset-size-dependent cost.
 
 ### `GET /api/v1/todos/:todoId`
 

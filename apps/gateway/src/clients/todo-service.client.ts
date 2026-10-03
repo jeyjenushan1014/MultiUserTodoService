@@ -463,6 +463,10 @@ export async function listTodos(
     String(query.pageSize),
   );
 
+  if (query.cursor !== undefined) {
+    endpoint.searchParams.set("cursor", query.cursor);
+  }
+
   if (
     query.state !==
     undefined

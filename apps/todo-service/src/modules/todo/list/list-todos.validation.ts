@@ -12,6 +12,7 @@ import {
   TODO_LIST_ACCESS_TYPES,
   TODO_SORT_FIELDS,
   TODO_STATES,
+  todoListCursorMatchesQuery,
 } from "@todo/contracts";
 
 export const listTodosQuerySchema =
@@ -72,12 +73,10 @@ export const listTodosQuerySchema =
     })
     .strict()
     .refine(
-      (query) =>
-        query.cursor === undefined ||
-        query.sortBy === "createdAt",
+      todoListCursorMatchesQuery,
       {
         message:
-          "Cursor pagination supports createdAt sorting only",
+          "Invalid cursor: use page=1, createdAt sorting and the cursor's original sortOrder",
         path: ["cursor"],
       },
     );

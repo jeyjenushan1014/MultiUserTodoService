@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -27,9 +28,10 @@ export function parseOptions(args) {
   const options = { ref: "HEAD", keep: false };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--keep") options.keep = true;
+    else if (args[i] === "--pagination-only") options.paginationOnly = true;
     else if (args[i] === "--working-tree" || args[i] === "--clean-clone") options.workingTree = true;
     else if (args[i] === "--ref" && args[i + 1] && !args[i + 1].startsWith("-")) options.ref = args[++i];
-    else throw new Error("Usage: verify-day4.mjs [--ref <committed-revision> | --working-tree] [--keep]");
+    else throw new Error("Usage: verify-day4.mjs [--ref <committed-revision> | --working-tree] [--pagination-only] [--keep]");
   }
   if (options.workingTree && args.includes("--ref")) throw new Error("--working-tree snapshots the current source and cannot be combined with --ref");
   return options;
@@ -213,7 +215,7 @@ export async function waitForProgress(check, { timeoutMs = 60_000, sleep = (ms) 
 }
 
 export async function verifyDay4(options = {}, { repository = sourceRoot } = {}) {
-  const { ref = "HEAD", keep = false, workingTree = false } = options;
+  const { ref = "HEAD", keep = false, workingTree = false, paginationOnly = false } = options;
   if (workingTree && ref !== "HEAD") throw new Error("--working-tree cannot select a historical revision");
   const id = `${Date.now()}-${randomBytes(5).toString("hex")}`;
   const project = `todo-day4-verify-${id}`;
@@ -298,6 +300,17 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       "fetch('http://127.0.0.1:3000/health/dependencies',{signal:AbortSignal.timeout(10000)}).then(async r=>{const b=await r.json();if(!r.ok||b.status!=='healthy')process.exit(1)}).catch(()=>process.exit(1))"],
     "Verify complete dependency health");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:e2e"], "Complete live E2E suite");
+    if (paginationOnly) {
+      const pagination = JSON.parse(dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T",
+        "-e", `PF2_DATABASE_URL=${env.EV_DATABASE_URL}`, "validation", "node", "scripts/verify-pagination.mjs"],
+      "Real PF-2 access/filter/direction timing matrix", { capture: true, timeout: 600_000 }));
+      assert.equal(pagination.passed, true);
+      evidence = { result: "passed", scope: "PF-2", ...source, project, cleanCommittedSource: !workingTree,
+        liveGatewayE2ePassed: true, pagination };
+      await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
+      console.log(JSON.stringify(evidence));
+      return evidence;
+    }
     dc(["stop", "verification-chain"], "Stop isolated chain for real outage injection");
     try {
       dc(["exec", "-T", "todo-service", "node", "scripts/verify-chain-live.mjs", "--outage"],

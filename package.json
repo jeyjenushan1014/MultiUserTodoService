@@ -48,6 +48,7 @@
     "verify:day4": "node scripts/verify-day4.mjs",
     "rollback:release": "node scripts/rollback-release.mjs",
     "verify:evolution:schema": "node scripts/verify-evolution-schema.mjs",
+    "verify:pagination": "node scripts/verify-pagination.mjs",
     "verify:authorization": "npm run clean -w @todo/contracts && npm run build -w @todo/contracts && npm run test -w @todo/contracts && node scripts/verify-authorization-docs.mjs"
   },
   "engines": {

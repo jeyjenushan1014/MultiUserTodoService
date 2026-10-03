@@ -5,6 +5,7 @@ import {
   it,
 } from "vitest";
 import { decodeJwt } from "jose";
+import { createClient } from "redis";
 
 interface ApiResult {
   readonly status: number;
@@ -1518,6 +1519,98 @@ describe.skipIf(
         ).toBe("number");
       },
     );
+
+    it("traverses cursor pages through Gateway and Redis without duplicate tasks", async () => {
+      const path = "/api/v1/todos?pageSize=1&access=owned&sortBy=createdAt&sortOrder=desc";
+      const first = await request(path, { accessToken: userA.accessToken });
+      expect(first.status).toBe(200);
+      const firstBody = getResponseData(first.body);
+      if (!isRecord(firstBody)) throw new Error("Expected list response");
+      const cursor = getString(firstBody.nextCursor, "nextCursor");
+      if (process.env.REDIS_URL === undefined) throw new Error("REDIS_URL is required for live cursor-cache evidence");
+      const redis = createClient({ url: process.env.REDIS_URL, socket: { connectTimeout: 5000 } });
+      redis.on("error", (error: Error) => { console.error("Cursor cache verification Redis error", error.message); });
+      try {
+        await redis.connect();
+        let storedCursor = false;
+        for await (const keys of redis.scanIterator({ MATCH: `todo:${userA.userId}:*:list:*`, COUNT: 100 })) {
+          for (const key of keys) {
+            const value = await redis.get(key);
+            if (value !== null) {
+              const payload: unknown = JSON.parse(value);
+              if (isRecord(payload) && payload.nextCursor === cursor) storedCursor = true;
+            }
+          }
+        }
+        expect(storedCursor, "Actual Redis entry must preserve first-page nextCursor").toBe(true);
+      } finally {
+        if (redis.isOpen) await redis.quit();
+      }
+      const secondPath = `${path}&cursor=${encodeURIComponent(cursor)}`;
+      const second = await request(secondPath, { accessToken: userA.accessToken });
+      expect(second.status).toBe(200);
+      expect(getListItems(second.body)).toHaveLength(1);
+      expect(getListItems(second.body)[0]?.id).not.toBe(getListItems(first.body)[0]?.id);
+      const cached = await request(secondPath, { accessToken: userA.accessToken });
+      expect(cached.status).toBe(200);
+      expect(cached.body).toEqual(second.body);
+      for (const query of ["cursor=invalid", `cursor=${cursor}&sortBy=dueDate`, `cursor=${cursor}&page=2`]) {
+        expect((await request(`/api/v1/todos?${query}`, { accessToken: userA.accessToken })).status).toBe(400);
+      }
+    });
+
+    it("traverses cursor access/state/direction combinations without exposing another owner's tasks", async () => {
+      const suffix = crypto.randomUUID();
+      const caller = await registerAndLogin(`cursor-caller-${suffix}@example.com`);
+      const sender = await registerAndLogin(`cursor-sender-${suffix}@example.com`);
+      const states = ["pending", "in_progress", "completed", "cancelled"];
+      const owned: TodoRecord[] = [];
+      const shared: TodoRecord[] = [];
+      for (const state of states) {
+        for (const [user, records] of [[caller, owned], [sender, shared]] as const) {
+          const todo = await createTodoAfterProjection(user, `cursor ${state} ${user.userId}`);
+          const changed = await request(`/api/v1/todos/${todo.id}`, {
+            method: "PATCH", accessToken: user.accessToken,
+            body: { state, expectedVersion: todo.version },
+          });
+          expect(changed.status).toBe(200);
+          records.push(parseTodo(changed.body));
+        }
+      }
+      for (const todo of shared) {
+        const result = await request(`/api/v1/todos/${todo.id}/shares`, {
+          method: "POST", accessToken: sender.accessToken, body: { recipientEmail: caller.email },
+        });
+        expect(result.status).toBe(201);
+      }
+      const hidden = await createTodoAfterProjection(sender, `not shared ${suffix}`);
+      for (const access of ["owned", "shared", "all"]) {
+        for (const state of [undefined, ...states]) {
+          for (const sortOrder of ["asc", "desc"]) {
+            const candidates = access === "owned" ? owned : access === "shared" ? shared : [...owned, ...shared];
+            const expectedIds = candidates.filter((todo) => state === undefined || todo.state === state).map((todo) => todo.id).sort();
+            const seen: string[] = [];
+            let cursor: string | undefined;
+            for (let page = 0; page <= expectedIds.length; page++) {
+              const query = new URLSearchParams({ pageSize: "1", access, sortBy: "createdAt", sortOrder });
+              if (state !== undefined) query.set("state", state);
+              if (cursor !== undefined) query.set("cursor", cursor);
+              const result = await request(`/api/v1/todos?${query.toString()}`, { accessToken: caller.accessToken });
+              expect(result.status).toBe(200);
+              const items = getListItems(result.body);
+              seen.push(...items.map((todo) => todo.id));
+              const body = getResponseData(result.body);
+              if (!isRecord(body)) throw new Error("Expected cursor page");
+              if (body.nextCursor === undefined) break;
+              cursor = getString(body.nextCursor, "nextCursor");
+            }
+            expect(seen).not.toContain(hidden.id);
+            expect(seen.length).toBe(new Set(seen).size);
+            expect([...seen].sort()).toEqual(expectedIds);
+          }
+        }
+      }
+    }, 120_000);
 
     it(
       "filters TODOs by state",

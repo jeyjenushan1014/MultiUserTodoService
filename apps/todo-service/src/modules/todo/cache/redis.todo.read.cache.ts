@@ -49,6 +49,7 @@ function createListQueryIdentifier(
     ListTodosParameters,
 ): string {
   return [
+    "paginationVersion=2",
     `page=${parameters.page}`,
     `pageSize=${parameters.pageSize}`,
     `cursor=${parameters.cursor ?? "first"}`,
@@ -645,6 +646,10 @@ if (!accessibilityIsValid) {
 
         totalItems:
           parsed.data.totalItems,
+
+        ...(parsed.data.nextCursor === undefined
+          ? {}
+          : { nextCursor: parsed.data.nextCursor }),
       },
     };
   }

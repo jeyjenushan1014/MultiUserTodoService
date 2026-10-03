@@ -20,6 +20,8 @@ export {
   TODO_LIST_ACCESS_TYPES,
 } from "./list.todos.contract.js";
 
+export { decodeTodoListCursor, todoListCursorMatchesQuery } from "./todo-list-cursor.js";
+
 export type {
   TodoListAccessType,
 } from "./list.todos.contract.js";
@@ -54,7 +56,6 @@ export type {
 export * from "./share/index.js"
 
 export * from './events/todo-event.contract.js'
-
 
 
 

@@ -89,5 +89,7 @@ export const cachedListResultSchema =
         .number()
         .int()
         .nonnegative(),
+
+      nextCursor: z.string().min(1).max(300).optional(),
     })
     .strict();

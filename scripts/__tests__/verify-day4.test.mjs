@@ -32,6 +32,9 @@ test("rejects legacy/unsafe command-line overrides", () => {
   assert.throws(() => parseOptions(["--project", "live"]));
   assert.throws(() => parseOptions(["--ref", "--keep"]));
   assert.deepEqual(parseOptions(["--working-tree"]), { ref: "HEAD", keep: false, workingTree: true });
+  assert.deepEqual(parseOptions(["--working-tree", "--pagination-only"]), {
+    ref: "HEAD", keep: false, workingTree: true, paginationOnly: true,
+  });
   assert.deepEqual(parseOptions(["--clean-clone"]), { ref: "HEAD", keep: false, workingTree: true });
   assert.throws(() => parseOptions(["--clean-clone", "--ref", "HEAD"]));
 });

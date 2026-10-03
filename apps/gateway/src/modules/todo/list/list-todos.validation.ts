@@ -12,6 +12,7 @@ import {
   TODO_LIST_ACCESS_TYPES,
   TODO_SORT_FIELDS,
   TODO_STATES,
+  todoListCursorMatchesQuery,
 } from "@todo/contracts";
 
 export const listTodosQuerySchema =
@@ -35,6 +36,8 @@ export const listTodosQuerySchema =
         .default(
           DEFAULT_TODO_PAGE_SIZE,
         ),
+
+      cursor: z.string().min(1).max(300).optional(),
 
       state: z
         .enum(
@@ -64,7 +67,11 @@ export const listTodosQuerySchema =
           DEFAULT_SORT_ORDER,
         ),
     })
-    .strict();
+    .strict()
+    .refine(todoListCursorMatchesQuery, {
+      message: "Invalid cursor: use page=1, createdAt sorting and the cursor's original sortOrder",
+      path: ["cursor"],
+    });
 
 export type ValidatedListTodosQuery =
   z.infer<

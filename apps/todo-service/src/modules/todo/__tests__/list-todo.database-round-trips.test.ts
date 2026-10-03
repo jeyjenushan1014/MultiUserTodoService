@@ -12,7 +12,7 @@ import {
   PostgresListTodosRepository,
 } from "../list/postgres-list-todos.repository.js";
 
-function createRows(count: number): Record<string, string | Date | null | readonly unknown[]>[] {
+function createRows(count: number): Record<string, string | number | Date | null | readonly unknown[]>[] {
   return Array.from({ length: Math.min(count, 10) }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     version: 1,
@@ -23,6 +23,7 @@ function createRows(count: number): Record<string, string | Date | null | readon
     state: "pending",
     due_date: null,
     created_at: new Date("2026-10-01T00:00:00.000Z"),
+    cursor_created_at: "2026-10-01T00:00:00.000123Z",
     updated_at: new Date("2026-10-01T00:00:00.000Z"),
     access_type: "owner",
     shared_with: [],
@@ -62,6 +63,33 @@ async function countDatabaseCalls(totalItems: number): Promise<number> {
 }
 
 describe("PostgresListTodosRepository query count", () => {
+  it.each(["asc", "desc"] as const)("returns a first-page cursor without OFFSET for %s", async (sortOrder) => {
+    const statements: string[] = [];
+    const client = {
+      query: (statement: string) => {
+        statements.push(statement);
+        if (statement.includes("COUNT(*)")) return Promise.resolve({ rows: [{ total_items: "10" }] });
+        if (statement.includes("FROM todos t")) return Promise.resolve({ rows: createRows(3) });
+        return Promise.resolve({ rows: [] });
+      },
+      release: () => undefined,
+    };
+    const repository = new PostgresListTodosRepository({
+      connect: () => Promise.resolve(client),
+    } as unknown as Pick<Pool, "connect">);
+    const result = await repository.listTodos({
+      ownerId: "11111111-1111-4111-8111-111111111111",
+      page: 1, pageSize: 2, access: "owned", sortBy: "createdAt", sortOrder,
+    });
+    expect(result.items).toHaveLength(2);
+    expect(statements.find((sql) => sql.includes("AS shared_with"))).not.toContain("OFFSET");
+    if (result.nextCursor === undefined) throw new Error("Expected first-page cursor");
+    expect(JSON.parse(Buffer.from(result.nextCursor, "base64url").toString("utf8"))).toEqual({
+      createdAt: "2026-10-01T00:00:00.000123Z",
+      id: "00000000-0000-4000-8000-000000000002",
+      sortOrder,
+    });
+  });
   it("keeps database round trips constant as the result set grows", async () => {
     const emptyPageCalls = await countDatabaseCalls(0);
     const populatedPageCalls = await countDatabaseCalls(10_000);

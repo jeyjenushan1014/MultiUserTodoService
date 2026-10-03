@@ -19,6 +19,8 @@ import {
   logger,
 } from "../../../config/logger.js";
 
+import { decodeTodoListCursor, todoListCursorMatchesQuery } from "@todo/contracts";
+
 import type {
   ListTodosRepository,
 } from "./list-todos.repository.interface.js";
@@ -34,6 +36,7 @@ interface CountRow {
 }
 
 interface ListTodoRow {
+  readonly cursor_created_at: string;
   readonly id:
     string;
 
@@ -74,56 +77,12 @@ interface ListTodoRow {
 type OrderKey =
   `${TodoSortField}:${SortOrder}`;
 
-interface CreatedAtCursor {
-  readonly createdAt: string;
-  readonly id: string;
-  readonly sortOrder: SortOrder;
-}
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function decodeCursor(
-  encoded: string,
-  sortOrder: SortOrder,
-): CreatedAtCursor {
-  let value: unknown;
-  try {
-    value = JSON.parse(
-      Buffer.from(encoded, "base64url").toString("utf8"),
-    ) as unknown;
-  } catch {
-    throw new Error("Invalid TODO list cursor");
-  }
-
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("createdAt" in value) ||
-    typeof value.createdAt !== "string" ||
-    !Number.isFinite(Date.parse(value.createdAt)) ||
-    !("id" in value) ||
-    typeof value.id !== "string" ||
-    !UUID_PATTERN.test(value.id) ||
-    !("sortOrder" in value) ||
-    value.sortOrder !== sortOrder
-  ) {
-    throw new Error("Invalid TODO list cursor");
-  }
-
-  return {
-    createdAt: value.createdAt,
-    id: value.id,
-    sortOrder,
-  };
-}
-
 function encodeCursor(
   row: ListTodoRow,
   sortOrder: SortOrder,
 ): string {
-  const value: CreatedAtCursor = {
-    createdAt: row.created_at.toISOString(),
+  const value = {
+    createdAt: row.cursor_created_at,
     id: row.id,
     sortOrder,
   };
@@ -361,8 +320,9 @@ implements ListTodosRepository {
   ): Promise<
     ListTodosRepositoryResult
   > {
-    const client =
-      await this.pool.connect();
+    if (!todoListCursorMatchesQuery(parameters)) {
+      throw new TypeError("Invalid TODO list cursor or incompatible pagination options");
+    }
 
     const offset =
       (
@@ -373,10 +333,13 @@ implements ListTodosRepository {
     const cursor =
       parameters.cursor === undefined
         ? undefined
-        : decodeCursor(
+        : decodeTodoListCursor(
             parameters.cursor,
-            parameters.sortOrder,
           );
+
+    const keyset = parameters.sortBy === "createdAt" &&
+      (parameters.page === 1 || cursor !== undefined);
+    const client = await this.pool.connect();
 
     const accessCondition =
       getAccessCondition(
@@ -413,13 +376,11 @@ implements ListTodosRepository {
       cursorCondition = `AND (t.created_at, t.id) ${comparison} ($${listValues.length - 1}, $${listValues.length})`;
     }
     listValues.push(
-      cursor === undefined
-        ? parameters.pageSize
-        : parameters.pageSize + 1,
+      keyset ? parameters.pageSize + 1 : parameters.pageSize,
     );
     const limitParameterPosition = listValues.length;
     let offsetParameterPosition: number | undefined;
-    if (cursor === undefined) {
+    if (!keyset) {
       listValues.push(offset);
       offsetParameterPosition = listValues.length;
     }
@@ -467,6 +428,8 @@ implements ListTodosRepository {
               t.state,
               t.due_date,
               t.created_at,
+              to_char(t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                AS cursor_created_at,
               t.updated_at,
 
               CASE
@@ -532,7 +495,7 @@ implements ListTodosRepository {
       );
 
       const hasMore =
-        cursor !== undefined &&
+        keyset &&
         todosResult.rows.length > parameters.pageSize;
       const rows = hasMore
         ? todosResult.rows.slice(0, parameters.pageSize)

@@ -256,8 +256,8 @@ requirements. New automated evidence is recorded in `docs/operator-verification.
 # copilot
 ### 4:30-7:30 AM: Performance
 
-- [ ] PF-2 keyset pagination for deep pages
-- [ ] PF-3 fixed four-query list path regression test added; focused test run pending
+- [x] PF-2 keyset pagination for deep pages (`verify:day4 -- --working-tree --pagination-only` passed on 2026-10-03: 30 live Gateway/Redis E2E tests and 30 real PostgreSQL access/state/direction cases, 100,000 tasks, depths up to 90,000; measured evidence in `docs/pagination.md`)
+- [ ] PF-3 fixed four-query list path unit regression passed; real endpoint round-trip evidence pending
 - [ ] PF-4 read and write latency objectives
 - [ ] PF-5 automated load-test threshold
 - [x] PF-6 optimistic concurrency conflict response (`version` / `expectedVersion`, atomic compare-and-swap, real simultaneous API edits: one success and one `409 TODO_VERSION_CONFLICT`; all 28 live E2E tests passed)

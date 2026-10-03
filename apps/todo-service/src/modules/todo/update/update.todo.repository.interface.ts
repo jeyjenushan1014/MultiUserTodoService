@@ -22,6 +22,7 @@ export interface UpdateTodoRepository {
     callerId: string,
     todoId: string,
     state: TodoState,
+    expectedVersion: number | undefined,
     requestId: string,
   ): Promise<
     UpdateTodoRepositoryResult

@@ -334,9 +334,59 @@ external mail or stops consumers in the normal operator stack.
 **Symptom:** a chain submission remains nonterminal or an operator reports a transaction hash
 that has not progressed. Save the public transaction hash, chain ID, and contract address; never
 share a private key or RPC URL. Check the public testnet explorer and RPC availability. A transaction
-already mined on chain cannot be rolled back. The default Compose stack has no chain-worker
-operator status/replacement command, so do not alter database state or broadcast a replacement
-manually; BC-11/OP-5 chain recovery tooling remains incomplete.
+already mined on chain cannot be rolled back. Default Compose now runs two `chain-writer`
+and two `chain-indexer` instances. The writer stores the nonce, public transaction fields and
+deterministic transaction hash before broadcasting. Restarting it reconciles that hash and can
+rebroadcast the identical transaction, rather than writing a second record.
+
+```powershell
+docker compose logs --tail 100 chain-writer chain-indexer
+docker compose restart chain-writer
+```
+
+Five failed attempts place the row in `dead_letter`; it is a durable human-review queue,
+not a RabbitMQ queue. Rows with a known hash continue receipt reconciliation without further
+broadcast attempts. A mined success becomes `confirmed` only at `CHAIN_CONFIRMATIONS` (minimum
+two); a mined revert becomes `abandoned`. Automatic fee replacement and an audited chain-DLQ
+replay command are not built. Do not change a reserved nonce or manually replay an uncertain
+submission: first reconcile its public hash and nonce on the configured chain. BC-11's
+unconditional terminal-state guarantee for indefinitely dropped/stuck transactions and OP-5's
+complete recovery tooling remain uncovered.
+
+### Chain runtime and contract replacement
+
+Put the signing key in `writer.key` in an untracked local directory and set `CHAIN_SECRET_DIR`
+to that directory. Compose mounts it read-only into writers; it is not baked into an image or
+passed as an environment value. Set the public `CHAIN_WRITER_ADDRESS` to the derived address,
+and set RPC, chain ID, current contract and deployment block from the contract build/deployment.
+Then run `docker compose up -d --build chain-writer chain-indexer`. A missing file or mismatched
+address fails startup explicitly. Never paste the key into a command, document, log or ticket.
+
+Before replacing a contract, retain its address and original deployment block in
+`CHAIN_PREVIOUS_CONTRACTS`, for example `[{"address":"<previous-public-address>","deploymentBlock":1}]`.
+Both current and retained contracts are indexed separately; queries through the projection
+repository include all addresses. Retained contracts remain directly readable on chain.
+Only ABI-compatible `TaskHistory` replacements are supported; a changed ABI needs a versioned
+decoder, not a pasted address.
+
+For an exclusive rebuild, run the normal command while APIs and indexer replicas stay up:
+
+```powershell
+npm run rebuild:chain-projection
+```
+
+Indexers hold the advisory lock for one polling cycle, releasing it between cycles. Rebuild
+waits up to 30 seconds to acquire that same lock and never races a scanner. Both replicas stay
+running, waiting if rebuild or the other replica owns the lock. If a long scan prevents acquisition
+for the full budget, rebuild fails explicitly and can be retried; it does not silently skip work.
+
+Personal tasks deliberately use `00000000-0000-4000-8000-000000000001` as a shared **non-tenant
+sentinel** on chain. It is not a real workspace, membership authority, or per-person identifier.
+The off-chain `workspace_id` remains null and authorization remains owner-based. Creating a
+personal on-chain workspace per user would create a permanent person-level correlation key.
+The sentinel groups all personal tasks together and intentionally loses personal-workspace
+grouping; task identifiers remain random opaque IDs. Never derive this value from an owner ID,
+email, title, or their hashes.
 
 ### Migration failed
 

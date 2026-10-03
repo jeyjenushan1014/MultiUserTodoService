@@ -32,7 +32,7 @@ npm run verify:account-lifecycle
 - [x] Day 3 quality gate: `npm run check`
 - [x] API documentation check: 21 endpoints verified
 - [x] Authorization documentation check: 3 roles x 11 actions
-- [x] Full Gateway E2E suite: 27/27 passed from clean Redis state
+- [x] Full Gateway E2E suite: 28/28 passed, including real stale-version update conflicts
 - [x] Live dependency health: PostgreSQL, Redis, RabbitMQ, Mailpit, and workers available
 - [x] Existing outbox, retry, DLQ, cache, retention, JWT, SQL, and Mailpit behavior
 - [x] Immediate logout revocation through Gateway local cache
@@ -138,28 +138,28 @@ Live process-stop, compensation, and operator proofs remain pending.
 - [x] BC-8 chain reorganization handling (common ancestor search & `rollbackAfterBlock` unit-tested)
 - [x] BC-9 configurable confirmations greater than one (enforced $\ge 2$, safe head calculation unit-tested)
 - [x] BC-10 asynchronous chain writes (durable `chain_submissions` outbox pattern & worker service)
-- [x] BC-11 confirmed/replaced/abandoned transaction states (`pending`, `reserved`, `submitted`, `confirmed`, `replaced`, `abandoned`, `dead_letter`)
-- [x] BC-12 nonce coordination across two workers (`chain_writer_nonces` atomic allocation with `FOR UPDATE` and `FOR UPDATE SKIP LOCKED`)
-- [x] BC-13 business operations survive chain outage (API persists to Postgres submission table; independent worker polling)
-- [x] BC-14 retry and chain DLQ (exponential backoff & `dead_letter` status with error audit)
+- [ ] BC-11 unconditional terminal transaction outcome (durable hash/crash recovery implemented; fee replacement and indefinite stuck-transaction recovery omitted)
+- [x] BC-12 real two-worker nonce/duplicate proof (PostgreSQL cold-counter race and 12 API tasks through deployed writers: unique nonces and one actual on-chain record each)
+- [x] BC-13 real chain stop/restart proof (two HTTP creates queued during stopped RPC; contract/account state persisted on restart)
+- [x] BC-14 real bounded retry/dead-letter proof (deployed workers moved a failing row to `dead_letter` after exactly five failures)
 - [x] Durable submission table (`chain_submissions` and `chain_writer_nonces` migrations)
-- [x] Restart recovery and finality handling (checkpoints and safeHead window in indexer)
-- [x] Contract replacement verification (distinct contract addresses supported and unit-tested in `backend-chain-integration.test.ts`)
+- [x] Restart recovery and finality handling (real writer killed after broadcast before acknowledgement; restarted writers confirmed the original hash, with one actual emitted record)
+- [x] Contract replacement verification (two real deployments and production projection/read-back check passed)
 
 #cobilot
 ### 12:30-3:30 PM: Evolution Compatibility
 
-- [x] EV-1 online schema migration (additive non-locking schema changes tested under concurrent queries)
-- [x] EV-2 old code works during migration (omitted fields handled with default/nulls without locking or failing)
+- [ ] EV-1 full online service proof (real previous production GET repository HTTP traffic/DDL overlap passed; complete historical service/write traffic not exercised)
+- [ ] EV-2 full old-code compatibility (previous production GET reads passed real PostgreSQL migration; no blanket proof for all paths)
 - [x] EV-3 simultaneous event versions (`account.registered` v1 and v2 accepted during rollout)
 - [x] EV-4 unknown event fields ignored (consumer schemas strip additive envelope/payload fields)
 - [x] EV-5 event meanings remain stable (v2 adds `registrationMethod`; v1 `userId` and `email` meanings retained)
 - [x] EV-6 independent producer/consumer compatibility checks (`event-evolution.compatibility.test.ts` validates production factory output against Todo consumer schema)
 - [x] EV-7 previous API compatibility (registration preserves legacy `data.id/email/createdAt` alongside `data.user`)
 - [x] EV-8 old and new service versions together (`docker-compose.ev8.yml` ran distinct old/new Account images concurrently against one DB; `verify:ev8-live` confirmed both writes and v1/v2 outbox rows)
-- [x] EV-9 reversible migration test (`npm run verify:evolution:schema` audits all 35 migrations with working `down()` functions)
-- [x] EV-10 rollback without database restore (reversals drop column/table cleanly without database restore)
-- [x] EV-11 contract replacement preserves old verification (multi-contract support unit-tested in `backend-chain-integration.test.ts`)
+- [x] EV-9 every schema migration actually reversed (`verify:evolution:schema`: PostgreSQL 17, 19 Account + 26 Todo = 45 migrations, dynamic discovery; guarded rollback refusal also checked)
+- [ ] EV-10 every service release rollback without restore (compatible schema/data reversal passed; not every historical service deployment exercised)
+- [x] EV-11 compatible contract replacement preserves old verification (real two-contract writes, log rebuild and direct old/new on-chain read-back passed)
 - [x] Update `docs/events.md` and `docs/architecture.md` for event-version rollout and compatibility rules
 
 # chatgbt
@@ -240,7 +240,7 @@ requirements. New automated evidence is recorded in `docs/operator-verification.
 
 - [x] Create `docs/operations.md`
 - [x] Broker unavailable runbook
-- [x] Chain unavailable runbook (worker absent from default Compose; operator recovery command remains unavailable)
+- [x] Chain unavailable runbook (default Compose workers, mounted-key setup, restart/reconciliation and omitted replacement/replay tooling documented)
 - [x] Mail-provider failure runbook
 - [x] Consumer progress failure runbook (health/log checks documented; lag metrics unavailable)
 - [x] DLQ filling runbook (targeted notification replay documented; general DLQ tooling remains open)
@@ -260,7 +260,7 @@ requirements. New automated evidence is recorded in `docs/operator-verification.
 - [ ] PF-3 fixed four-query list path regression test added; focused test run pending
 - [ ] PF-4 read and write latency objectives
 - [ ] PF-5 automated load-test threshold
-- [ ] PF-6 optimistic concurrency conflict response
+- [x] PF-6 optimistic concurrency conflict response (`version` / `expectedVersion`, atomic compare-and-swap, real simultaneous API edits: one success and one `409 TODO_VERSION_CONFLICT`; all 28 live E2E tests passed)
 - [ ] PF-10 expensive-query `EXPLAIN ANALYZE` evidence
 - [x] Slow chain and mail dependency isolation (PF-7 evidence recorded above and in `docs/traceability.md`)
 - [x] Pool and concurrency calculations documented (`docs/capacity.md`; `npm run verify:capacity` passed)

@@ -164,6 +164,9 @@ const todo:
     id:
       todoId,
 
+    version:
+      1,
+
     ownerId,
 
     title:

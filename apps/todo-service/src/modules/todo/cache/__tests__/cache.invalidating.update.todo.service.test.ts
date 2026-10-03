@@ -119,6 +119,9 @@ const updatedTodo:
     id:
       todoId,
 
+    version:
+      2,
+
     ownerId,
 
     title:

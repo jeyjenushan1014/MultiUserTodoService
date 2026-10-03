@@ -10,6 +10,11 @@ export type ChainSubmissionStatus =
   | "dead_letter";
 
 export interface ChainSubmissionRecord {
+  readonly transactionRequest?: {
+    readonly gas: string;
+    readonly maxFeePerGas: string;
+    readonly maxPriorityFeePerGas: string;
+  } | null;
   readonly id: string;
   readonly sourceEventId: string;
   readonly taskId: string;
@@ -30,6 +35,7 @@ export interface ChainSubmissionRecord {
 }
 
 interface RawSubmissionRow {
+  transaction_request: ChainSubmissionRecord["transactionRequest"];
   id: string;
   source_event_id: string;
   task_id: string;
@@ -51,6 +57,7 @@ interface RawSubmissionRow {
 
 function mapRow(row: RawSubmissionRow): ChainSubmissionRecord {
   return {
+    transactionRequest: row.transaction_request ?? null,
     id: row.id,
     sourceEventId: row.source_event_id,
     taskId: row.task_id,
@@ -95,7 +102,8 @@ export class PostgresChainSubmissionRepository {
         WHERE id IN (
           SELECT id
           FROM chain_submissions
-          WHERE status IN ('pending', 'reserved')
+          WHERE (status IN ('pending', 'reserved', 'submitted')
+                 OR (status = 'dead_letter' AND transaction_hash IS NOT NULL))
             AND next_attempt_at <= NOW()
             AND (locked_at IS NULL OR locked_at < NOW() - INTERVAL '2 minutes')
           ORDER BY next_attempt_at ASC, created_at ASC
@@ -123,7 +131,12 @@ export class PostgresChainSubmissionRepository {
     const normAddress = writerAddress.toLowerCase();
     const chainIdStr = chainId.toString();
 
-    // Lock and get current stored nonce
+    // Initialize before locking: two first-time writers must not both return the same nonce.
+    await client.query(
+      `INSERT INTO chain_writer_nonces (chain_id, writer_address, next_nonce, updated_at)
+       VALUES ($1, $2, $3, NOW()) ON CONFLICT (chain_id, writer_address) DO NOTHING`,
+      [chainIdStr, normAddress, onChainTransactionCount.toString()],
+    );
     const lockResult = await client.query<{ next_nonce: string }>(
       `
         SELECT next_nonce
@@ -134,26 +147,13 @@ export class PostgresChainSubmissionRepository {
       [chainIdStr, normAddress],
     );
 
-    let nextNonce: bigint;
-
     if (lockResult.rows.length === 0 || lockResult.rows[0] === undefined) {
-      // First time initialization: sync with on-chain transaction count
-      nextNonce = onChainTransactionCount;
-      await client.query(
-        `
-          INSERT INTO chain_writer_nonces (chain_id, writer_address, next_nonce, updated_at)
-          VALUES ($1, $2, $3, NOW())
-          ON CONFLICT (chain_id, writer_address)
-          DO UPDATE SET next_nonce = GREATEST(chain_writer_nonces.next_nonce, EXCLUDED.next_nonce)
-        `,
-        [chainIdStr, normAddress, (nextNonce + 1n).toString()],
-      );
-      return nextNonce;
+      throw new Error("Writer nonce row disappeared during allocation");
     }
 
     const dbNext = BigInt(lockResult.rows[0].next_nonce);
     // Use maximum of DB tracked next_nonce and actual on-chain transaction count
-    nextNonce = dbNext >= onChainTransactionCount ? dbNext : onChainTransactionCount;
+    const nextNonce = dbNext >= onChainTransactionCount ? dbNext : onChainTransactionCount;
 
     await client.query(
       `
@@ -207,6 +207,27 @@ export class PostgresChainSubmissionRepository {
         WHERE id = $1
       `,
       [submissionId, transactionHash.toLowerCase()],
+    );
+  }
+
+  async saveTransactionRequest(
+    client: PoolClient,
+    submissionId: string,
+    request: NonNullable<ChainSubmissionRecord["transactionRequest"]>,
+    transactionHash: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE chain_submissions SET transaction_request = $2,
+       transaction_hash = $3, updated_at = NOW() WHERE id = $1`,
+      [submissionId, JSON.stringify(request), transactionHash.toLowerCase()],
+    );
+  }
+
+  async releaseClaim(submissionId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE chain_submissions SET locked_at = NULL, locked_by = NULL,
+       next_attempt_at = NOW() + INTERVAL '2 seconds' WHERE id = $1`,
+      [submissionId],
     );
   }
 

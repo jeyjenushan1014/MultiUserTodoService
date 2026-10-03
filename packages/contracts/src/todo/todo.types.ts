@@ -16,6 +16,8 @@ export type SortOrder =
 export interface TodoResponse {
   readonly id: string;
 
+  readonly version: number;
+
   readonly ownerId: string;
 
   readonly title: string;

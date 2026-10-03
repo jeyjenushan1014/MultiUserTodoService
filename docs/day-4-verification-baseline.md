@@ -1,5 +1,55 @@
 # Day 4 Verification Baseline
 
+## 2026-10-03 priority-review remediation
+
+The isolated working-tree snapshot passed all 28 real Gateway E2E tests, including
+competing updates against the same observed task version: exactly one succeeded and
+the stale update returned `409 TODO_VERSION_CONFLICT`.
+
+The real PostgreSQL 17 verifier executed up/down for every discovered migration:
+19 Account + 26 Todo = 45 (the previous 43 plus two remediation migrations).
+It checked surviving core rows, catalog restoration, guarded rollback refusal and
+frozen previous-production GET repository HTTP traffic overlapping actual DDL.
+This is not full historical authenticated-service/write compatibility.
+
+Real application/chain checks passed HTTP creation during an RPC outage, a cold
+nonce-counter race, 12 API tasks through two deployed writers, process death after
+actual broadcast before acknowledgement, exactly-once recovery of the original hash,
+two actual compatible contract deployments with production projection/read-back,
+and a failing submission reaching the human-review queue at exactly five failures.
+
+The aggregate rehearsal then stopped because the mail-retry verifier lacked an
+operator identity. Passing the isolated verifier identity fixed that check, which
+was rerun successfully. Separately, the current compiled indexer/rebuild artifacts
+were installed into that disposable stack: two consecutive rebuild commands passed
+with both indexers and both Todo API replicas remaining running.
+These targeted reruns are not a completed aggregate verification run.
+
+The subsequent complete working-tree snapshot rerun also passed `npm run check`,
+all 28 live E2E tests, all 45 migration reversals, every real chain check above,
+sink-only mail mode/retry/quota checks, workspace concurrency, and both rebuilds
+without stopping indexers. Progress showed two consumers for each of six queues,
+zero ready/unacknowledged messages and a caught-up chain checkpoint.
+
+That aggregate rerun failed later in the existing Account owner-event replay
+rehearsal: PostgreSQL reported `42P08`, inconsistent types for parameter `$5`
+(`text` versus `character varying`) in `replay-owner-events.mjs`'s `insertAudit`.
+No aggregate success is claimed; operator replay and the remaining aggregate
+steps are still unproven. The isolated containers, network, volumes, image aliases
+and generated signing key were cleaned up.
+
+A final resource audit found that Compose's stripped cleanup model left its
+unreferenced named volumes behind. Cleanup now retains named-volume mounts but
+omits secret bind mounts/environment. All nine focused verifier tests passed,
+and a separate real Compose create/down rehearsal proved removal of the named
+volume and container. The ten confirmed leftover volumes from the last two
+disposable projects were explicitly removed; no application-stack volumes were
+touched.
+
+Automatic fee replacement/audited chain replay, public application-to-Sepolia traffic,
+ABI-changing contract replacement, and exhaustive historical-release rollback remain
+explicit gaps in [traceability.md](traceability.md).
+
 ## 2026-10-03 operator completion verification
 
 The current working-tree implementation passed `npm run check`: 517 Vitest assertions

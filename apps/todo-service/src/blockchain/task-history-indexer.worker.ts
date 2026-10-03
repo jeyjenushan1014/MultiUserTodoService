@@ -26,6 +26,10 @@ const repository =
 
 const indexer =
   new TaskHistoryIndexer(repository);
+const indexers = [
+  indexer,
+  ...env.CHAIN_PREVIOUS_CONTRACTS.map((deployment) => new TaskHistoryIndexer(repository, deployment)),
+];
 
 let shuttingDown = false;
 
@@ -33,55 +37,35 @@ function wait(
   milliseconds: number,
 ): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, milliseconds);
-    timer.unref();
+    setTimeout(resolve, milliseconds);
   });
 }
 
 async function run(): Promise<void> {
-  const lockClient =
-    await repository.acquireWorkerLock(lockName);
-
-  if (lockClient === undefined) {
-    logger.info(
-      "Another chain indexer owns the PostgreSQL advisory lock; exiting",
-    );
-    return;
-  }
-
-  try {
-    await indexer.verifyConfiguredChain();
-
-    logger.info(
-      {
-        chainId: env.CHAIN_ID,
-        contractAddress: env.TASK_HISTORY_CONTRACT_ADDRESS,
-        confirmations: env.CHAIN_CONFIRMATIONS,
-      },
-      "Task-history chain indexer started",
-    );
-
-    while (!shuttingDown) {
+  logger.info(
+    { chainId: env.CHAIN_ID, contractAddress: env.TASK_HISTORY_CONTRACT_ADDRESS },
+    "Task-history chain indexer started",
+  );
+  while (!shuttingDown) {
+    const lockClient = await repository.acquireWorkerLock(lockName);
+    if (lockClient !== undefined) {
       try {
-        await indexer.pollOnce();
+        await indexer.verifyConfiguredChain();
+        for (const configuredIndexer of indexers) await configuredIndexer.pollOnce();
       } catch (error) {
         logger.error(
           { err: error },
           "Chain indexer poll failed; will retry",
         );
+      } finally {
+        await repository.releaseWorkerLock(lockClient, lockName);
       }
-
-      await wait(env.CHAIN_POLL_INTERVAL_MS);
     }
-  } finally {
-    await repository.releaseWorkerLock(
-      lockClient,
-      lockName,
-    );
+    await wait(env.CHAIN_POLL_INTERVAL_MS);
   }
 }
 
-async function shutdown(signal: string): Promise<void> {
+function shutdown(signal: string): void {
   if (shuttingDown) {
     return;
   }
@@ -93,15 +77,14 @@ async function shutdown(signal: string): Promise<void> {
     "Task-history chain indexer shutting down",
   );
 
-  await database.end();
 }
 
 process.once("SIGTERM", () => {
-  void shutdown("SIGTERM");
+  shutdown("SIGTERM");
 });
 
 process.once("SIGINT", () => {
-  void shutdown("SIGINT");
+  shutdown("SIGINT");
 });
 
 void run()

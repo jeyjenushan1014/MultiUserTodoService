@@ -76,12 +76,14 @@ TestDependencies {
         callerId,
         todoId,
         state,
+        expectedVersion,
         requestId,
       ) =>
         updateAccessibleTodoStateMock(
           callerId,
           todoId,
           state,
+          expectedVersion,
           requestId,
         ),
     };
@@ -110,6 +112,9 @@ const updatedTodo:
   UpdateTodoResponse = {
     id:
       todoId,
+
+    version:
+      2,
 
     ownerId:
       callerId,
@@ -196,6 +201,9 @@ describe(
           UpdateTodoRequest = {
             state:
               "completed",
+
+            expectedVersion:
+              1,
           };
 
         const result =
@@ -226,6 +234,7 @@ describe(
           callerId,
           todoId,
           "completed",
+          1,
           requestId,
         );
 
@@ -468,6 +477,40 @@ describe(
 
           message:
             "An active TODO with this title already exists",
+        });
+      },
+    );
+
+    it(
+      "returns a conflict when the requested version is stale",
+      async () => {
+        const dependencies =
+          createDependencies();
+
+        dependencies
+          .updateOwnedTodoMock
+          .mockResolvedValue({
+            status:
+              "version_conflict",
+          });
+
+        await expect(
+          dependencies.service.execute(
+            callerId,
+            todoId,
+            {
+              title:
+                "Stale update",
+              expectedVersion:
+                1,
+            },
+            requestId,
+          ),
+        ).rejects.toMatchObject({
+          statusCode:
+            409,
+          code:
+            "TODO_VERSION_CONFLICT",
         });
       },
     );

@@ -5,6 +5,8 @@ import type {
 export interface TodoDatabaseRow {
   readonly id: string;
 
+  readonly version: number;
+
   readonly owner_id: string;
 
   readonly title: string;

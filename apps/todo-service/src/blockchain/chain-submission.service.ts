@@ -5,6 +5,9 @@ import {
   defineChain,
   getAddress,
   http,
+  encodeFunctionData,
+  keccak256,
+  TransactionReceiptNotFoundError,
   type Abi,
   type PublicClient,
   type WalletClient,
@@ -80,7 +83,7 @@ export class ChainSubmissionService {
       options.publicClient ??
       (createPublicClient({
         chain,
-        transport: http(env.CHAIN_RPC_URL),
+        transport: http(env.CHAIN_RPC_URL, { timeout: 5000, retryCount: 0 }),
       }) as unknown as PublicClient);
 
     this.walletClient =
@@ -88,7 +91,7 @@ export class ChainSubmissionService {
       (createWalletClient({
         account: this.signerProvider.getAccount(),
         chain,
-        transport: http(env.CHAIN_RPC_URL),
+        transport: http(env.CHAIN_RPC_URL, { timeout: 5000, retryCount: 0 }),
       }) as unknown as WalletClient);
   }
 
@@ -113,14 +116,56 @@ export class ChainSubmissionService {
     submission: ChainSubmissionRecord,
   ): Promise<void> {
     const client = await pool.connect();
+    let transactionOpen = false;
+    let acquired = false;
 
     try {
+      const lock = await client.query<{ acquired: boolean }>(
+        "SELECT pg_try_advisory_lock(hashtext($1)) AS acquired",
+        [`chain-submission:${submission.id}`],
+      );
+      acquired = lock.rows[0]?.acquired === true;
+      if (!acquired) return;
+      submission = (await this.repository.getById(submission.id)) ?? submission;
+      if (!["pending", "reserved", "submitted", "dead_letter"].includes(submission.status)) return;
+      if (submission.chainId !== BigInt(env.CHAIN_ID) ||
+          submission.writerAddress.toLowerCase() !== this.signerProvider.address.toLowerCase()) {
+        throw new Error("Submission network or writer does not match this worker");
+      }
+
+      if (submission.transactionHash) {
+        try {
+          const receipt = await this.publicClient.getTransactionReceipt({
+            hash: submission.transactionHash as `0x${string}`,
+          });
+          const head = await this.publicClient.getBlockNumber({ cacheTime: 0 });
+          if (head - receipt.blockNumber + 1n >= BigInt(env.CHAIN_CONFIRMATIONS)) {
+            if (receipt.status === "success") {
+              await this.repository.markConfirmed(submission.id, receipt.blockNumber, receipt.blockHash);
+            } else {
+              await this.repository.markAbandoned(submission.id, "Transaction reverted on chain");
+            }
+          }
+          await this.repository.releaseClaim(submission.id);
+          return;
+        } catch (error) {
+          if (!(error instanceof TransactionReceiptNotFoundError)) throw error;
+        }
+      }
+
+      if (submission.status === "dead_letter") {
+        await this.repository.releaseClaim(submission.id);
+        return;
+      }
+
       await client.query("BEGIN");
+      transactionOpen = true;
 
       // Step 1: Query current on-chain transaction count for writer
       const onChainTxCount = BigInt(
         await this.publicClient.getTransactionCount({
           address: this.signerProvider.address,
+          blockTag: "pending",
         }),
       );
 
@@ -137,13 +182,40 @@ export class ChainSubmissionService {
       // Transition to reserved
       await this.repository.markReserved(client, submission.id, nonce);
 
-      await client.query("COMMIT");
-
-      // Step 3: Broadcast transaction to chain (BC-10)
       const abi = await this.getAbi();
       const taskIdBytes16 = uuidToBytes16(submission.taskId) as `0x${string}`;
       const workspaceIdBytes16 = uuidToBytes16(submission.workspaceId) as `0x${string}`;
       const actionEnum = actionToEnum[submission.action];
+      const data = encodeFunctionData({
+        abi, functionName: "recordTaskAction",
+        args: [taskIdBytes16, workspaceIdBytes16, actionEnum],
+      });
+      const request = submission.transactionRequest ?? await (async () => {
+        const fees = await this.publicClient.estimateFeesPerGas();
+        const gas = await this.publicClient.estimateGas({
+          account: this.signerProvider.getAccount(),
+          to: getAddress(submission.contractAddress), data,
+        });
+        return {
+          gas: gas.toString(),
+          maxFeePerGas: fees.maxFeePerGas.toString(),
+          maxPriorityFeePerGas: fees.maxPriorityFeePerGas.toString(),
+        };
+      })();
+      const serializedTransaction = await this.walletClient.signTransaction({
+        to: getAddress(submission.contractAddress), data,
+        nonce: Number(nonce), gas: BigInt(request.gas),
+        maxFeePerGas: BigInt(request.maxFeePerGas),
+        maxPriorityFeePerGas: BigInt(request.maxPriorityFeePerGas),
+        account: this.signerProvider.getAccount(),
+        chain: this.walletClient.chain,
+      });
+      const txHash = keccak256(serializedTransaction);
+      // Persist the hash and public transaction fields before any broadcast.
+      // A restarted worker signs the identical request, not a second contract call.
+      await this.repository.saveTransactionRequest(client, submission.id, request, txHash);
+      await client.query("COMMIT");
+      transactionOpen = false;
 
       logger.info(
         {
@@ -155,15 +227,7 @@ export class ChainSubmissionService {
         "Submitting transaction to TaskHistory smart contract",
       );
 
-      const txHash = await this.walletClient.writeContract({
-        address: getAddress(submission.contractAddress),
-        abi,
-        functionName: "recordTaskAction",
-        args: [taskIdBytes16, workspaceIdBytes16, actionEnum],
-        nonce: Number(nonce),
-        account: this.signerProvider.getAccount(),
-        chain: this.walletClient.chain,
-      });
+      await this.publicClient.sendRawTransaction({ serializedTransaction });
 
       // Step 4: Record submitted state (BC-11)
       await this.repository.markSubmitted(submission.id, txHash);
@@ -177,12 +241,13 @@ export class ChainSubmissionService {
         "Chain submission successfully broadcasted",
       );
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
-
+      if (transactionOpen) await client.query("ROLLBACK");
+      // RPC error objects can contain signed request details; retain only their class.
+      const err = new Error(error instanceof Error ? error.name : "ChainSubmissionError");
       logger.error(
         {
           submissionId: submission.id,
-          err,
+          errorType: err.message,
         },
         "Failed to submit chain transaction; scheduling retry or DLQ",
       );
@@ -190,7 +255,13 @@ export class ChainSubmissionService {
       // Step 5: Retry backoff or Dead-Letter-Queue (BC-14)
       await this.repository.recordFailure(submission.id, err, this.maxRetries);
     } finally {
-      client.release();
+      try {
+        if (acquired) {
+          await client.query("SELECT pg_advisory_unlock(hashtext($1))", [`chain-submission:${submission.id}`]);
+        }
+      } finally {
+        client.release();
+      }
     }
   }
 

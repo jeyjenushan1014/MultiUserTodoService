@@ -13,6 +13,8 @@ export const serviceImages = {
   "todo-owner-consumer": "multi-user-todo-platform-todo-service",
   "todo-history-worker": "multi-user-todo-platform-todo-service",
   "todo-cleanup-worker": "multi-user-todo-platform-todo-service",
+  "chain-writer": "multi-user-todo-platform-todo-service",
+  "chain-indexer": "multi-user-todo-platform-todo-service",
 };
 
 export function parseArguments(args) {

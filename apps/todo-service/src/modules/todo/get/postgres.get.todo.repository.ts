@@ -17,6 +17,9 @@ interface AccessibleTodoRow {
   readonly id:
     string;
 
+  readonly version:
+    number;
+
   readonly owner_id:
     string;
 
@@ -100,6 +103,9 @@ function mapAccessibleTodo(
     id:
       row.id,
 
+    version:
+      row.version,
+
     ownerId:
       row.owner_id,
 
@@ -158,6 +164,7 @@ implements GetTodoRepository {
         `
           SELECT
             todo.id,
+            todo.version,
             todo.owner_id,
             todo.title,
             todo.description,

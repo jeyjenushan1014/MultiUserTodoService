@@ -429,6 +429,21 @@ CHAIN_SIGNER_PRIVATE_KEY: z
   .regex(/^0x[a-fA-F0-9]{64}$/, "Must be a 32-byte hex-encoded Ethereum private key (0x...)")
   .optional(),
 
+CHAIN_SIGNER_KEY_FILE: z.string().min(1).optional(),
+
+CHAIN_PREVIOUS_CONTRACTS: z.string().default("[]")
+  .transform((value, context): unknown => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      context.addIssue({ code: "custom", message: "CHAIN_PREVIOUS_CONTRACTS must be JSON" });
+      return z.NEVER;
+    }
+  }).pipe(z.array(z.object({
+    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+    deploymentBlock: z.coerce.number().int().nonnegative(),
+  }))),
+
     OUTBOX_RETENTION_SECONDS:
       z.coerce
         .number()

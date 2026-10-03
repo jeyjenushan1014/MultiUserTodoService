@@ -40,7 +40,13 @@ const nullableDueDateSchema =
 export const updateTodoBodySchema =
   z
     .object({
-      title: z
+        expectedVersion: z
+          .number()
+          .int()
+          .positive()
+          .optional(),
+
+        title: z
         .string()
         .trim()
         .min(1)
@@ -66,8 +72,10 @@ export const updateTodoBodySchema =
     .strict()
     .refine(
       (value) =>
-        Object.keys(value)
-          .length > 0,
+        value.title !== undefined ||
+        value.description !== undefined ||
+        value.state !== undefined ||
+        value.dueDate !== undefined,
       {
         message:
           "At least one TODO field must be provided",

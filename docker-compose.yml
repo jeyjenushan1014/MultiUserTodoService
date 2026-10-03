@@ -440,6 +440,7 @@ services:
       CHAIN_CONFIRMATIONS: ${CHAIN_CONFIRMATIONS:-2}
       CHAIN_SCAN_RANGE: ${CHAIN_SCAN_RANGE:-100}
       CHAIN_POLL_INTERVAL_MS: ${CHAIN_POLL_INTERVAL_MS:-2000}
+      CHAIN_PREVIOUS_CONTRACTS: ${CHAIN_PREVIOUS_CONTRACTS:-[]}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -473,6 +474,59 @@ services:
 
     restart: unless-stopped
 
+
+  chain-writer:
+    image: multi-user-todo-platform-todo-service:${APP_RELEASE_ID:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+    command: ["npm", "run", "start:chain-writer", "-w", "@todo/todo-service"]
+    environment: &chain-worker-environment
+      NODE_ENV: production
+      TODO_DATABASE_URL: ${TODO_DATABASE_URL}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      CHAIN_RPC_URL: ${CONTAINER_CHAIN_RPC_URL:-http://host.docker.internal:8545}
+      CHAIN_ID: ${CHAIN_ID:-31337}
+      CHAIN_WRITER_ADDRESS: ${CHAIN_WRITER_ADDRESS}
+      TASK_HISTORY_CONTRACT_ADDRESS: ${TASK_HISTORY_CONTRACT_ADDRESS}
+      TASK_HISTORY_DEPLOYMENT_BLOCK: ${TASK_HISTORY_DEPLOYMENT_BLOCK:-1}
+      CHAIN_CONFIRMATIONS: ${CHAIN_CONFIRMATIONS:-2}
+      CHAIN_POLL_INTERVAL_MS: ${CHAIN_POLL_INTERVAL_MS:-2000}
+      CHAIN_SCAN_RANGE: ${CHAIN_SCAN_RANGE:-100}
+      CHAIN_PREVIOUS_CONTRACTS: ${CHAIN_PREVIOUS_CONTRACTS:-[]}
+      DATABASE_POOL_MAX: 3
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CHAIN_SIGNER_KEY_FILE: /run/chain-secrets/writer.key
+    volumes:
+      - ${CHAIN_SECRET_DIR:-./secrets/chain}:/run/chain-secrets:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      todo-migrations:
+        condition: service_completed_successfully
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+
+  chain-indexer:
+    image: multi-user-todo-platform-todo-service:${APP_RELEASE_ID:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: todo-service-runtime
+    command: ["npm", "run", "start:chain-indexer", "-w", "@todo/todo-service"]
+    environment: *chain-worker-environment
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      todo-migrations:
+        condition: service_completed_successfully
+    deploy:
+      replicas: 2
+    restart: unless-stopped
 
   todo-owner-consumer:
     build:

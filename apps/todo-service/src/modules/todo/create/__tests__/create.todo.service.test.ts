@@ -35,6 +35,9 @@ const todo:
     id:
       "9f134ed0-4503-4a23-a189-f065fe9fd838",
 
+    version:
+      1,
+
     ownerId,
 
     title:

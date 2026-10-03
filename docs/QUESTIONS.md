@@ -1,112 +1,132 @@
-# Questions and Challenges
+# Day 4 Questions, Experiments and Decisions
 
-## Day 4: mail delivery decisions (planning, 2026-10-02)
+Updated: 2026-10-03. This is the canonical Day 4 question list, not the Day 3 journal.
+Earlier Day 4 activities are retained in [Questions.day4.md](Questions.day4.md).
+Executable evidence and its limits are recorded in [traceability.md](traceability.md).
 
-This section records Day 4 decisions and remaining proof. Automated mail checks
-remain sink-only; manual external delivery is recorded separately below.
+## 1. Which fixes matter before adding more features?
 
-1. How can I enable external delivery without redeploying either notification worker?
-	A singleton PostgreSQL mode row and Docker-only operator command now control
-	delivery without changing business rules. Two readers and pinned event
-	destinations were verified against the live database. The operator reported
-	external and sink password-reset flows succeeding; the external reset token
-	was accepted with HTTP 204, and mode was returned to sink afterward.
-2. Does Brevo meet the free-tier requirement without a card or company domain?
-	The operator reports Brevo Free allows 300 messages per day and that the
-	configured sender is verified; signup required only a personal email, with
-	no card or company domain supplied. A real reset message was reported
-	delivered. The SMTP key was replaced after setup. Sender address and key are
-	intentionally omitted from tracked documentation.
-3. What happens when the provider accepts a message but the worker dies before marking
-	it sent? The existing event-ID claim prevents concurrent workers sending together,
-	but not a duplicate after the lease expires. Find provider idempotency support or
-	document the residual duplicate risk; never call the existing delivery exactly once.
-4. How do retry, per-address quotas, and account deletion interact? At present a failed
-	notification is retried twice using a delayed queue (30 and 60 seconds), then
-	reaches the DLQ after the third failure. Account erasure scans that new retry
-	queue as well. Gateway's rate limits are still per caller, not per destination.
-	The five-per-24-hour atomic address quota and send/deletion lock have live
-	PostgreSQL proof. Account and Todo migrations were reconciled and completed
-	on 2026-10-02; rerun lifecycle verification against that schema before
-	claiming the full DG-10 deployed flow. The local mail outage/replay proof
-	passes via `npm run verify:mail`; provider refusal/throttling remains open for ML-5.
-5. What remains open? The operator reports a successful external reset email,
-   a successful sink reset, Brevo Free's 300/day allowance, personal-email-only
-   signup, no card/company domain, and replacement of the setup SMTP key. Stage 5
-   proves local Mailpit outages, not real provider refusal/throttling; ML-5 remains
-   open and automated tests must stay sink-only. Provider replacement ML-6 is also
-   not demonstrated.
+**Problem:** code and green unit tests were being mistaken for a deployed, proven pipeline.
+The review identified absent chain workers, synthetic schema/replacement tests, lost concurrent
+edits, stale migration counts and an incomplete question journal.
 
-## Day 3: historical questions
+**Decision:** prioritize running the application pipeline, preventing lost updates, and testing
+the real database and chain. Correct unsupported ticks instead of adding assertions that merely
+repeat implementation strings. Keep external mail and public-chain writes out of automation.
 
-The following is the Day 3 version of this document. Day 2's questions (Docker setup, single-service Redis
-caching) are superseded — the system is now three services plus five worker processes coordinated
-through Postgres, Redis, and RabbitMQ, and the hard problems moved with it.
+**Why:** an omission declared honestly is better than a "Covered" claim that passes while its
+database, migration, worker or chain is missing.
 
-## 1. How do I keep two services' event contracts from silently drifting apart?
+## 2. Why were queued chain records never submitted?
 
-### Challenge
+**Tried/reviewed:** compared package scripts, Compose services and operational documentation.
+An indexer script existed, but neither worker had a default Compose service.
 
-Todo Service publishes domain events (`todo.shared`, `account.email-changed`, etc.) that Account
-Service consumes, and vice versa. Early on, the consumer's parsing schema and the producer's actual
-payload were written independently in two different packages, so a passing unit test on each side
-proved nothing about whether the two services agreed with each other. A schema mismatch only shows
-up at runtime, as a dead-lettered message, which is much harder to notice than a failing test.
+**Decision:** deploy two writers and two indexers with explicit resource bounds. Indexers
+acquire a shared PostgreSQL advisory lock per polling cycle, so both stay running while only
+one scans or rebuilds at a time. Writers claim real rows
+with `SKIP LOCKED`, initialize the nonce row before locking it, and coordinate each submission
+with a session advisory lock.
 
-### Solution
+**Crash decision:** persist the nonce, public unsigned transaction fields and deterministic hash
+before broadcasting. Recovery signs the identical request and reconciles receipts at the stated
+confirmation depth. Do not persist a private key or use a fresh nonce to retry an uncertain send.
+The crash verifier forwards to the real RPC, kills the real child worker after broadcast but
+before acknowledgement, and requires the restarted writers to confirm the original hash.
 
-Event payload types now live once, in `@todo/contracts`, and both the producer and the consumer
-import the same type instead of each maintaining its own copy. I also deleted a second, unused
-event-contract module (`integration-events/`) that existed only in `dist/` output and was never
-imported anywhere, so there was exactly one definition of each event's shape left to drift from.
+**Limit:** confirmation/crash recovery is not an unconditional liveness guarantee. Automatic
+fee replacement and audited chain-DLQ replay are not implemented; indefinitely stuck/dropped
+transactions still require human reconciliation. BC-11 must not be fully ticked.
 
-### Learning Outcome
+## 3. What is an independent migration test?
 
-A shared contract package only prevents drift if it is the *only* place the shape is defined and
-every consumer actually imports from it — a second definition sitting unused is just as dangerous
-as no shared definition at all, because nothing stops someone from wiring it up later by mistake.
+**Problem:** a mock pool returned expected rows regardless of PostgreSQL behavior. Checking
+that `down` is exported does not prove the reversal runs or preserves compatible data.
 
-## 2. How do I avoid two authentication implementations quietly disagreeing?
+**Decision:** run the actual migration runner on disposable databases, exercise real `up` and
+`down` steps, discover migration counts at runtime, and use actual previous-code traffic around
+an additive migration. Fail on SQL/HTTP/data errors. Never down-migrate the operator's database.
 
-### Challenge
+The real previous-code check is specifically the frozen previous GET repository behind
+an HTTP adapter, not a full historical authenticated application or old-version writes.
+Foundational table drops cannot preserve the removed data; guarded workflow reversals
+must refuse populated incompatible state. These limits are part of the evidence.
 
-The gateway grew two ways to verify an access token: a router-level middleware that also checks the
-session is still live, and a controller-level function that only checks the JWT signature. They used
-different error codes for the same failure (`INVALID_ACCESS_TOKEN` vs `UNAUTHORIZED`), and only one
-of them re-checked whether the session had been revoked.
+**Why:** the observable result must come from PostgreSQL and production code, not rows defined
+inside the assertion. Supporting mock unit tests are not evidence for EV-1/EV-2/EV-9/EV-10.
 
-### Solution
+## 4. How do conflicting task edits avoid silently overwriting one another?
 
-I extracted the actual JWT-parsing/verification logic into one shared module
-(`security/access-token-claims.ts`) and made both call sites use it, so there is one error vocabulary.
-Endpoints that should stop working the instant a session ends (profile, email change) now go through
-the session-checked middleware. Logout deliberately keeps the signature-only path, because logout has
-to succeed even against a token whose session was already ended by something else (a second logout
-call, or reuse-detection revoking every session on the account) — collapsing that into the
-session-checked path would make logout itself fail in exactly the case it exists to handle.
+**Problem:** duplicate-title 409 responses were unrelated to concurrent modifications.
 
-### Learning Outcome
+**Decision:** expose a task version and compare the caller's expected version inside the
+mutation transaction. A stale caller receives a distinct conflict response and must reload
+before deciding whether to retry. Test two real competing edits against the same observed
+version, and verify both the winning state and the absence of a second update event/anchor.
+The API compatibility and legacy-client policy are documented in [api.md](api.md).
 
-"Two implementations of the same concept" is not always a bug to delete down to one; sometimes it is
-two call sites with a genuinely different requirement that were previously hiding behind duplicated
-code instead of a documented decision. The fix was to make the shared part shared and keep only the
-part that is actually different.
+## 5. How can records from a replaced contract still be verified?
 
-## 3. What did I deliberately choose not to change in this pass?
+**Problem:** the old EV-11 test mapped two invented rows without calling any production code.
 
-This pass focused on the review's minor findings (m2–m10): health reporting, password-reset rate
-limiting, docker-compose start ordering, the Redis healthcheck, the duplicate event contract, the
-two auth paths, and documentation drift in `docs/api.md` and `docs/events.md`. The larger, riskier
-findings from the same review — the ones that require an actual design decision rather than a small
-correction (for example, how session revocation should be checked without a synchronous call to
-Account Service on every TODO read) — were left for a follow-up pass rather than folded in here,
-because getting that tradeoff right is worth its own review rather than a rushed change alongside
-a batch of smaller fixes.
+**Decision:** retain old public addresses and deployment blocks in `CHAIN_PREVIOUS_CONTRACTS`,
+index each deployment separately, and use the production projection repository to read across
+addresses. Verification deploys two actual contracts, writes through the application writer,
+rebuilds the replacement projection from real logs and reads both histories directly on chain.
 
-## Overall Reflection
+**Limit:** this supports ABI-compatible replacements. ABI-changing upgrades need versioned
+decoders and are deliberately not claimed.
 
-The recurring theme this time was not "does this one component work" but "do two independently
-written components still agree with each other" — a shared contract, a duplicated auth check, and a
-stale doc are all the same failure mode: something was true when it was written and nothing forced it
-to stay true afterward. `npm run check` catches the first kind of bug; it does not catch the second,
-which is why this document exists.
+## 6. Why is the personal-task workspace a shared sentinel?
+
+**Decision:** `DEFAULT_PERSONAL_WORKSPACE_ID` is deliberately one reserved non-tenant UUID,
+`00000000-0000-4000-8000-000000000001`, shared by all personal tasks on chain. It is not a real
+workspace and never grants membership or permission. Off-chain personal tasks retain null
+workspace IDs and owner authorization.
+
+**Alternatives rejected:** an owner ID violates BC-2; hashing it does not make it anonymous;
+a random per-person on-chain workspace creates permanent person-level correlation. Creating
+a real tenant solely to satisfy the contract would invent membership semantics.
+
+**Trade-off:** personal-task workspace grouping is intentionally unavailable on chain. The
+sentinel discloses only that a task was personal, not which person's workspace it belonged to.
+
+## 7. How is the signing key supplied without entering source or images?
+
+**Decision:** mount an untracked `writer.key` read-only into chain writers using
+`CHAIN_SECRET_DIR`. The signer validates its derived public address. The isolated verifier
+generates a new throwaway key outside its source snapshot, funds it on the local chain and
+cleans up its directory. Logs retain error classes rather than raw RPC/signing error objects.
+
+**Why:** passing a key in Compose environment/config or baking it into a build makes accidental
+disclosure much easier. The existing environment-key fallback is for compatibility only;
+the documented Compose deployment uses a mounted file.
+
+## 8. What remains special about real mail?
+
+The operator reported a Brevo password-reset email and HTTP 204 token acceptance on 2026-10-02,
+Free's 300/day allowance, personal-email signup without a card/company domain, and rotation of
+the setup SMTP credential. Those are manual/operator-reported facts, not automated results.
+Automated checks stay sink-only. The shared five-per-24-hour address quota and send/deletion
+fences are separate from Brevo's account-wide daily limit.
+
+Provider acceptance followed by worker death can still duplicate mail without provider-side
+idempotency. Never call that pipeline exactly once.
+
+## Deliberate omissions (rule 7)
+
+These are **not completed requirements**, and adding code-shaped tests does not change that:
+
+| Omitted or unproven work | Why left out / boundary |
+|---|---|
+| Automatic chain fee replacement and audited chain-DLQ replay; unconditional BC-11 liveness | Prioritize durable known-hash crash recovery and no duplicate application writes. Guessing a replacement nonce can permanently corrupt history. Human reconciliation remains required for indefinitely stuck transactions. |
+| Public Sepolia application-pipeline demonstration | The existing public demo was a standalone synthetic script. Automated tests use disposable local chains; public writes require an explicit operator-controlled key, funds and manual demonstration. |
+| ABI-changing contract replacement | Retaining compatible deployments is implemented; inventing a generic decoder without a real second ABI would be misleading. |
+| Real provider refusal/throttling/outage proof (full ML-5) and live provider replacement (ML-6) | Avoid sending test mail to people or consuming a real provider quota. Sink failure/retry proof does not substitute for external-provider behavior. |
+| Complete PR-1/PR-2/PR-4 across every Day 4 requirement and dependency | This remediation targets the review's specific unsupported evidence. The entire assessment still needs requirement-by-requirement behavioral review; no global tick is justified by the targeted checks. |
+| PF-4/PF-5/PF-10 broad load objectives and large-data query evidence where still missing | Correctness, deployment and lost-update prevention take priority over performance claims without a reproducible dataset and measured thresholds. |
+
+The broader uncovered groups remain in [traceability.md](traceability.md) and
+[day-4-checklist.md](day-4-checklist.md). This list does not turn partial work into coverage.
+Do not mark the assessment globally finished until every remaining requirement has its stated
+observable proof.

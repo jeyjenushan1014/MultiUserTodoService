@@ -17,6 +17,8 @@ explicit rather than inherited from library defaults.
 | History consumer prefetch | RabbitMQ consumer default, one handler per delivery | 2 | 2 active handlers per queue delivery stream | Durable queue and manual acknowledgement bound in consumer |
 | Account outbox batch | 20 rows | 2 | 40 rows per polling round | `2 workers * 20` |
 | Todo outbox batch | 25 rows | 2 | 50 rows per polling round | `2 workers * 25` |
+| Chain writer pool and batch | 3 connections; 5 claimed rows processed sequentially | 2 | 6 connections, at most 2 active RPC sequences | Each worker needs one session/advisory-lock client, one repository query client, and one spare for failure handling. RPC timeout is 5 seconds with no transport retry, below the 120-second claim lease. |
+| Chain indexer pool | 3 connections | 2 | 6 connections; one active scan/rebuild | One advisory-lock connection per polling cycle plus one projection transaction plus one spare. Both instances release the lock between polls so a single rebuild command can acquire it while they remain running. |
 | Owner rebuild batch | 100 rows | 1 maintenance run | 100 rows per transaction unit | Bounded maintenance work |
 | Cleanup batch | 100 rows | 2 | 200 rows per interval | `2 workers * 100` |
 | General API rate limit | 100 requests / 60 seconds | per caller | 100 per caller/window | Shared Redis counter |

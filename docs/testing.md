@@ -40,6 +40,41 @@ Real mail, public-chain deployment, destructive restore, and incident-approved w
 require their documented inputs and approvals; the safe verifier never performs them on
 production.
 
+### Real review-remediation checks
+
+`npm run verify:day4 -- --working-tree` verifies an isolated source snapshot including
+uncommitted fixes. It is not proof of a committed clean clone. The full flow now includes:
+
+- real authenticated Gateway task edits using one observed `version`: exactly one winner
+  and one `409 TODO_VERSION_CONFLICT`, with persisted state checked;
+- RPC container stop/restart while HTTP task creation must continue;
+- a real writer killed after actual RPC broadcast, before acknowledgement, followed by
+  durable-hash reconciliation by restarted deployed workers;
+- real PostgreSQL cold-nonce initialization races and two deployed writers, with direct
+  on-chain counts required to equal one per task;
+- two deployed `TaskHistory` contracts, real log indexing and old/new direct read-back;
+- five actual failures reaching the durable chain human-review queue;
+- migration reversals on a dedicated role-free PostgreSQL cluster.
+
+`npm run verify:evolution:schema` requires `EV_DATABASE_URL` for a disposable, dedicated
+PostgreSQL cluster. It refuses application tables/operator roles, creates uniquely named
+scratch databases, executes all discovered production migrations up/down, compares catalog
+snapshots and surviving core data, exercises guarded rollback refusal, and cleans up its
+databases/roles. It must fail rather than claim success when the database URL is absent.
+The opt-in Vitest integration uses `EV_RUN_POSTGRES=1`; without it the integration is explicitly
+skipped, not replaced by mock rows. The standalone CLI never silently skips.
+
+EV-1/EV-2 traffic uses a frozen previous-release production GET repository behind a real
+HTTP adapter while PostgreSQL lock inspection verifies overlap with an actual pending
+production migration. It proves that read path, not a complete historical authenticated
+deployment or old-version write traffic. Brief DDL locks can increase latency; "online"
+does not mean lock-free. Foundational table drops intentionally lose those tables' data;
+reversibility does not promise to recover deliberately dropped data without a backup.
+
+The chain crash check uses a forwarding RPC proxy only to withhold the real node's
+acknowledgement. It does not fabricate RPC replies, receipts, database rows, or contract logs.
+Public Sepolia application writes and real provider mail remain manual gates.
+
 The account-lifecycle unit slice is:
 
 ```powershell

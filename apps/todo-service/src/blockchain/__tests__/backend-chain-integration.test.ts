@@ -7,7 +7,7 @@ import {
 import { PrivacyGateViolationError } from "../privacy-gate.js";
 import { getDeploymentArtifact, getVerifiedContractAddress } from "../deployment-artifact.js";
 
-describe("Backend Chain Integration & Gates (BC-1, BC-2, BC-17, PF-7, Contract Replacement)", () => {
+describe("Backend chain writer unit regressions and artifact checks", () => {
   describe("PostgresChainSubmissionWriter (BC-1, BC-2)", () => {
     it("enqueues privacy-safe chain commands into chain_submissions table (BC-1)", async () => {
       const queries: { text: string; values: unknown[] }[] = [];
@@ -80,11 +80,8 @@ describe("Backend Chain Integration & Gates (BC-1, BC-2, BC-17, PF-7, Contract R
     });
   });
 
-  describe("PF-7 Chain Isolation", () => {
-    it("ensures database mutation succeeds in milliseconds even when external blockchain RPC hangs or fails", async () => {
-      // Simulate that the database write succeeds synchronously
-      const startTime = Date.now();
-
+  describe("Database-only enqueue path", () => {
+    it("enqueues using the transaction without a wallet or RPC dependency", async () => {
       const queries: { text: string }[] = [];
       const mockClient = {
         query: vi.fn((text: string) => {
@@ -101,55 +98,8 @@ describe("Backend Chain Integration & Gates (BC-1, BC-2, BC-17, PF-7, Contract R
         action: "created",
       });
 
-      const elapsedMs = Date.now() - startTime;
-      expect(elapsedMs).toBeLessThan(100);
       expect(queries.some((q) => q.text.includes("chain_submissions"))).toBe(true);
     });
   });
 
-  describe("Contract Replacement Verification (EV-11)", () => {
-    it("supports querying and verifying records from both old and replacement contract addresses", () => {
-      const oldContract = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
-      const newContract = "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0";
-      const taskId = "11111111-1111-4111-8111-111111111111";
-
-      const mockDbRows = [
-        {
-          chain_id: "31337",
-          contract_address: oldContract,
-          task_id: taskId,
-          action: "created",
-          chain_timestamp: "1790833100",
-        },
-        {
-          chain_id: "31337",
-          contract_address: newContract,
-          task_id: taskId,
-          action: "updated",
-          chain_timestamp: "1790833200",
-        },
-      ];
-
-      // Simulated query across both contracts
-      const records = mockDbRows.map((r) => ({
-        contractAddress: r.contract_address,
-        action: r.action,
-        timestamp: BigInt(r.chain_timestamp),
-      }));
-
-      expect(records).toHaveLength(2);
-      const firstRecord = records[0];
-      const secondRecord = records[1];
-      expect(firstRecord).toBeDefined();
-      expect(secondRecord).toBeDefined();
-      if (!firstRecord || !secondRecord) {
-        throw new Error("Expected records to be defined");
-      }
-
-      expect(firstRecord.contractAddress).toBe(oldContract);
-      expect(firstRecord.action).toBe("created");
-      expect(secondRecord.contractAddress).toBe(newContract);
-      expect(secondRecord.action).toBe("updated");
-    });
-  });
 });

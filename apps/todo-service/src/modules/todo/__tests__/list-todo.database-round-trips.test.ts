@@ -15,6 +15,7 @@ import {
 function createRows(count: number): Record<string, string | Date | null | readonly unknown[]>[] {
   return Array.from({ length: Math.min(count, 10) }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    version: 1,
     owner_id: "11111111-1111-4111-8111-111111111111",
     owner_email: "operator@example.test",
     title: `Todo ${index + 1}`,

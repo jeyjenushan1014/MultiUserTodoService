@@ -4,7 +4,28 @@ import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { delimiter, resolve, join } from "node:path";
-import { assertIsolatedConfig, cloneCommittedSource, isolatedComposeEnvironment, isSnapshotSource, parseOptions, redactVerificationOutput, snapshotCurrentSource, verificationEnvironment, waitForProgress } from "../verify-day4.mjs";
+import { assertIsolatedConfig, cleanupComposeConfig, cloneCommittedSource, isolatedComposeEnvironment, isSnapshotSource, parseOptions, redactVerificationOutput, snapshotCurrentSource, verificationEnvironment, waitForProgress } from "../verify-day4.mjs";
+
+test("cleanup retains named-volume references without secret bind mounts", () => {
+  const data = { type: "volume", source: "data", target: "/data" };
+  const config = {
+    services: {
+      database: { image: "postgres:17", volumes: [data], environment: { PASSWORD: "not-retained" } },
+      writer: { volumes: [{ type: "bind", source: "/private", target: "/run/secrets", read_only: true }] },
+    },
+    volumes: { data: { name: "isolated_data" } },
+    networks: { default: { name: "isolated_default" } },
+  };
+  assert.deepEqual(cleanupComposeConfig(config, "isolated"), {
+    name: "isolated",
+    services: {
+      database: { image: "postgres:17", volumes: [data] },
+      writer: { image: "node:24-alpine", volumes: [] },
+    },
+    volumes: config.volumes,
+    networks: config.networks,
+  });
+});
 
 test("rejects legacy/unsafe command-line overrides", () => {
   assert.deepEqual(parseOptions(["--ref", "HEAD~1", "--keep"]), { ref: "HEAD~1", keep: true });

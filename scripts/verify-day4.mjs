@@ -5,9 +5,23 @@ import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyRollback } from "./verify-rollback.mjs";
+import { privateKeyToAccount } from "viem/accounts";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const commandTimeoutMs = 600_000;
+
+export function cleanupComposeConfig(config, project) {
+  return {
+    name: project,
+    services: Object.fromEntries(Object.entries(config.services).map(([name, service]) =>
+      [name, {
+        image: service.image ?? "node:24-alpine",
+        volumes: (service.volumes ?? []).filter((mount) => mount.type === "volume"),
+      }])),
+    volumes: config.volumes,
+    networks: config.networks,
+  };
+}
 
 export function parseOptions(args) {
   const options = { ref: "HEAD", keep: false };
@@ -95,6 +109,7 @@ export function verificationEnvironment(project, release, scratch, clone, inheri
     COMPOSE_PROJECT_NAME: project, DAY4_COMPOSE_PROJECT: project, APP_RELEASE_ID: release,
     ACCOUNT_POSTGRES_USER: "verify_account", ACCOUNT_POSTGRES_PASSWORD: secret(), ACCOUNT_POSTGRES_DB: "verify_account",
     TODO_POSTGRES_USER: "verify_todo", TODO_POSTGRES_PASSWORD: secret(), TODO_POSTGRES_DB: "verify_todo",
+    EV_POSTGRES_PASSWORD: secret(),
     REDIS_PASSWORD: secret(), RABBITMQ_USER: "verify_broker", RABBITMQ_PASSWORD: secret(),
     INTERNAL_SERVICE_SECRET: secret(), JWT_SECRET: secret(),
     CHAIN_WRITER_ADDRESS: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -103,11 +118,13 @@ export function verificationEnvironment(project, release, scratch, clone, inheri
     CONTAINER_CHAIN_RPC_URL: "http://verification-chain:8545",
     MAIL_TEST_SINK_ONLY: "true", MAIL_PROVIDER_HOST: "", MAIL_PROVIDER_FROM: "",
     MAIL_SECRET_DIR: join(scratch, "empty-mail-secrets"),
+    CHAIN_SECRET_DIR: join(scratch, "chain-secrets"),
     VERIFICATION_SOURCE: clone, VERIFICATION_SCRIPTS: join(clone, "scripts"),
     MAIL_RETRY_FIRST_MS: "1000", MAIL_RETRY_SECOND_MS: "1500",
     LOG_LEVEL: "warn",
   });
   env.TODO_DATABASE_URL = `postgres://${env.TODO_POSTGRES_USER}:${env.TODO_POSTGRES_PASSWORD}@todo-postgres:5432/${env.TODO_POSTGRES_DB}`;
+  env.EV_DATABASE_URL = `postgres://verify_evolution:${env.EV_POSTGRES_PASSWORD}@evolution-postgres:5432/postgres`;
   env.ACCOUNT_DATABASE_URL = `postgres://${env.ACCOUNT_POSTGRES_USER}:${env.ACCOUNT_POSTGRES_PASSWORD}@account-postgres:5432/${env.ACCOUNT_POSTGRES_DB}`;
   env.RABBITMQ_URL = `amqp://${env.RABBITMQ_USER}:${env.RABBITMQ_PASSWORD}@rabbitmq:5672`;
   env.REDIS_URL = `redis://:${env.REDIS_PASSWORD}@redis:6379`;
@@ -243,9 +260,13 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       await readFile(join(clone, file));
     }
     await mkdir(join(scratch, "empty-mail-secrets"));
+    await mkdir(join(scratch, "chain-secrets"));
+    const writerKey = `0x${randomBytes(32).toString("hex")}`;
+    await writeFile(join(scratch, "chain-secrets", "writer.key"), writerKey, { mode: 0o600 });
     await writeFile(join(scratch, "empty.env"), "", { mode: 0o600 });
     env = isolatedComposeEnvironment(verificationEnvironment(project, release, scratch, clone),
       clone, join(scratch, "empty.env"));
+    env.CHAIN_WRITER_ADDRESS = privateKeyToAccount(writerKey).address;
     compose = ["compose", "--project-name", project, "--project-directory", clone,
       "--env-file", join(scratch, "empty.env"), "-f", join(clone, "docker-compose.yml"),
       "-f", join(clone, "scripts", "day4.compose.yml")];
@@ -253,12 +274,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     const config = JSON.parse(dc(["config", "--format", "json"], "Validate isolated Compose model", { capture: true }));
     assertIsolatedConfig(config, project, [clone, scratch]);
     const cleanupFile = join(scratch, "cleanup.compose.json");
-    await writeFile(cleanupFile, JSON.stringify({
-      name: project,
-      services: Object.fromEntries(Object.entries(config.services).map(([name, service]) =>
-        [name, { image: service.image ?? "node:24-alpine" }])),
-      volumes: config.volumes, networks: config.networks,
-    }, null, 2));
+    await writeFile(cleanupFile, JSON.stringify(cleanupComposeConfig(config, project), null, 2));
     console.log(`Source: ${source.sourceKind}; base revision: ${revision}; isolated project: ${project}; no host ports`);
     for (const service of ["account-migrations", "todo-migrations", "account-service", "todo-service", "gateway"]) {
       dc(["build", service], `Build isolated ${service} image (one target at a time)`);
@@ -272,16 +288,38 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:docs"], "API documentation verification");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "verify:authorization"], "Authorization verification");
     dc(["up", "-d", "--no-build", "account-postgres", "todo-postgres", "redis", "rabbitmq", "mailpit",
-      "account-migrations", "todo-migrations", "verification-chain"], "Start disposable infrastructure and migrations");
+      "account-migrations", "todo-migrations", "verification-chain", "evolution-postgres"], "Start disposable infrastructure and migrations");
     dc(["run", "--rm", "--no-deps", "-T", "todo-service", "node", "scripts/setup-day4-chain.mjs"],
       "Deploy and validate TaskHistory on isolated local chain", { timeout: 120_000 });
     dc(["up", "-d", "--no-build", "--wait", "--wait-timeout", "180"], "Start and health-check all replicas", { timeout: 240_000 });
+    dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "node",
+      "scripts/verify-evolution-schema.mjs"], "Execute all real migration reversals and previous-code HTTP traffic", { timeout: 240_000 });
     dc(["exec", "-T", "gateway", "node", "-e",
       "fetch('http://127.0.0.1:3000/health/dependencies',{signal:AbortSignal.timeout(10000)}).then(async r=>{const b=await r.json();if(!r.ok||b.status!=='healthy')process.exit(1)}).catch(()=>process.exit(1))"],
     "Verify complete dependency health");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:e2e"], "Complete live E2E suite");
+    dc(["stop", "verification-chain"], "Stop isolated chain for real outage injection");
+    try {
+      dc(["exec", "-T", "todo-service", "node", "scripts/verify-chain-live.mjs", "--outage"],
+        "Business operations while chain is unavailable");
+    } finally {
+      dc(["stop", "chain-writer"], "Pause writers before restoring RPC for crash injection");
+      dc(["start", "verification-chain"], "Restart isolated chain");
+    }
+    let crash;
+    try {
+      crash = JSON.parse(dc(["exec", "-T", "-e", "CHAIN_SIGNER_KEY_FILE=/run/chain-secrets/writer.key", "todo-service",
+        "node", "scripts/verify-chain-crash.mjs"], "Kill real writer after RPC broadcast before acknowledgement", { capture: true }));
+    } finally {
+      dc(["start", "chain-writer"], "Restart both deployed writers after crash injection");
+    }
+    dc(["exec", "-T", "todo-service", "node", "scripts/verify-chain-crash.mjs", "--recover", crash.transactionHash],
+      "Reconcile durable transaction after process death", { timeout: 240_000 });
+    dc(["exec", "-T", "todo-service", "node", "scripts/verify-chain-live.mjs"],
+      "Real application chain pipeline, concurrent writers and replacement contracts", { timeout: 240_000 });
     for (const script of ["verify-mail-mode.mjs", "verify-notification-retry.mjs", "verify-notification-quota.mjs"]) {
-      runRedacted("docker", [...compose, "exec", "-T", "account-service", "node", `apps/account-service/scripts/${script}`],
+      runRedacted("docker", [...compose, "exec", "-T", "-e", `DLQ_OPERATOR_ID=day4-verifier:${project}`,
+        "account-service", "node", `apps/account-service/scripts/${script}`],
         `Sink-only notification verification: ${script}`, 120_000);
     }
     dc(["exec", "-T", "account-service", "node", "apps/account-service/scripts/verify-workspace-concurrency.mjs"], "Workspace PostgreSQL concurrency proof");

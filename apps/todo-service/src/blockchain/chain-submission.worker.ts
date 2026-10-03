@@ -2,14 +2,14 @@ import { database } from "../config/database.js";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import { ChainSubmissionService } from "./chain-submission.service.js";
+import { hostname } from "node:os";
 
-const workerId = `chain-submission-worker:${process.pid}`;
+const workerId = `chain-writer:${hostname()}:${process.pid}`;
 let shuttingDown = false;
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, milliseconds);
-    timer.unref();
+    setTimeout(resolve, milliseconds);
   });
 }
 
@@ -43,15 +43,14 @@ async function run(): Promise<void> {
   }
 }
 
-async function shutdown(signal: string): Promise<void> {
+function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, "Chain submission worker shutting down");
-  await database.end();
 }
 
-process.once("SIGTERM", () => void shutdown("SIGTERM"));
-process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => { shutdown("SIGTERM"); });
+process.once("SIGINT", () => { shutdown("SIGINT"); });
 
 void run()
   .catch((error: unknown) => {

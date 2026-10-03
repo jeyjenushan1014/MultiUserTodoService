@@ -59,6 +59,9 @@ interface CurrentTodoRow {
   readonly owner_id:
     string;
 
+  readonly version:
+    number;
+
   readonly state:
     TodoState;
 }
@@ -173,6 +176,7 @@ implements UpdateTodoRepository {
     const values:
       (
         | string
+        | number
         | null
       )[] = [];
 
@@ -265,12 +269,12 @@ implements UpdateTodoRepository {
           `
             SELECT
               owner_id,
+              version,
               state
             FROM todos
             WHERE id = $1
               AND owner_id = $2
               AND deleted_at IS NULL
-            FOR UPDATE
           `,
           [
             todoId,
@@ -295,6 +299,33 @@ implements UpdateTodoRepository {
         };
       }
 
+      if (
+        changes.expectedVersion !==
+          undefined &&
+        changes.expectedVersion !==
+          currentTodo.version
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return {
+          status:
+            "version_conflict",
+        };
+      }
+
+      const expectedVersion =
+        changes.expectedVersion ??
+        currentTodo.version;
+
+      values.push(
+        expectedVersion,
+      );
+
+      const versionPosition =
+        values.length;
+
       const updateResult =
         await client.query<
           TodoDatabaseRow
@@ -309,9 +340,12 @@ implements UpdateTodoRepository {
               $${todoIdPosition}
               AND owner_id =
                 $${ownerIdPosition}
+              AND version =
+                $${versionPosition}
               AND deleted_at IS NULL
             RETURNING
               id,
+              version,
               owner_id,
               workspace_id,
               title,
@@ -331,9 +365,14 @@ implements UpdateTodoRepository {
         updatedTodo ===
         undefined
       ) {
-        throw new Error(
-          "Locked TODO disappeared during update",
+        await client.query(
+          "ROLLBACK",
         );
+
+        return {
+          status:
+            "version_conflict",
+        };
       }
 
       await this.appendCompletedEvent(
@@ -395,6 +434,7 @@ implements UpdateTodoRepository {
     callerId: string,
     todoId: string,
     state: TodoState,
+    expectedVersion: number | undefined,
     requestId: string,
   ): Promise<
     UpdateTodoRepositoryResult
@@ -407,10 +447,6 @@ implements UpdateTodoRepository {
         "BEGIN",
       );
 
-      /*
-       * Locking the TODO row also coordinates with
-       * share withdrawal, which locks this row first.
-       */
       const currentResult =
         await client.query<
           CurrentTodoRow
@@ -418,6 +454,7 @@ implements UpdateTodoRepository {
           `
             SELECT
               todo.owner_id,
+              todo.version,
               todo.state
             FROM todos AS todo
             WHERE todo.id = $1
@@ -438,7 +475,6 @@ implements UpdateTodoRepository {
                       IS NULL
                 )
               )
-            FOR UPDATE OF todo
           `,
           [
             todoId,
@@ -463,6 +499,22 @@ implements UpdateTodoRepository {
         };
       }
 
+      if (
+        expectedVersion !==
+          undefined &&
+        expectedVersion !==
+          currentTodo.version
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return {
+          status:
+            "version_conflict",
+        };
+      }
+
       const updateResult =
         await client.query<
           TodoDatabaseRow
@@ -475,8 +527,23 @@ implements UpdateTodoRepository {
                 CURRENT_TIMESTAMP
             WHERE id = $2
               AND deleted_at IS NULL
+              AND version = $3
+              AND (
+                owner_id = $4
+                OR EXISTS (
+                  SELECT 1
+                  FROM todo_shares AS active_share
+                  WHERE active_share.todo_id =
+                    todos.id
+                    AND active_share.recipient_id =
+                      $4
+                    AND active_share.withdrawn_at
+                      IS NULL
+                )
+              )
             RETURNING
               id,
+              version,
               owner_id,
               workspace_id,
               title,
@@ -489,6 +556,8 @@ implements UpdateTodoRepository {
           [
             state,
             todoId,
+            currentTodo.version,
+            callerId,
           ],
         );
 
@@ -499,9 +568,14 @@ implements UpdateTodoRepository {
         updatedTodo ===
         undefined
       ) {
-        throw new Error(
-          "Locked TODO disappeared during state update",
+        await client.query(
+          "ROLLBACK",
         );
+
+        return {
+          status:
+            "version_conflict",
+        };
       }
 
       await this.appendCompletedEvent(

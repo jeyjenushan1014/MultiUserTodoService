@@ -16,6 +16,8 @@ for (const replicaService of [
   "todo-owner-consumer",
   "account-notification-consumer",
   "todo-history-worker",
+  "chain-writer",
+  "chain-indexer",
 ]) {
   const serviceMatch = new RegExp(`^  ${replicaService}:\\r?$`, "m").exec(compose);
   const serviceStart = serviceMatch?.index ?? -1;

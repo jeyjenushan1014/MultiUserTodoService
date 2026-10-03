@@ -48,6 +48,7 @@ Protected Gateway endpoints return `401 INVALID_ACCESS_TOKEN` for a missing Auth
 | Field | Type | Meaning |
 |---|---|---|
 | `id` | UUID string | Stable identifier for an account, TODO, share, history record, or event. |
+| `version` | positive integer | TODO concurrency token. Send as `expectedVersion` when updating to reject stale writes. |
 | `userId` / `ownerId` / `recipientId` | UUID string | Account identifier. These are opaque identifiers and must not be inferred from email addresses. |
 | `email` | string | Normalized account email address. |
 | `createdAt` / `updatedAt` / `sharedAt` / `occurredAt` | ISO-8601 datetime string | Timestamp with an explicit UTC offset. |
@@ -201,7 +202,7 @@ Request:
 { "title": "Write architecture docs", "description": "Describe failure behavior", "state": "pending", "dueDate": "2026-09-30T17:00:00.000Z" }
 ```
 
-Response `201` is a TODO object with `id`, `ownerId`, `title`, `description`, `state`, `dueDate`, `createdAt`, and `updatedAt`. Returns `400 VALIDATION_ERROR`, `409 TODO_TITLE_ALREADY_EXISTS`, or `503 OWNER_PROJECTION_NOT_READY` when the account projection has not caught up.
+Response `201` is a TODO object with `id`, `version` (positive integer, initially `1`), `ownerId`, `title`, `description`, `state`, `dueDate`, `createdAt`, and `updatedAt`. Returns `400 VALIDATION_ERROR`, `409 TODO_TITLE_ALREADY_EXISTS`, or `503 OWNER_PROJECTION_NOT_READY` when the account projection has not caught up.
 
 ### `GET /api/v1/todos`
 
@@ -216,15 +217,17 @@ Lists visible TODOs. Query parameters:
 | `sortBy` | string | `createdAt`, `dueDate` (default `createdAt`) | sort field |
 | `sortOrder` | string | `asc`, `desc` (default `desc`) | sort direction |
 
-Response `200` has `{ "items": [], "pagination": { "page": 1, "pageSize": 20, "totalItems": 0, "totalPages": 0 } }`. Each item includes TODO fields plus `accessType` (`owner` or `shared`), `owner: { id, email }`, and `sharedWith: [{ id, email }]`. Invalid query values return `400 VALIDATION_ERROR`.
+Response `200` has `{ "items": [], "pagination": { "page": 1, "pageSize": 20, "totalItems": 0, "totalPages": 0 } }`. Each item includes TODO fields plus `accessType` (`owner` or `shared`), `owner: { id, email }`, and `sharedWith: [{ id, email }]`. TODO `version` is a positive integer that changes on every update. Invalid query values return `400 VALIDATION_ERROR`.
 
 ### `GET /api/v1/todos/:todoId`
 
-Returns one visible TODO with owner and sharing details. Returns `200`, `400 VALIDATION_ERROR`, or `404 TODO_NOT_FOUND`. The same `404` is used when the TODO exists but is not visible to the caller.
+Returns one visible TODO with owner and sharing details, including its positive integer `version`. Returns `200`, `400 VALIDATION_ERROR`, or `404 TODO_NOT_FOUND`. The same `404` is used when the TODO exists but is not visible to the caller.
 
 ### `PATCH /api/v1/todos/:todoId`
 
-Partially updates `title`, `description`, `state`, and/or `dueDate`. At least one field is required. Owners may change every field; an active share recipient may change only `state`. Returns `200` with the updated TODO, `400 VALIDATION_ERROR`, `404 TODO_NOT_FOUND` (used for both a missing TODO and one the caller cannot update — no existence disclosure), or `409 TODO_TITLE_ALREADY_EXISTS`.
+Partially updates `title`, `description`, `state`, and/or `dueDate`. At least one field is required. Owners may change every field; an active share recipient may change only `state`. Clients should include the `version` from the last TODO response as `expectedVersion`, for example `{ "title": "Revised title", "expectedVersion": 3 }`. If the TODO has changed since that version was read, the service makes no changes and returns `409 TODO_VERSION_CONFLICT`; fetch the latest TODO and resolve/retry the edit. Each successful task-row update increments `version`.
+
+For wire compatibility, `expectedVersion` remains optional: legacy update bodies without it are still accepted, and concurrent database updates use an atomic version compare-and-swap so only one overlapping write can succeed. A legacy request cannot detect that its caller is submitting an older snapshot after a prior write has already committed; clients need to send `expectedVersion` to protect that case. Returns `200` with the updated TODO, `400 VALIDATION_ERROR`, `404 TODO_NOT_FOUND` (used for both a missing TODO and one the caller cannot update — no existence disclosure), `409 TODO_TITLE_ALREADY_EXISTS`, or `409 TODO_VERSION_CONFLICT`.
 
 ### `DELETE /api/v1/todos/:todoId`
 

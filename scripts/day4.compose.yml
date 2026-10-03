@@ -6,16 +6,39 @@ services:
     ports: !reset []
   edge:
     ports: !reset []
+  gateway:
+    environment:
+      GENERAL_RATE_LIMIT_MAX: "1000"
+      AUTH_RATE_LIMIT_MAX: "100"
+      PASSWORD_RESET_RATE_LIMIT_MAX: "20"
   todo-service:
     volumes:
       - ${VERIFICATION_SCRIPTS}:/app/scripts:ro
       - ${VERIFICATION_SOURCE}/contracts/onchain/ignition/deployments/chain-31337/artifacts:/app/verification-contract:ro
+      - ${CHAIN_SECRET_DIR}:/run/chain-secrets:ro
   verification-chain:
     image: ghcr.io/foundry-rs/foundry:v1.3.1
+    user: "0:0"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
     entrypoint: ["anvil"]
-    command: ["--host", "0.0.0.0", "--chain-id", "31337", "--silent"]
+    command: ["--host", "0.0.0.0", "--chain-id", "31337", "--silent",
+      "--state", "/chain/state.json", "--state-interval", "1", "--preserve-historical-states"]
+    volumes:
+      - verification_chain_data:/chain
     healthcheck:
       test: ["CMD", "cast", "block-number", "--rpc-url", "http://127.0.0.1:8545"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  evolution-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: verify_evolution
+      POSTGRES_PASSWORD: ${EV_POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verify_evolution -d postgres"]
       interval: 2s
       timeout: 5s
       retries: 30
@@ -27,8 +50,11 @@ services:
     environment:
       TODO_E2E_BASE_URL: http://edge:3000
       NODE_ENV: test
+      VITEST_MAX_FORKS: "2"
+      VITEST_MIN_FORKS: "1"
       ACCOUNT_DATABASE_URL: ${ACCOUNT_DATABASE_URL}
       TODO_DATABASE_URL: ${TODO_DATABASE_URL}
+      EV_DATABASE_URL: ${EV_DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       RABBITMQ_URL: ${RABBITMQ_URL}
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
@@ -41,3 +67,6 @@ services:
       CHAIN_RPC_URL: ${CONTAINER_CHAIN_RPC_URL}
       MAIL_TEST_SINK_ONLY: "true"
     command: ["npm", "run", "check"]
+
+volumes:
+  verification_chain_data:

@@ -44,6 +44,37 @@ describe(
     );
 
     it(
+      "accepts a positive expected version",
+      () => {
+        expect(
+          updateTodoBodySchema.parse({
+            state:
+              "completed",
+            expectedVersion:
+              4,
+          }),
+        ).toEqual({
+          state:
+            "completed",
+          expectedVersion:
+            4,
+        });
+      },
+    );
+
+    it(
+      "does not accept an expected version as the only update field",
+      () => {
+        expect(
+          updateTodoBodySchema.safeParse({
+            expectedVersion:
+              4,
+          }).success,
+        ).toBe(false);
+      },
+    );
+
+    it(
       "accepts multiple fields",
       () => {
         const result =

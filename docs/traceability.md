@@ -13,9 +13,10 @@ as full automated coverage, as required by TRC-2.
 | AUT-3 | Covered | `npm run verify:authorization` | The verifier checks documented and source anchors for the last-administrator, no-workspace, and legacy-task rules. |
 | AUT-4 | Covered | `npm run verify:authorization` plus the live TN-7 E2E test | The verifier checks the documented 15-second propagation bound; the live test measures actual role/removal propagation. |
 | AUT-5 | Covered | `npm run verify:authorization` plus the live hidden-resource E2E test | The verifier checks refusal and non-disclosure wording/source anchors; the live test checks identical missing and inaccessible TODO responses and timing. |
-| PF-1 | Covered | `docker compose ps` followed by `npm run test:e2e -w @todo/gateway` with two replicas of every stateless process | The runtime showed two replicas for each configured stateless process and the complete 27-test E2E suite passed with competing application and worker instances. |
+| PF-1 | Covered | `docker compose ps` followed by `npm run test:e2e -w @todo/gateway` with two replicas of every stateless process | The runtime showed two replicas for each configured stateless process and the complete 28-test E2E suite passed with competing application and worker instances. |
 | PF-8 | Covered | `npm run verify:capacity` | The verifier anchors every stateless replica declaration and configured pool, prefetch, batch, and rate-limit value to the calculations in `docs/capacity.md`. |
-| PF-9 | Covered | `npm run verify:capacity` plus the scaled `npm run test:e2e -w @todo/gateway` proof | Shared Redis rate limits, bounded pools/prefetch, idempotent workers, and the 27-test scaled E2E run demonstrate caller and replica isolation. |
+| PF-9 | Covered | `npm run verify:capacity` plus the scaled `npm run test:e2e -w @todo/gateway` proof | Shared Redis rate limits, bounded pools/prefetch, idempotent workers, and the 28-test scaled E2E run demonstrate caller and replica isolation. |
+| PF-6 | Covered (real optimistic concurrency) | `npm run test:e2e -w @todo/gateway` against the isolated Day 4 stack | Real competing updates carrying the same observed task version yield exactly one success and one `409 TODO_VERSION_CONFLICT`; the persisted task equals the winner. All 28 live E2E tests passed on 2026-10-03. Legacy bodies remain accepted; clients must carry `expectedVersion` to reject stale edits made after a previous read. |
 | WF-8 | Covered | `npm run verify:workflow:boundaries` | Source-anchored proof confirms local workflow commits complete before participant HTTP calls and worker ownership uses `FOR UPDATE SKIP LOCKED`. |
 | WF-4 | Covered | `npm run verify:workflow:compensation` | Live Todo participant failure reaches bounded compensation and the workflow completes after the participant returns. |
 | WF-5 | Covered | `npm run verify:workflow:compensation` plus orchestrator unit tests | Live compensation completes through idempotent participant cleanup; unit tests cover repeated undo and compensation failure bounds. |
@@ -30,23 +31,18 @@ as full automated coverage, as required by TRC-2.
 | BC-7 | Covered | `npm run test -w @todo/todo-service -- task-history-projection.test.ts` | Unit-tested: `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING` guarantees duplicate event processing leaves identical state. |
 | BC-8 | Covered | `npm run test -w @todo/todo-service -- task-history-projection.test.ts` | Unit-tested: reorg detection identifies common ancestor and `rollbackAfterBlock` removes orphaned events and block records above the ancestor. |
 | BC-9 | Covered | `npm run test -w @todo/todo-service -- task-history-projection.test.ts` | Unit-tested: `CHAIN_CONFIRMATIONS` is enforced $\ge 2$ and indexer only processes blocks at or behind `safeHead = latestBlock - confirmations + 1n`. |
-| BC-10 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Asynchronous chain writes via Postgres outbox pattern & worker service. |
-| BC-11 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | State machine transitions: pending, reserved, submitted, confirmed, replaced, abandoned, dead_letter. |
-| BC-12 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Atomic sequential nonce coordination via `chain_writer_nonces` and row locking across concurrent workers. |
-| BC-13 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Outage resilience: mutations persist to DB even during chain/RPC outage. |
-| BC-14 | Covered | `npm run test -w @todo/todo-service -- chain-submission.test.ts` | Exponential backoff retry and DLQ routing on repeated failures. |
+| BC-10 | Covered (real local application pipeline) | `npm run verify:day4 -- --working-tree` | On 2026-10-03, HTTP creates queued real rows during stopped RPC; 12 new tasks subsequently passed PostgreSQL -> two deployed writers -> EVM -> deployed indexer with direct on-chain counts. Public Sepolia application traffic remains unproven. |
+| BC-12 | Covered (real concurrent-worker proof) | `npm run verify:day4 -- --working-tree` | Passed cold nonce-row initialization races in actual PostgreSQL, then two deployed writers submitted 12 real API tasks with unique nonces/hashes and exactly one contract record each. Broadcast-boundary process death also recovered the same hash. Indefinite fee/drop recovery remains the declared BC-11 gap. |
+| BC-13 | Covered (real RPC stop/restart) | `npm run verify:day4 -- --working-tree` | Passed two real HTTP task creations and durable enqueue during stopped RPC; persisted local chain state survives restart. Only the precise fresh-owner projection-delay response is retried. |
+| BC-14 | Covered (real bounded retry) | `npm run verify:day4 -- --working-tree` | Passed an actual failing row through deployed workers to `dead_letter` at exactly five failures; known hashes continue receipt reconciliation without unbounded rebroadcast. An audited replay command is not claimed. |
 | BC-15 | Covered | `npm run test -w @todo/todo-service -- signer-key-provider.test.ts` | `SecureSignerKeyProvider` with runtime in-memory protection, address validation, and logger redaction. |
 | BC-16 | Covered (local comparison and public sample) | `cd contracts/onchain; npm run test:gas`; operator-run `npm run demo:sepolia` | Local append used 75,583 gas with 1 and 1,000 existing records; the Sepolia v1 synthetic demo write used 91,881 gas. |
 | BC-17 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Independent Hardhat project exports `task-history.abi.json` and `task-history.deployment.json`; consumed dynamically by backend without hardcoded addresses. |
-| PF-7 | Covered (chain isolation) | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Slow or failing chain RPC calls do not affect API response time; mutations write to Postgres in milliseconds. |
-| OP-1 | Covered (chain copy) | `npm run rebuild:chain-projection` | One documented command rebuilds the local relational chain projection from chain source while services are running, without manual database edits. |
+| OP-1 | Covered (chain copy) | `npm run rebuild:chain-projection` | Two consecutive live rebuilds passed with both current indexer processes and both Todo API replicas remaining running. Per-cycle advisory locking serializes scanners and rebuilds without manual database edits or stopping indexers. |
 | OP-4 | Covered (operator-reported restore and smoke test) | Operator-run `pg_dump -Fc` and `pg_restore --no-owner` into scratch databases; authenticated API/TODO-read smoke test against the restored copies; evidence in `docs/operations.md` | Restore is manually demonstrated and timed; backups and scratch DBs remain local/private. |
 | OP-7 | Covered | `npm run verify:mail` and `verify-mail-mode.mjs` | Mail destination switches between sink and external mode in Account PostgreSQL without redeploy, records an operator audit identity, and keeps sink as the default. |
-| EV-1 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Schema changes are non-blocking and additive; concurrent queries continue serving traffic during migration without failures. |
-| EV-2 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Old application code (which omits new columns) continues executing correctly against evolved schemas via defaults and nullable fields. |
-| EV-9 | Partial | `npm run verify:evolution:schema` (last passed before the two Todo replay migrations were added) | Account has 15 migrations and Todo now has 22. Both new migrations define `down`; rerun the aggregate verifier before claiming current coverage. |
-| EV-10 | Covered | `npm run test -w @todo/todo-service -- schema-evolution.test.ts` | Reversals drop added schema components cleanly without corrupting core data or requiring database restore. |
-| EV-11 | Covered | `npm run test -w @todo/todo-service -- backend-chain-integration.test.ts` | Replacing a contract retains verifiable historical records anchored by previous addresses. |
+| EV-9 | Covered (schema reversals) | `npm run verify:evolution:schema` with dedicated `EV_DATABASE_URL` | PostgreSQL 17 run passed all 19 Account + 26 Todo migrations up/down (45 total after two remediation migrations), catalog restoration, surviving core data, guarded rollback refusal and scratch DB/role cleanup. Discovery is dynamic. |
+| EV-11 | Covered (real compatible-contract replacement) | `npm run verify:day4 -- --working-tree` | Passed two actual deployments, writes through the production submission worker, real log rebuild through production indexer/repository, and direct old/new history/timestamp read-back. The self-mapped fixture was removed. ABI-changing replacement is omitted. |
 | EV-7 | Covered | `npm run test -w @todo/account-service -- registration.controller.test.ts` and `npm run test -w @todo/gateway -- registration.controller.compatibility.test.ts` | Registration returns the previous flat `data.id/email/createdAt` fields and current `data.user` shape. |
 | EV-8 | Covered (live Account Service rollout) | `docker compose -f docker-compose.yml -f docker-compose.ev8.yml exec -T -e EV8_OLD_URL=http://account-service-ev8-old:3001 -e EV8_NEW_URL=http://account-service-ev8-new:3001 account-service-ev8-new npm run verify:ev8-live -w @todo/account-service` | Distinct old/new Account images ran together against one database and RabbitMQ; both registrations succeeded and outbox stored event versions 1 and 2. Gateway old-response compatibility is also covered by `registration.controller.compatibility.test.ts`. |
 | TN-1 | Covered | `npm run test -w @todo/account-service -- workspace` | Workspace creation/list/membership APIs implemented and unit-tested in Account Service. Evidence: `apps/account-service/src/modules/workspace/*` tests and routes. |
@@ -64,14 +60,22 @@ as full automated coverage, as required by TRC-2.
 
 ## Coverage gaps — no evidence claimed
 
+| Requirement | Supporting check actually run | Remaining requirement gap |
+|---|---|---|
+| BC-11 | `verify:day4` killed a real writer after actual broadcast and restarted writers confirmed the original durable hash exactly once. | Automatic fee replacement, audited replay and unconditional terminality for indefinitely dropped/stuck transactions are not built. State names alone are not proof. |
+| EV-1 / EV-2 | `verify:evolution:schema` passed PostgreSQL 17 with frozen previous production GET repository HTTP reads before/during/after real production DDL. PostgreSQL locks verified overlapping requests. | This is not the full authenticated historical service or old-version write traffic. No blanket previous-path coverage is claimed. |
+| EV-10 | Real schema down/up, compatible surviving core data and previous-repository read-back without restore; guarded incompatible workflow rollback refused safely. | Not every historical service release was deployed/rolled back. Foundational table drops intentionally remove their data. |
+| PF-7 | Real RPC stop/restart and five-second worker RPC deadlines. | Slow chain and mail-provider capacity saturation is not fully measured; a mocked enqueue timing check was withdrawn. |
+
 The on-chain contract has a local build, eight passing tests, ABI and deployment metadata export,
 a reported chain-31337 Ignition deployment, a verified Sepolia deployment and synthetic read-back,
 a local projection indexer with rebuild, deduplication, reorg rollback, and confirmation gating
 (BC-3, BC-5..BC-9, OP-1), backend durable anchoring with privacy gate (BC-1, BC-2), asynchronous
 submission code with state machine, multi-worker nonce coordination, and DLQ (BC-10..BC-14), signer
 key custody (BC-15), gas measurements (BC-16), deployment artifact verification (BC-17), and RPC
-isolation (PF-7). The backend chain workers are not in default Compose; production API-to-Sepolia
-anchoring and operator recovery are not demonstrated. EV-8's live rollout evidence is recorded
+isolation (PF-7). Default Compose now includes two chain writers and two indexers.
+Public API-to-Sepolia anchoring, automatic fee replacement and audited operator recovery are
+not demonstrated. EV-8's live rollout evidence is recorded
 above and must not be confused with automated compatibility coverage for every event pair.
 
 Account and Todo migrations were reconciled and completed on 2026-10-02; rerun the deployed
@@ -90,7 +94,7 @@ stated acceptance evidence is missing.
 | PR-2 | Partial | Shared contracts and the registration compatibility test provide independent producer/consumer evidence; independent contracts are not exercised for every event pair. |
 | PR-3 | Partial | Registration v1/v2 compatibility is tested. A complete producer/consumer compatibility matrix is not automated. |
 | PR-4 | Partial | `npm run verify:mail` exercises a Mailpit outage/recovery in an isolated project. Equivalent stop/restart automation for other dependencies and workflow processes remains open. |
-| PR-5 | Partial | `scripts/verify-day4.mjs` assigns a unique Compose project, scopes volume cleanup, installs locked dependencies, and injects test-only secrets/configuration; clean-clone execution and repeated-run evidence remain pending. See `docs/testing.md`. |
+| PR-5 | Partial | `scripts/verify-day4.mjs` assigns a unique Compose project, scopes volume cleanup, installs locked dependencies, and injects test-only secrets/configuration. The remediation working-tree run passed unit/E2E, real migration/chain and repeated live rebuild checks, then failed the existing owner-event replay SQL audit (`42P08`); no aggregate or committed clean-clone success is claimed. See `docs/day-4-verification-baseline.md`. |
 | PR-6 | Partial | API endpoint/heading checks, authorization checks, and capacity checks exist. Status-code and all requested documentation behavior claims are not verified. |
 | PR-7 | Partial | The mail verifier isolates its disposable Compose project. The full Day 4 suite is not demonstrated repeatable/safe in a clean clone. |
 | PR-8 | Open | No record of eight deliberate breakages with observed detections and cleanup is present. |
@@ -111,7 +115,7 @@ stated acceptance evidence is missing.
 | ARC-8 | Partial | Membership projection ownership and propagation are documented; full propagation latency evidence is not recorded. |
 | ARC-9 | Documented | The durable workspace-provisioning saga, participant boundaries, compensation, and failure behavior are described in `docs/architecture.md` and `docs/distributed-workflow.md`; some DB/HTTP assertions remain open. |
 | ARC-10 | Documented | Replica topology and shared-state responsibilities are recorded in `docs/architecture.md` and `docs/capacity.md`; capacity evidence is scoped to the checks listed above. |
-| ARC-11 | Documented, partial | Contract finality, confirmation depth, and reorg projection behavior are documented/tested locally; production workers are absent from default Compose. |
+| ARC-11 | Documented, partial | Contract finality, confirmation depth, and reorg projection behavior are documented/tested locally; default Compose deploys chain workers, but public application-pipeline proof remains unproven. |
 | AUT-2..AUT-5 | Covered | `npm run verify:authorization` plus the cited live E2E checks in the completed evidence table. |
 | ONC-1..ONC-7 | Documented, partial | Contract behavior, privacy, deployment, reads, keys, and versioning are described in `docs/onchain.md`; backend production anchoring and operator recovery remain separate gaps. |
 | OPS-1..OPS-6 | Partial | `docs/operations.md` has symptom-led runbooks. Chain-projection rebuild and notification replay are available; the new general DLQ, progress, and range-replay commands await runtime proof. |

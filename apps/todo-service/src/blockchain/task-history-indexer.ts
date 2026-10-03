@@ -65,12 +65,8 @@ const chain = defineChain({
 
 const client = createPublicClient({
   chain,
-  transport: http(env.CHAIN_RPC_URL),
+  transport: http(env.CHAIN_RPC_URL, { timeout: 5000, retryCount: 0 }),
 });
-
-const contractAddress = getAddress(
-  env.TASK_HISTORY_CONTRACT_ADDRESS,
-);
 
 const eventName = "TaskActionRecorded";
 
@@ -149,9 +145,19 @@ function asBigInt(
 }
 
 export class TaskHistoryIndexer {
+  private readonly contractAddress: `0x${string}`;
+  private readonly deploymentBlock: number;
+
   constructor(
     private readonly repository: TaskHistoryProjectionRepository,
-  ) {}
+    deployment = {
+      address: env.TASK_HISTORY_CONTRACT_ADDRESS,
+      deploymentBlock: env.TASK_HISTORY_DEPLOYMENT_BLOCK,
+    },
+  ) {
+    this.contractAddress = getAddress(deployment.address);
+    this.deploymentBlock = deployment.deploymentBlock;
+  }
 
   async verifyConfiguredChain(): Promise<void> {
     const actualChainId = await client.getChainId();
@@ -164,6 +170,7 @@ export class TaskHistoryIndexer {
   }
 
   async rebuild(): Promise<void> {
+    const contractAddress = this.contractAddress;
     await this.repository.clearProjection(
       env.CHAIN_ID,
       contractAddress,
@@ -173,7 +180,7 @@ export class TaskHistoryIndexer {
       {
         chainId: env.CHAIN_ID,
         contractAddress,
-        deploymentBlock: env.TASK_HISTORY_DEPLOYMENT_BLOCK,
+        deploymentBlock: this.deploymentBlock,
       },
       "Cleared local chain projection; rebuilding from deployment block",
     );
@@ -182,13 +189,14 @@ export class TaskHistoryIndexer {
   }
 
   async pollOnce(): Promise<void> {
+    const contractAddress = this.contractAddress;
     const checkpoint = await this.repository.getCheckpoint(
       env.CHAIN_ID,
       contractAddress,
     );
 
     const deploymentBlock = BigInt(
-      env.TASK_HISTORY_DEPLOYMENT_BLOCK,
+      this.deploymentBlock,
     );
 
     if (checkpoint !== undefined) {
@@ -197,7 +205,7 @@ export class TaskHistoryIndexer {
       );
     }
 
-    const latestBlock = await client.getBlockNumber();
+    const latestBlock = await client.getBlockNumber({ cacheTime: 0 });
 
     const confirmations = BigInt(
       env.CHAIN_CONFIRMATIONS,
@@ -241,6 +249,7 @@ export class TaskHistoryIndexer {
   private async reconcileReorganization(
     lastScannedBlock: bigint,
   ): Promise<void> {
+    const contractAddress = this.contractAddress;
     const checkpoints =
       await this.repository.getRecentBlockCheckpoints(
         env.CHAIN_ID,
@@ -310,7 +319,7 @@ export class TaskHistoryIndexer {
     }
 
     const deploymentBlock = BigInt(
-      env.TASK_HISTORY_DEPLOYMENT_BLOCK,
+      this.deploymentBlock,
     );
 
     if (deploymentBlock === 0n) {
@@ -338,6 +347,7 @@ export class TaskHistoryIndexer {
     fromBlock: bigint,
     toBlock: bigint,
   ): Promise<void> {
+    const contractAddress = this.contractAddress;
     const logs = await client.getLogs({
       address: contractAddress,
       fromBlock,

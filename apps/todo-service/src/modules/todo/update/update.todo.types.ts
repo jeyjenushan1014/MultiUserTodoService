@@ -21,4 +21,8 @@ export type UpdateTodoRepositoryResult =
   | {
       readonly status:
         "duplicate_title";
+    }
+  | {
+      readonly status:
+        "version_conflict";
     };

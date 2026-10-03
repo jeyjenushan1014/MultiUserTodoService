@@ -17,6 +17,9 @@ function createMockDb(): {
   const client = {
     query: vi.fn((text: string, values: unknown[] | undefined) => {
       queries.push({ text, values });
+      if (text.includes("pg_try_advisory_lock")) {
+        return Promise.resolve({ rows: [{ acquired: true }] });
+      }
       if (text.includes("SELECT next_nonce")) {
         return Promise.resolve({
           rows: [{ next_nonce: "5" }],
@@ -53,7 +56,7 @@ function createMockDb(): {
   return { pool, client, queries };
 }
 
-describe("Chain Submissions (BC-10, BC-11, BC-12, BC-13, BC-14)", () => {
+describe("Chain submission unit regressions (not live concurrency evidence)", () => {
   describe("PostgresChainSubmissionRepository", () => {
     it("claims pending submissions using FOR UPDATE SKIP LOCKED for multi-worker safety (BC-10)", async () => {
       const { pool, queries } = createMockDb();
@@ -65,11 +68,11 @@ describe("Chain Submissions (BC-10, BC-11, BC-12, BC-13, BC-14)", () => {
         q.text.includes("FOR UPDATE SKIP LOCKED"),
       );
       expect(claimQuery).toBeDefined();
-      expect(claimQuery?.text).toContain("status IN ('pending', 'reserved')");
+      expect(claimQuery?.text).toContain("status IN ('pending', 'reserved', 'submitted')");
       expect(claimQuery?.values).toEqual(["worker-1", 5]);
     });
 
-    it("atomically allocates next sequential nonce across workers using DB lock (BC-12)", async () => {
+    it("increments an existing nonce row using a locking query", async () => {
       const { pool, client, queries } = createMockDb();
       const repo = new PostgresChainSubmissionRepository(pool);
 
@@ -177,8 +180,8 @@ describe("Chain Submissions (BC-10, BC-11, BC-12, BC-13, BC-14)", () => {
     });
   });
 
-  describe("ChainSubmissionService (BC-10, BC-13)", () => {
-    it("submits transaction to blockchain and updates state to submitted without blocking business API", async () => {
+  describe("ChainSubmissionService", () => {
+    it("signs a reserved request and calls the raw transaction broadcaster", async () => {
       const { pool } = createMockDb();
 
       const mockSigner: SecureSignerKeyProvider = {
@@ -188,10 +191,13 @@ describe("Chain Submissions (BC-10, BC-11, BC-12, BC-13, BC-14)", () => {
 
       const mockPublicClient = {
         getTransactionCount: vi.fn().mockResolvedValue(0),
+        estimateFeesPerGas: vi.fn().mockResolvedValue({ maxFeePerGas: 20n, maxPriorityFeePerGas: 1n }),
+        estimateGas: vi.fn().mockResolvedValue(100000n),
+        sendRawTransaction: vi.fn().mockResolvedValue(`0x${"11".repeat(32)}`),
       };
 
       const mockWalletClient = {
-        writeContract: vi.fn().mockResolvedValue("0xmocktxhash"),
+        signTransaction: vi.fn().mockResolvedValue("0x1234"),
       };
 
       const service = new ChainSubmissionService({
@@ -223,7 +229,8 @@ describe("Chain Submissions (BC-10, BC-11, BC-12, BC-13, BC-14)", () => {
 
       await service.processSubmission(pool, submission);
 
-      expect(mockWalletClient.writeContract).toHaveBeenCalledTimes(1);
+      expect(mockWalletClient.signTransaction).toHaveBeenCalledTimes(1);
+      expect(mockPublicClient.sendRawTransaction).toHaveBeenCalledTimes(1);
     });
   });
 });

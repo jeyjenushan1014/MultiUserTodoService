@@ -4,6 +4,8 @@ import type {
 } from "./todo.types.js";
 
 export interface UpdateTodoRequest {
+  readonly expectedVersion?: number;
+
   readonly title?: string;
 
   readonly description?:

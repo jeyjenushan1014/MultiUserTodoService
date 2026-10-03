@@ -28,6 +28,39 @@ describe(
     );
 
     it(
+      "accepts an expected task version",
+      () => {
+        expect(
+          updateTodoBodySchema.parse({
+            title:
+              "Updated title",
+            expectedVersion:
+              3,
+          }),
+        ).toEqual({
+          title:
+            "Updated title",
+          expectedVersion:
+            3,
+        });
+      },
+    );
+
+    it(
+      "rejects an invalid expected task version",
+      () => {
+        expect(
+          updateTodoBodySchema.safeParse({
+            state:
+              "completed",
+            expectedVersion:
+              0,
+          }).success,
+        ).toBe(false);
+      },
+    );
+
+    it(
       "accepts a state-only update",
       () => {
         const result =
@@ -135,6 +168,18 @@ describe(
 
         expect(
           result.success,
+        ).toBe(false);
+      },
+    );
+
+    it(
+      "rejects an expected version without a task field",
+      () => {
+        expect(
+          updateTodoBodySchema.safeParse({
+            expectedVersion:
+              1,
+          }).success,
         ).toBe(false);
       },
     );

@@ -29,6 +29,11 @@ Each activity record in `contracts/onchain/contracts/TaskHistory.sol` contains t
 
 Task and workspace IDs must be opaque, random application identifiers. They must not be derived from an account ID or calculated from personal information such as an email address or name.
 
+Personal tasks are the explicit exception to workspace grouping: their on-chain workspace is
+the shared reserved sentinel `00000000-0000-4000-8000-000000000001`, not a real tenant or a
+per-person identifier. Off-chain workspace IDs stay null and authorization stays owner-based.
+See [QUESTIONS.md](QUESTIONS.md) for the privacy decision and grouping trade-off.
+
 `TaskActionRecorded` emits exactly these four values; task and workspace IDs are indexed.
 `writer` is an immutable address and `MAX_PAGE_SIZE` is 50. **Privacy release gate:** The Sepolia
 demonstration used only the fixed synthetic IDs listed below. Before writing production-derived
@@ -72,7 +77,9 @@ A transaction from any other account reverts with `UnauthorizedWriter`. The cons
 the zero address with `InvalidWriter`; a zero task or workspace ID reverts with `ZeroIdentifier`.
 The deploy module uses Hardhat account 0 as the writer only for the local demonstration.
 Backend signing key custody is implemented under BC-15 (`SecureSignerKeyProvider`):
-- Key must be supplied only at runtime via secure environment/secrets manager (`CHAIN_SIGNER_PRIVATE_KEY`).
+- Default Compose reads the key from a read-only mounted `writer.key` through
+  `CHAIN_SIGNER_KEY_FILE`/`CHAIN_SECRET_DIR`. The environment-key fallback
+  (`CHAIN_SIGNER_PRIVATE_KEY`) is retained for compatibility, not the recommended deployment.
 - Never stored in Git, Docker images, database, RabbitMQ event payloads, or logger output (redacted in `logger.ts`).
 - Address derivation validation: the provider checks in-memory that the private key matches `CHAIN_WRITER_ADDRESS` before any transaction signing.
 - Object serialization masks the key (`[PROTECTED_IN_MEMORY]`).
@@ -215,7 +222,11 @@ If the contract is replaced later:
 - Ensure a backend command or verification process can verify a record anchored by the old contract.
 - Obtain the contract address from a deployment artifact produced by the contract project. Do not retype and hard-code it in a service.
 
-This approach must still be implemented and tested for BC-17 and EV-11.
+ABI-compatible retained deployments are configured in `CHAIN_PREVIOUS_CONTRACTS` as public
+address/deployment-block pairs. The production indexer scans each, rebuild preserves address
+boundaries, and `TaskHistoryProjectionRepository.findTaskRecords` reads across them.
+`verify:day4` deploys two real contracts and verifies both histories. ABI-changing replacements
+remain unimplemented; see [operations.md](operations.md) for configuration and rebuild steps.
 
 ## 11. Chain Projection and Indexer (BC-6, BC-7, BC-8, BC-9)
 
@@ -278,11 +289,11 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 | BC-7 | Unit-tested: `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING`. | Demonstrated. |
 | BC-8 | Unit-tested: common ancestor reconciliation and `rollbackAfterBlock` removes reorged events. | Demonstrated. |
 | BC-9 | `CHAIN_CONFIRMATIONS` enforced $\ge 2$ in `env.ts` and safe head calculation tested. | Demonstrated. |
-| BC-10 | Asynchronous chain writes via Postgres outbox pattern & worker service. | Demonstrated. |
-| BC-11 | State machine: pending, reserved, submitted, confirmed, replaced, abandoned, dead_letter. | Demonstrated. |
-| BC-12 | Atomic sequential nonce coordination via `chain_writer_nonces` and row locking. | Demonstrated. |
-| BC-13 | Outage resilience: mutations persist to DB even during chain/RPC outage. | Demonstrated. |
-| BC-14 | Exponential backoff retry and DLQ routing on repeated failures. | Demonstrated. |
+| BC-10 | Real asynchronous application pipeline check. | See current run evidence in [traceability.md](traceability.md); unit tests alone are not deployment proof. |
+| BC-11 | Durable request/hash before broadcast; restart receipt reconciliation. | Partial: indefinite stuck/drop recovery, fee replacement and audited replay are omitted. |
+| BC-12 | Cold-row initialization lock plus competing deployed writers. | Real PostgreSQL/EVM check in `verify:day4`; see current results in [traceability.md](traceability.md). |
+| BC-13 | Actual isolated RPC stop/restart with successful HTTP mutations. | Real check in `verify:day4`; not a mocked timing assertion. |
+| BC-14 | Real five-failure transition to durable human-review queue. | Check in `verify:day4`; known hashes retain receipt reconciliation without unlimited rebroadcast. |
 | BC-15 | `SecureSignerKeyProvider` with runtime in-memory protection and logger redaction. | Demonstrated. |
 | BC-16 | Local same-task append gas: 75,583 with 1 and 1,000 existing records. Sepolia demo v1 write used 91,881 gas. | Local constant-cost comparison is the scaling evidence; public sample receipt is additionally recorded above. |
 | BC-17 | Independent Hardhat project exports `task-history.abi.json` and `task-history.deployment.json`; consumed dynamically by backend without hardcoded addresses. | Demonstrated. |
@@ -292,13 +303,16 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 ### Asynchronous Writes & Outage Resilience (BC-10, BC-13)
 - User-facing TODO APIs (Create/Update/Delete) never synchronously await blockchain transaction completion or block confirmations.
 - Instead, the mutation handler atomically inserts a command into the durable `chain_submissions` table within the Postgres transaction via `PostgresChainSubmissionWriter.enqueue()`.
-- If the RPC node or public blockchain is offline, business operations proceed normally without degradation: the submissions simply remain in `pending` state and wait for the worker.
+- If RPC is offline, business operations still enqueue independently. Worker attempts are bounded;
+  a prolonged outage can move submissions to `dead_letter`, rather than pending forever.
 
 ### Nonce Coordination Across Workers (BC-12)
 - Ethereum/EVM requires strict incremental sequence nonces per account. If two workers submit transactions concurrently with the same nonce, a duplicate nonce conflict occurs.
-- `PostgresChainSubmissionRepository.allocateNextNonce` achieves zero-conflict coordination:
+- `PostgresChainSubmissionRepository.allocateNextNonce` coordinates nonce allocation:
   - It maintains an atomic counter in `chain_writer_nonces(chain_id, writer_address, next_nonce)`.
-  - When allocating, it executes `SELECT next_nonce FROM chain_writer_nonces WHERE ... FOR UPDATE`.
+  - It first inserts the counter row with `ON CONFLICT DO NOTHING`, then executes
+    `SELECT next_nonce FROM chain_writer_nonces WHERE ... FOR UPDATE`. Initialization must
+    be locked too; selecting a nonexistent row does not lock a future insert.
   - It verifies against the on-chain transaction count (`getTransactionCount`), allocates the guaranteed next integer, increments the database row, and marks the submission as `reserved`.
   - Submissions are claimed using `FOR UPDATE SKIP LOCKED`, so multiple worker replicas concurrently claim distinct batches without contention.
 
@@ -306,13 +320,16 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 Submissions transition deterministically across discrete states:
 - `pending`: Command enqueued, waiting to be claimed.
 - `reserved`: Nonce allocated, transaction being prepared/signed.
-- `submitted`: Transaction broadcasted to network; `transaction_hash` recorded.
-- `confirmed`: Included in a finalized block; `confirmed_block_number` and `confirmed_block_hash` saved.
-- `replaced`: Underpriced transaction replaced by a higher-fee transaction with same nonce (`replacement_transaction_hash`).
-- `abandoned`: Dropped due to reorg or deliberate cancellation.
-- `dead_letter`: Unrecoverable errors after exceeding max retries.
+- `submitted`: Broadcast acknowledged; the hash and public transaction fields were already durable.
+- `confirmed`: Successful receipt at the configured confirmation depth; block number/hash saved.
+- `replaced`: Schema/API support only; automatic higher-fee replacement is not implemented.
+- `abandoned`: A mined reverted receipt at the configured depth, not a guess that a missing transaction was dropped.
+- `dead_letter`: Five failed attempts require human review; any known hash remains receipt-checkable.
 
-State is fully durable in PostgreSQL. If the worker process restarts mid-flight, uncommitted locks expire after 2 minutes, and the worker resumes from the recorded state without creating gaps.
+Claim leases expire after two minutes, and PostgreSQL releases a dead process's advisory lock.
+A restarted worker reconstructs and signs the identical saved request, then checks or rebroadcasts
+the same hash. This avoids a duplicate after a crash between broadcast and acknowledgement.
+It does not guarantee progress if a nonce stays stuck indefinitely; that remains a declared gap.
 
 ### Retry & Dead-Letter-Queue (BC-14)
 - Transient RPC network errors, fee spikes, or temporary provider downtime trigger exponential backoff retry:
@@ -323,21 +340,21 @@ State is fully durable in PostgreSQL. If the worker process restarts mid-flight,
 The operator deployed and verified TaskHistory on Sepolia and performed a synthetic
 two-confirmation write/read demonstration; deployment evidence and the public
 transaction are recorded above. No production private key is committed or
-documented. Backend submission and indexer worker code exists, but neither worker
-is part of the default Compose topology, and production TODO traffic has not been
-demonstrated writing to the Sepolia deployment. These remain release and
-operational integration gates.
+documented. Both chain workers now run in the default Compose topology, with two replicas each.
+The automated application-pipeline check uses a throwaway key and disposable local chain.
+Production TODO traffic has not been demonstrated writing to Sepolia; the public synthetic
+demo is not application-pipeline evidence. Public integration and complete operator recovery
+remain separate gates.
 
 
 ## Durable chain submissions
 
 `chain_submissions` stores privacy-safe commands for asynchronous blockchain writes.
 It contains task ID, workspace ID, action, chain/contract/writer addresses, retry data,
-nonce, transaction hashes, and transaction status. It does not contain task content,
+nonce, public unsigned transaction fee/gas fields, transaction hashes, and transaction status. It does not contain task content,
 user IDs, email addresses, or signing private keys.
 
-The table is the durable queue foundation. Unit and integration tests cover the
-backend enqueue, submission state machine, nonce coordination, retry, and
-dead-letter code paths (BC-10 through BC-14). However, the corresponding workers
-are not started by default Compose, and a live production-path submission, receipt
-finality operation, and operator recovery flow remain unproven.
+Unit tests are regression checks, not real-worker proof. `verify:day4` now exercises HTTP
+enqueue, two deployed writers, local EVM receipts, the deployed indexer, a real process
+death at the broadcast boundary, actual RPC outage, and two deployed contracts.
+Current executed results and remaining omissions are in [traceability.md](traceability.md).

@@ -12,6 +12,9 @@ export const cachedTodoSchema =
       id:
         z.uuid(),
 
+      version:
+        z.number().int().positive(),
+
       ownerId:
         z.uuid(),
 

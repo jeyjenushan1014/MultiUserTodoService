@@ -24,13 +24,14 @@ while (Date.now() < deadline) {
   } catch { await new Promise((resolve) => setTimeout(resolve, 1000)); }
 }
 assert.ok(ready, "Isolated chain failed to start");
-const [writer] = await rpc("eth_accounts");
-assert.equal(writer.toLowerCase(), process.env.CHAIN_WRITER_ADDRESS.toLowerCase());
+const [deployer] = await rpc("eth_accounts");
+const writer = process.env.CHAIN_WRITER_ADDRESS;
+assert.match(writer, /^0x[0-9a-f]{40}$/i);
 const artifact = JSON.parse(await readFile("/app/verification-contract/TaskHistoryModule#TaskHistory.json", "utf8"));
 assert.match(artifact.bytecode, /^0x[0-9a-f]+$/i);
 assert.equal(await rpc("eth_getCode", [process.env.TASK_HISTORY_CONTRACT_ADDRESS, "latest"]), "0x", "Fresh chain required");
 const transaction = await rpc("eth_sendTransaction", [{
-  from: writer, data: `${artifact.bytecode}${writer.slice(2).padStart(64, "0")}`, gas: "0x7a1200",
+  from: deployer, data: `${artifact.bytecode}${writer.slice(2).padStart(64, "0")}`, gas: "0x7a1200",
 }]);
 let receipt;
 while (Date.now() < deadline) {
@@ -42,6 +43,9 @@ assert.equal(receipt?.status, "0x1");
 assert.equal(receipt.contractAddress.toLowerCase(), process.env.TASK_HISTORY_CONTRACT_ADDRESS.toLowerCase());
 assert.equal(BigInt(receipt.blockNumber), BigInt(process.env.TASK_HISTORY_DEPLOYMENT_BLOCK));
 assert.notEqual(await rpc("eth_getCode", [receipt.contractAddress, "latest"]), "0x");
+await rpc("eth_sendTransaction", [{
+  from: deployer, to: writer, value: "0x56bc75e2d63100000",
+}]);
 await rpc("evm_mine");
 await rpc("evm_mine");
 console.log(JSON.stringify({ result: "deployed", chainId: 31337, contract: receipt.contractAddress, scope: "disposable local chain only; committed deployment bytecode fixture" }));

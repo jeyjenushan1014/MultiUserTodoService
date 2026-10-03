@@ -37,6 +37,9 @@ interface ListTodoRow {
   readonly id:
     string;
 
+  readonly version:
+    number;
+
   readonly owner_id:
     string;
 
@@ -282,6 +285,9 @@ function mapListTodoRow(
     id:
       row.id,
 
+    version:
+      row.version,
+
     ownerId:
       row.owner_id,
 
@@ -452,6 +458,7 @@ implements ListTodosRepository {
           `
             SELECT
               t.id,
+              t.version,
               t.owner_id,
               owner_projection.email
                 AS owner_email,

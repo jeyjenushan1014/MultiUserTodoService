@@ -13,6 +13,9 @@ export function mapTodoRow(
     id:
       row.id,
 
+    version:
+      row.version,
+
     ownerId:
       row.owner_id,
 

@@ -265,6 +265,7 @@ implements TodoRepository {
             `
               SELECT
                 id,
+                version,
                 owner_id,
                 title,
                 description,
@@ -345,6 +346,7 @@ implements TodoRepository {
                 IS NULL
             RETURNING
               id,
+              version,
               owner_id,
               workspace_id,
               title,

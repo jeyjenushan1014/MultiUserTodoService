@@ -22,6 +22,7 @@ interface TestUser {
 
 interface TodoRecord {
   readonly id: string;
+  readonly version: number;
   readonly ownerId: string;
   readonly title: string;
   readonly description:
@@ -90,6 +91,20 @@ function parseTodo(
   const dueDate =
     responseData.dueDate;
 
+  const version =
+    responseData.version;
+
+  if (
+    typeof version !==
+      "number" ||
+    !Number.isSafeInteger(version) ||
+    version < 1
+  ) {
+    throw new Error(
+      "Invalid TODO version",
+    );
+  }
+
   if (
     description !== null &&
     typeof description !==
@@ -116,6 +131,8 @@ function parseTodo(
         responseData.id,
         "TODO id",
       ),
+
+    version,
 
     ownerId:
       getString(
@@ -782,6 +799,99 @@ describe.skipIf(
         );
       },
     );
+
+    it(
+            "allows only one concurrent update for the same task version",
+            async () => {
+              const uniqueValue = [
+                Date.now(),
+                crypto.randomUUID(),
+              ].join("-");
+              const todo =
+                await createTodoAfterProjection(
+                  userA,
+                  `Versioned task ${uniqueValue}`,
+                );
+
+              const [first, second] =
+                await Promise.all([
+                  request(
+                    `/api/v1/todos/${todo.id}`,
+                    {
+                      method:
+                        "PATCH",
+                      accessToken:
+                        userA.accessToken,
+                      body: {
+                        title:
+                          `Concurrent winner A ${uniqueValue}`,
+                        expectedVersion:
+                          todo.version,
+                      },
+                    },
+                  ),
+                  request(
+                    `/api/v1/todos/${todo.id}`,
+                    {
+                      method:
+                        "PATCH",
+                      accessToken:
+                        userA.accessToken,
+                      body: {
+                        title:
+                          `Concurrent winner B ${uniqueValue}`,
+                        expectedVersion:
+                          todo.version,
+                      },
+                    },
+                  ),
+                ]);
+
+              const results = [
+                first,
+                second,
+              ];
+              expect(
+                results.filter(
+                  (result) =>
+                    result.status === 200,
+                ),
+              ).toHaveLength(1);
+              expect(
+                results.filter(
+                  (result) =>
+                    result.status === 409 &&
+                    getErrorCode(result.body) ===
+                      "TODO_VERSION_CONFLICT",
+                ),
+              ).toHaveLength(1);
+
+              const successfulUpdate =
+                results.find(
+                  (result) =>
+                    result.status === 200,
+                );
+              expect(successfulUpdate).toBeDefined();
+              const updated =
+                parseTodo(successfulUpdate?.body);
+              expect(updated.version).toBe(
+                todo.version + 1,
+              );
+
+              const persisted =
+                await request(
+                  `/api/v1/todos/${todo.id}`,
+                  {
+                    accessToken:
+                      userA.accessToken,
+                  },
+                );
+              expect(persisted.status).toBe(200);
+              expect(parseTodo(persisted.body)).toEqual(
+                updated,
+              );
+            },
+          );
 
     it(
       "rejects a TODO request immediately after logout",

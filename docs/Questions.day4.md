@@ -395,28 +395,21 @@ globally — mutation endpoints still need `forbidden` to distinguish "you're a 
 allowed" from "you have no relationship to this workspace at all," while read endpoints do not,
 because every role can read.
 
-```markdown
-## Activity N — Short title (requirement IDs)
+## Activity 12 — Why did green chain and evolution tests not prove deployment?
 
-### Question
-What was unclear?
+The review found that the writer/indexer were not Compose services, schema checks returned
+hard-coded mock rows, and contract-replacement tests mapped their own fixtures. Those checks
+could pass with no live database or chain.
 
-### Challenge
-What made it difficult or what failed?
+The remediation adds actual writer/indexer services, a disposable-chain application pipeline
+check, a real crash after broadcast, two actual deployed contracts, and executable PostgreSQL
+migration/rollback checks. The completed-run results and remaining limitations are maintained
+in [QUESTIONS.md](QUESTIONS.md) and [traceability.md](traceability.md), not inferred from unit
+test names. Unit tests remain useful regression checks but are not integration evidence.
 
-### What I tried
-Which alternatives or experiments were attempted?
+## Activity 13 — Which work is deliberately left out?
 
-### Resolution
-What was decided or changed, and why?
-
-### Evidence
-Include this section only if the entire requirement is complete. Give the exact automated command,
-the failure it detects, manual demonstration steps if required, and relevant documentation.
-
-### Remaining challenge
-What is intentionally unfinished? Do not present it as evidence.
-
-### Learning
-What will change in the next implementation because of this activity?
-```
+See [QUESTIONS.md](QUESTIONS.md), "Deliberate omissions (rule 7)", for the canonical current
+list and the reasons for prioritizing deployment, concurrency and independent proof.
+This historical activity journal is supplementary; the submission question list is the
+Day 4-only [QUESTIONS.md](QUESTIONS.md).

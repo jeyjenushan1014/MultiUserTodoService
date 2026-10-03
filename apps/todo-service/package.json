@@ -16,6 +16,7 @@
     "ops:progress": "node scripts/progress-status.mjs",
     "start:cleanup": "node dist/src/retention/cleanup.worker.js",
     "start:chain-indexer": "node dist/src/blockchain/task-history-indexer.worker.js",
+    "start:chain-writer": "node dist/src/blockchain/chain-submission.worker.js",
      "rebuild:chain-projection": "node dist/src/blockchain/rebuild-task-history-projection.js"
   },
   "dependencies": {

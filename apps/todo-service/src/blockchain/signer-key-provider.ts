@@ -1,4 +1,5 @@
 import { privateKeyToAccount } from "viem/accounts";
+import { readFileSync } from "node:fs";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 
@@ -19,7 +20,10 @@ export class SecureSignerKeyProvider implements ISignerKeyProvider {
   private readonly account: ReturnType<typeof privateKeyToAccount>;
 
   constructor(privateKeyHex?: string) {
-    const rawKey = privateKeyHex ?? env.CHAIN_SIGNER_PRIVATE_KEY;
+    const rawKey = privateKeyHex ??
+      (env.CHAIN_SIGNER_KEY_FILE
+        ? readFileSync(env.CHAIN_SIGNER_KEY_FILE, "utf8").trim()
+        : env.CHAIN_SIGNER_PRIVATE_KEY);
 
     if (!rawKey) {
       throw new Error(

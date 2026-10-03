@@ -26,6 +26,29 @@ export class TaskHistoryProjectionRepository {
     private readonly pool: Pool,
   ) {}
 
+  async findTaskRecords(chainId: number, taskId: string, limit = 100): Promise<ChainEventRow[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new Error("Chain history limit must be between 1 and 100");
+    }
+    const result = await this.pool.query<{
+      chain_id: string; contract_address: string; transaction_hash: string;
+      log_index: number; block_number: string; block_hash: string;
+      task_id: string; workspace_id: string; action: ChainEventRow["action"];
+      chain_timestamp: string;
+    }>(
+      `SELECT * FROM task_chain_events WHERE chain_id = $1 AND task_id = $2
+       ORDER BY block_number, log_index, contract_address LIMIT $3`,
+      [chainId, taskId, limit],
+    );
+    return result.rows.map((row) => ({
+      chainId: Number(row.chain_id), contractAddress: row.contract_address,
+      transactionHash: row.transaction_hash, logIndex: row.log_index,
+      blockNumber: BigInt(row.block_number), blockHash: row.block_hash,
+      taskId: row.task_id, workspaceId: row.workspace_id,
+      action: row.action, chainTimestamp: BigInt(row.chain_timestamp),
+    }));
+  }
+
   async acquireWorkerLock(
     lockName: string,
   ): Promise<PoolClient | undefined> {

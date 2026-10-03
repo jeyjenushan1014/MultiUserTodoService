@@ -50,8 +50,10 @@ export class UpdateTodoService {
     UpdateTodoResponse
   > {
     if (
-      Object.keys(changes)
-        .length === 0
+      changes.title === undefined &&
+      changes.description === undefined &&
+      changes.state === undefined &&
+      changes.dueDate === undefined
     ) {
       throw new AppError(
         400,
@@ -67,6 +69,7 @@ export class UpdateTodoService {
               callerId,
               todoId,
               changes.state,
+              changes.expectedVersion,
               requestId,
             )
         : await this.repository
@@ -86,6 +89,13 @@ export class UpdateTodoService {
           409,
           "TODO_TITLE_ALREADY_EXISTS",
           "An active TODO with this title already exists",
+        );
+
+      case "version_conflict":
+        throw new AppError(
+          409,
+          "TODO_VERSION_CONFLICT",
+          "TODO has changed since it was read; fetch the latest version and retry",
         );
 
       case "not_found":

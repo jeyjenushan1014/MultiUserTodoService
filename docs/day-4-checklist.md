@@ -1,6 +1,6 @@
 # Day 4 Two-Day Execution Checklist
 
-Updated: 2026-10-02
+Updated: 2026-10-03
 Branch: `main`
 
 This is the current execution checklist for the Day 4 requirements. `[x]` means the
@@ -221,21 +221,19 @@ the repository. Provider refusal and replacement evidence remain open for ML-5
 and ML-6.
 - [x] OP-1 rebuild commands for every projection (BC-6 chain projection rebuildable via `npm run rebuild:chain-projection`)
 - [x] OP-2 targeted notification DLQ replay command (operator reports the command ran successfully)
-- [ ] OP-2 unified inspection/replay CLI for notification, owner-projection, and history DLQs; isolated broker rehearsal pending
-- [ ] OP-3 bounded time-range replay to `todo-history`; range tests and Compose rehearsal pending
-- [ ] OP-3 bounded time-range replay to `todo-history` (operator reports build, focused test, and dry-run passed; apply replay remains pending)
-- [ ] OP-3 bounded time-range replay to `todo-history` (dry-run selected 14 events: 9 eligible, 5 already processed; apply replay pending)
+- [ ] OP-2 unified audited inspection/replay CLI for notification, owner-projection, and history DLQs; automated isolated broker rehearsal pending
 - [x] OP-3 bounded time-range replay to `todo-history` (operator run selected 14 events: 9 queued, 5 already processed)
 - [ ] OP-3 targeted replay for other consumers with proven idempotency and audit
-- [ ] OP-6 progress CLI implemented; live broker/RPC output verification pending
-- [ ] OP-6 consumer lag verified live (six queues, zero ready/unacked, two consumers each); chain reader unavailable, investigate RPC/checkpoint
-- [ ] OP-6 consumer lag verified live (six queues, zero ready/unacked, two consumers each); RPC probe returned `fetch failed`, so chain lag remains unavailable
-- [ ] OP-6 consumer lag verified live (six queues, zero ready/unacked, two consumers each); RPC reachable, but fresh Hardhat chain is block 0 with no checkpoint (`not-initialized`)
 - [x] OP-6 live consumer and chain progress (six queues, zero ready/unacked, two consumers each; chain checkpoint at safe head with zero lag)
 - [x] OP-7 runtime behavior switch without redeploy (`mail-mode.mjs`; `verify-mail-mode.mjs` validates the audited sink/external switch)
-- [ ] OP-8 operator boundary documented; least-privilege enforcement and audited break-glass exercise pending
-- [ ] OP-9 release-tagged images and guarded rollback command implemented; retained-image rehearsal pending
+- [ ] OP-8 live deployment enforcement: isolated real-login restricted operations, denied raw table access, and audited break-glass exercise pass; operator explicitly chose to leave live permissions/identity provisioning unchanged
+- [x] OP-9 release-tagged images and guarded rollback command; isolated three-replica retained-tag switch, failed-health restoration, and cleanup passed (`npm run verify:rollback`)
 - [ ] OP-10 verifier generates ephemeral configuration; clean-clone run and all-command verification pending
+
+Superseded OP-3 dry-run and OP-6 unavailable/not-initialized observations are consolidated
+above into their final operator-reported results rather than retained as contradictory open
+requirements. New automated evidence is recorded in `docs/operator-verification.md` and
+`docs/day-4-verification-baseline.md`; documentation alone does not close an unchecked item.
 
 # copilot
 ### 10:30 PM-12:00 AM: Operations Documentation

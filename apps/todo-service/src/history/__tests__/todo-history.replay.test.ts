@@ -8,12 +8,13 @@ import {
   createTodoHistoryReplayPlan,
   parseTodoHistoryReplayArguments,
 } from "../todo-history-replay.js";
+import type { TodoHistoryReplayCandidate } from "../todo-history-replay.js";
 
 const occurredAt = new Date("2026-10-03T12:00:00.000Z");
 const eventId = "11111111-1111-4111-8111-111111111111";
 const requestId = "22222222-2222-4222-8222-222222222222";
 
-function candidate(overrides: Record<string, unknown> = {}) {
+function candidate(overrides: Partial<TodoHistoryReplayCandidate> = {}): TodoHistoryReplayCandidate {
   return {
     id: eventId,
     eventType: "todo.completed",
@@ -155,5 +156,15 @@ describe("parseTodoHistoryReplayArguments", () => {
       "--target", "account-notifications",
       "--event-id", eventId,
     ])).toThrow("Supported replay target is todo-history only");
+  });
+
+  it("requires explicit ISO timestamps rather than locale-dependent dates", () => {
+    for (const from of ["10/01/2026", "2026-10-01", "2026-10-01T00:00:00", "2026-02-30T00:00:00Z"]) {
+      expect(() => parseTodoHistoryReplayArguments([
+        "--from", from,
+        "--to", "2026-10-02T00:00:00Z",
+        "--target", "todo-history",
+      ])).toThrow("ISO-8601");
+    }
   });
 });

@@ -1,6 +1,7 @@
 import {
   TODO_HISTORY_EVENT_TYPES,
 } from "./todo-history.types.js";
+import { z } from "zod";
 
 export interface TodoHistoryReplayCandidate {
   readonly id: string;
@@ -89,8 +90,15 @@ export function parseTodoHistoryReplayArguments(
       };
     }
 
-    const fromTime = Date.parse(fromText as string);
-    const toTime = Date.parse(toText as string);
+    const timestamp = z.iso.datetime({ offset: true });
+    if (!timestamp.safeParse(fromText).success || !timestamp.safeParse(toText).success) {
+      throw new Error("Replay range must use ISO-8601 timestamps with an explicit timezone");
+    }
+    if (fromText === undefined || toText === undefined) {
+      throw new Error("Replay range requires both bounds");
+    }
+    const fromTime = Date.parse(fromText);
+    const toTime = Date.parse(toText);
     if (
       !Number.isFinite(fromTime) ||
       !Number.isFinite(toTime) ||

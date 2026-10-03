@@ -179,7 +179,7 @@ implements NotificationDeliveryRepository {
               AND notification_event_deliveries.attempts = $4
               AND notification_event_deliveries.lease_until <= CURRENT_TIMESTAMP
             ) OR (
-              notification_event_deliveries.status = 'replay_queued'
+              notification_event_deliveries.status IN ('replay_queued', 'replay_publishing')
               AND $4 = 1
             )
             RETURNING
@@ -360,6 +360,14 @@ implements NotificationDeliveryRepository {
       [eventId, processingToken],
     );
     if (result.rowCount !== 1) {
+      const consumed = await database.query<{ status: string }>(
+        `SELECT status FROM notification_event_deliveries
+         WHERE event_id = $1 AND status IN (
+           'processing', 'sent', 'retry_pending', 'dead_letter_pending', 'dead_letter'
+         )`,
+        [eventId],
+      );
+      if (consumed.rowCount === 1) return;
       throw new Error(`Notification delivery ${eventId} lost its replay lease`);
     }
   }

@@ -16,25 +16,29 @@ function authorization() {
 
 async function getQueueProgress(name, queue) {
   if (!env.RABBITMQ_USER || !env.RABBITMQ_PASSWORD) {
-    return { name, queue, status: "unavailable" };
+    return { name, queue, status: "unavailable", reason: "management-credentials-missing" };
   }
   try {
     const response = await fetch(
       `${env.RABBITMQ_MANAGEMENT_URL}/api/queues/%2f/${encodeURIComponent(queue)}`,
       { headers: { authorization: authorization() }, signal: AbortSignal.timeout(3000) },
     );
-    if (!response.ok) return { name, queue, status: "unavailable" };
+    if (!response.ok) return { name, queue, status: "unavailable", reason: `management-http-${response.status}` };
     const body = await response.json();
+    if (![body.messages_ready, body.messages_unacknowledged, body.consumers]
+      .every((value) => Number.isSafeInteger(value) && value >= 0)) {
+      return { name, queue, status: "unavailable", reason: "invalid-management-response" };
+    }
     return {
       name,
       queue,
       status: "available",
-      ready: Number(body.messages_ready ?? 0),
-      unacknowledged: Number(body.messages_unacknowledged ?? 0),
-      consumers: Number(body.consumers ?? 0),
+      ready: body.messages_ready,
+      unacknowledged: body.messages_unacknowledged,
+      consumers: body.consumers,
     };
   } catch {
-    return { name, queue, status: "unavailable" };
+    return { name, queue, status: "unavailable", reason: "management-request-failed" };
   }
 }
 
@@ -57,10 +61,10 @@ async function getChainProgress() {
       ),
     ]);
 
-    if (!headResponse.ok) return { status: "unavailable" };
+    if (!headResponse.ok) return { status: "unavailable", reason: `rpc-http-${headResponse.status}` };
     const rpc = await headResponse.json();
     if (typeof rpc.result !== "string" || !/^0x[0-9a-f]+$/i.test(rpc.result)) {
-      return { status: "unavailable" };
+      return { status: "unavailable", reason: "invalid-rpc-response" };
     }
 
     const latestBlock = BigInt(rpc.result);
@@ -91,11 +95,15 @@ async function getChainProgress() {
       confirmations: env.CHAIN_CONFIRMATIONS,
     };
   } catch {
-    return { status: "unavailable" };
+    return { status: "unavailable", reason: "rpc-or-checkpoint-request-failed" };
   }
 }
 
 try {
+  const args = process.argv.slice(2);
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--require-ready")) {
+    throw new Error("Usage: progress-status.mjs [--require-ready]");
+  }
   const [consumerProgress, chainReader] = await Promise.all([
     Promise.all(queues.map(([name, queue]) => getQueueProgress(name, queue))),
     getChainProgress(),
@@ -106,6 +114,15 @@ try {
     consumers: consumerProgress,
     chainReader,
   }, null, 2));
+  if (args.includes("--require-ready") && (
+    chainReader.status !== "caught-up" ||
+    consumerProgress.some((consumer) =>
+      consumer.status !== "available" || consumer.consumers < 1 ||
+      consumer.ready !== 0 || consumer.unacknowledged !== 0)
+  )) {
+    console.error("Progress verification failed: every consumer must be available and drained, and the chain reader caught up.");
+    process.exitCode = 1;
+  }
 } finally {
   await database.end();
 }

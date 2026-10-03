@@ -14,20 +14,31 @@ npm run verify:account-lifecycle
 
 ### Day 4 verification isolation
 
-`npm run verify:day4` assigns a timestamped, per-run `COMPOSE_PROJECT_NAME` to
-all Compose subprocesses and scopes `down -v --remove-orphans` cleanup to that
-project. It preflights the configured health URL and refuses to start if that
-port already responds. A stack left with `DAY4_KEEP_STACK=1` has a unique name
-and is not targeted by later runs. This prevents the verifier from deleting the
-working default Compose volumes; other fixed host ports can still conflict and
-will cause the isolated startup to fail without cleaning another project.
+`npm run verify:day4` creates a fresh local clone of the selected committed revision
+(`HEAD` by default; override with `-- --ref <revision>`). The verifier's own source must
+exist in that revision. Installation, lint, build, tests, and E2E run inside a Node.js 24
+validation image, not against a reused host `node_modules` directory.
 
-The runner now installs lockfile dependencies and supplies per-run throwaway database,
-Redis, RabbitMQ, JWT, and internal-service credentials, plus a free API port. It forces
-Mailpit sink-only mode and a local Hardhat RPC URL, overriding provider/RPC values from a
-developer `.env`; it does not write those generated values to disk. Docker and Node.js 24
-are still prerequisites. The clean-clone and repeated-run proof has not yet been executed,
-so do not check off PR-5 or OP-10 based on implementation alone.
+Every Compose subprocess uses the same unique project, explicit base/verification files,
+and empty environment file. The resolved model is checked before startup: host port
+publication, fixed container names, privileged containers, host networking, and shared
+external networks/volumes are refused. The RPC is an isolated local Anvil chain populated
+from the committed TaskHistory deployment bytecode fixture; it never connects to a public
+testnet. The RPC's configured chain ID, address, mined deployment, confirmations, projection
+rebuild, and progress checkpoint are verified rather than replaced by invented lag values.
+
+Per-run database, Redis, RabbitMQ, JWT, and internal-service credentials are generated in
+memory. Mail is sink-only with an empty secret directory. `.env`, provider credentials, and
+developer RPC/Compose selectors are not inherited. Cleanup targets only this project and
+its unique image aliases; no default Compose stack is reset. `-- --keep` is diagnostic
+retention of the disposable resources, not permission to reuse them as production.
+
+See [operator-verification.md](operator-verification.md) for the command proof inventory.
+The dated result in [day-4-verification-baseline.md](day-4-verification-baseline.md)
+distinguishes an actually tested revision/source snapshot from implementation-only claims.
+Real mail, public-chain deployment, destructive restore, and incident-approved writes still
+require their documented inputs and approvals; the safe verifier never performs them on
+production.
 
 The account-lifecycle unit slice is:
 

@@ -6,14 +6,13 @@ import {
 
 import type {
   Pool,
-  PoolClient,
 } from "pg";
 
 import {
   PostgresListTodosRepository,
 } from "../list/postgres-list-todos.repository.js";
 
-function createRows(count: number) {
+function createRows(count: number): Record<string, string | Date | null | readonly unknown[]>[] {
   return Array.from({ length: Math.min(count, 10) }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     owner_id: "11111111-1111-4111-8111-111111111111",
@@ -32,20 +31,20 @@ function createRows(count: number) {
 async function countDatabaseCalls(totalItems: number): Promise<number> {
   const calls: string[] = [];
   const client = {
-    query: async (statement: string) => {
+    query: (statement: string) => {
       calls.push(statement);
       if (statement.includes("COUNT(*)")) {
-        return { rows: [{ total_items: String(totalItems) }] };
+        return Promise.resolve({ rows: [{ total_items: String(totalItems) }] });
       }
       if (statement.includes("FROM todos t")) {
-        return { rows: createRows(totalItems) };
+        return Promise.resolve({ rows: createRows(totalItems) });
       }
-      return { rows: [] };
+      return Promise.resolve({ rows: [] });
     },
     release: () => undefined,
   };
   const pool = {
-    connect: async () => client,
+    connect: () => Promise.resolve(client),
   } as unknown as Pick<Pool, "connect">;
   const repository = new PostgresListTodosRepository(pool);
 
@@ -74,21 +73,21 @@ describe("PostgresListTodosRepository query count", () => {
     let listStatement = "";
     let listValues: readonly unknown[] = [];
     const client = {
-      query: async (statement: string, values?: readonly unknown[]) => {
+      query: (statement: string, values?: readonly unknown[]) => {
         if (statement.includes("COUNT(*)")) {
-          return { rows: [{ total_items: "10000" }] };
+          return Promise.resolve({ rows: [{ total_items: "10000" }] });
         }
         if (statement.includes("FROM todos t")) {
           listStatement = statement;
           listValues = values ?? [];
-          return { rows: createRows(10) };
+          return Promise.resolve({ rows: createRows(10) });
         }
-        return { rows: [] };
+        return Promise.resolve({ rows: [] });
       },
       release: () => undefined,
     };
     const pool = {
-      connect: async () => client,
+      connect: () => Promise.resolve(client),
     } as unknown as Pick<Pool, "connect">;
     const repository = new PostgresListTodosRepository(pool);
     const cursor = Buffer.from(

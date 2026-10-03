@@ -142,7 +142,6 @@ async function main() {
         continue;
       }
 
-      let confirmed = false;
       try {
         channel.sendToQueue(
           env.TODO_HISTORY_QUEUE,
@@ -165,7 +164,6 @@ async function main() {
           },
         );
         await channel.waitForConfirms();
-        confirmed = true;
         await database.query(
           `
             UPDATE todo_event_replay_audit
@@ -176,16 +174,14 @@ async function main() {
         );
         results.push({ eventId: plan.eventId, result: "queued" });
       } catch (error) {
-        if (!confirmed) {
-          await database.query(
-            `
-              UPDATE todo_event_replay_audit
-              SET status = 'failed', error_code = 'replay_outcome_uncertain', completed_at = CURRENT_TIMESTAMP
-              WHERE id = $1
-            `,
-            [auditId],
-          );
-        }
+        await database.query(
+          `
+            UPDATE todo_event_replay_audit
+            SET status = 'failed', error_code = $2, completed_at = CURRENT_TIMESTAMP
+            WHERE id = $1 AND status = 'started'
+          `,
+          [auditId, "replay_outcome_uncertain"],
+        );
         console.log(JSON.stringify({
           target: options.target,
           completed: results,

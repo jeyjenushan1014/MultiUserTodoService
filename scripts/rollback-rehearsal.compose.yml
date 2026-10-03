@@ -1,0 +1,14 @@
+services:
+  todo-service:
+    image: multi-user-todo-platform-todo-service:${APP_RELEASE_ID}
+    environment:
+      REHEARSAL_RELEASE: ${APP_RELEASE_ID}
+      REHEARSAL_FAIL_TAG: ${REHEARSAL_FAIL_TAG:-}
+    command:
+      - node
+      - -e
+      - >-
+        require('http').createServer((req,res) => {
+          res.writeHead(process.env.REHEARSAL_RELEASE === process.env.REHEARSAL_FAIL_TAG ? 503 : 200);
+          res.end('rollback fixture');
+        }).listen(3002, '0.0.0.0');

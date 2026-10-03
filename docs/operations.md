@@ -17,14 +17,20 @@ $env:ROLLBACK_OPERATOR_ID = $env:USERNAME
 npm run rollback:release -- --service todo-service --current <current-release-id> --release <previous-release-id>
 ```
 
-The command refuses unknown services, invalid tags, or missing images; starts two instances of the
-target service on the selected prior image; and restores the current tag if a supported HTTP
-health check fails. For workers it verifies that the service is running. It does not run schema
+The command refuses unknown services, invalid tags, missing images, or a deployed image that
+does not match `--current`. It preserves the existing replica count and verifies the retained
+image ID/reference, running state, configured healthcheck, and supported HTTP health endpoint
+of every replica. If application or verification fails, it restores and verifies every replica
+on the current image; restoration failure is explicitly reported. For workers without a health
+endpoint, running state and image identity do not prove useful consumer progress: also run
+`npm run ops:progress`. It does not run schema
 down-migrations, restore a database, or reverse a mined chain transaction. Releases must preserve
-backward compatibility with the current schema and durable messages. This command has not yet
-been rehearsed against two retained image tags, so OP-9 remains pending.
+backward compatibility with the current schema and durable messages. `npm run verify:rollback`
+uses a separate no-port Compose project to verify retained image switches, all-replica failure
+detection, and automatic restoration without changing a live service. Its synthetic images
+exercise the command mechanically; they are not evidence that arbitrary historical releases
+are compatible with the deployed schema.
 
-## OP-6 Consumer and chain progress (OP-6)
 # Operations
 
 ## Database backup and restore evidence (OP-4)
@@ -73,14 +79,15 @@ Routine operations must use the application API, a documented service-specific
 operator command, or read-only health/logging interfaces. Direct SQL is not a
 routine operator interface. Existing commands commonly run through Docker Compose
 and therefore require Docker access; that access is broader than a least-privilege
-operator role. This section defines the intended boundary, but does not claim that
-the boundary is enforced yet.
+operator role. These Compose commands are administrator wrappers, not credentials to distribute
+to ordinary operators. The restricted database roles, automated break-glass exercise, audit
+checks, and limitations are described in [operations-access.md](operations-access.md).
 
 | Task | Supported interface today | Data source or effect | Boundary status |
 |---|---|---|---|
-| Check service/dependency health | `GET /health/dependencies`; `docker compose ps` and service logs | Health checks and process logs; read-only | Available; no consumer/chain lag view yet. |
+| Check service/dependency health | `GET /health/dependencies`; `docker compose ps` and service logs | Health checks and process logs; read-only | Available; use `ops:progress` for lag rather than health. |
 | Change mail delivery mode | `mail-mode.mjs status`, `sink`, or `external` | Audited Account PostgreSQL mode; changing mode requires an operator ID | Available, but the wrapper requires Docker access. |
-| Replay one notification | `replay-notification-dlq.mjs <event-id>` | Notification RabbitMQ DLQ and Account delivery state | Available for notification events only; no general DLQ inspector/replayer. |
+| Inspect/replay a DLQ event | `npm run ops:dlq -- inspect|replay --queue <dlq>` | Three supported DLQs and durable replay audit | Available; mutation needs operator ID and event UUID. |
 | Rebuild chain projection | `npm run rebuild:chain-projection` | Rebuilds Todo's local projection from configured chain logs | Available when the chain source is configured; not a chain transaction or a production writer control. |
 | Verify account erasure | `npm run verify:account-erasure -- <request-id> <user-id> <email>` | Reads Account/Todo state, Redis, broker queues/DLQs, and chain logs | Available in a running stack; arguments and output may contain personal identifiers, so restrict and redact them. |
 | Backfill workspace ownership | `backfill-workspaces.mjs` with dry-run by default and explicit `--apply` | Reads Account ownership and updates eligible Todo rows through the service script | Available; apply is a data mutation and requires a reviewed dry-run. |
@@ -88,10 +95,10 @@ the boundary is enforced yet.
 | Apply migrations | One-shot `account-migrations` or `todo-migrations` Compose job | Mutates the corresponding PostgreSQL schema | Available; run only the affected job after backup and migration review. |
 | Back up or restore a database | Operator-run `pg_dump` / `pg_restore` procedure; OP-4 evidence is recorded above | Reads or replaces database contents, depending on target | Demonstrated for private scratch restores; not yet wrapped in a least-privilege command. Never restore over the live database as routine practice. |
 | Deploy a public contract | Hardhat Ignition deployment command in `docs/onchain.md` | Public chain transaction; requires deployment credentials | Manual release operation; not a routine service command. |
-| Inspect/replay non-notification DLQs or replay an arbitrary event | No supported command | Would touch broker messages and consumer-owned state | Unsupported; do not use `rabbitmqadmin`, queue purge, or direct SQL as a substitute. |
-| Inspect consumer/chain lag | No supported command | Queue, outbox, and chain-submission progress | Unsupported; use health/logs for liveness only. |
+| Replay published event ranges | `replay-event.mjs` (history) or `replay-owner-events.mjs` (owner projection) | Source outbox; direct named consumer queue; per-event audit | Dry-run first; half-open ranges capped at 100 published events. |
+| Inspect consumer/chain lag | `npm run ops:progress` | Six consumer queues and chain safe-head/checkpoint | Reports unavailable/not-initialized explicitly; no hand-connected console. |
 | Toggle non-mail runtime feature flags | No general feature-flag command exists | No shared flag store/interface | Unsupported; mail mode is the only current audited runtime switch. |
-| Roll back an application release | No one-command rollback exists | Release image/configuration and schema compatibility | Unsupported; do not treat migration `down` or chain transaction reversal as application rollback. |
+| Roll back an application release | `npm run rollback:release -- --service <service> --current <tag> --release <tag>` | Retained release image and current replica topology | No schema down-migrations or chain reversal; rehearse compatible releases first. |
 
 ### Break-glass database access
 
@@ -105,10 +112,10 @@ closure. Never edit outbox, delivery, workflow, migration-history, or chain-stat
 rows manually to force progress. If a safe recovery command does not exist, stop
 and escalate rather than improvising a mutation.
 
-OP-8 remains open until routine operator tasks have least-privilege interfaces,
-Docker/database access is separated from ordinary operator access, and the
-break-glass process is exercised and audited. The inventory is the baseline for
-those follow-up controls, not evidence that they are already enforced.
+The inventory distinguishes routine application operations from administrator deployment and
+database recovery. Do not grant Docker access as a substitute for a least-privilege credential.
+Run the isolated access verifier in [operations-access.md](operations-access.md) to check both
+allowed operations and denied writes, together with the audited, revoked break-glass role.
 
 ## OP-5 Incident runbooks
 ## Consumer and chain progress (OP-6)
@@ -125,8 +132,10 @@ consumer count. The chain section reports the RPC latest block, confirmation-adj
 projection checkpoint, checkpoint time, and block lag. A missing checkpoint is `not-initialized`;
 unreachable or invalid dependencies report `unavailable`, not zero lag. The command queries the
 broker, Todo database, and chain RPC itself; operators do not connect to those systems manually.
-It does not print event payloads, RPC URLs, or credentials. This command has editor diagnostics
-only so far. On 2026-10-03 the operator ran it successfully: all six queues reported zero ready
+It does not print event payloads, RPC URLs, or credentials. Dependency failures include a
+sanitized reason code rather than fabricated zero counters. `npm run ops:progress --
+--require-ready` fails unless all six queues are available, drained, and have consumers and
+the chain reader is caught up. On 2026-10-03 the operator ran it successfully: all six queues reported zero ready
 and unacknowledged messages with two consumers each. The first chain probe failed because no RPC
 was listening. After starting a fresh local Hardhat node, the progress command reported RPC
 reachable at chain 31337, latest block 0, safe head -1, and `not-initialized` with no checkpoint.
@@ -190,8 +199,8 @@ docker compose logs --since 10m --tail 100 todo-owner-consumer account-notificat
 ```
 
 Restore the failed dependency first, then recreate/restart only the affected consumer service.
-The health endpoint reports liveness, not per-consumer backlog age/lag; OP-6 lag visibility remains
-an open tooling gap.
+The health endpoint reports liveness, not lag. Run `npm run ops:progress` to inspect ready and
+unacknowledged counts, active consumers, and the chain safe-head/checkpoint distance.
 
 ### Dead-letter queue filling
 
@@ -205,8 +214,8 @@ docker compose run --rm --no-deps -T account-service node apps/account-service/s
 
 The script targets one notification event, preserves nonmatching messages, checks terminal
 delivery state, and has replay fencing. Do not purge a DLQ or edit delivery records manually.
-There is no single supported inspector/replayer for every service DLQ yet; broad OP-2/OP-3
-coverage remains open. The durable-outbox event replay command below is separate from DLQ replay.
+Use the unified command below for notification, owner-projection, and history DLQs. The
+durable-outbox range replay command below is separate from DLQ replay.
 
 ### Targeted event replay (OP-3)
 
@@ -214,8 +223,8 @@ The first supported target is `todo-history`. The command selects already-publis
 events in the half-open UTC range `[from, to)`, validates every selected envelope, and sends them
 only to the durable history queue. It is capped at 100 matching events; split larger ranges into
 smaller windows. The consumer's unique `todo_history.event_id` constraint makes duplicate delivery
-a no-op. Other consumers are deliberately rejected until their replay safety is separately
-established.
+a no-op. The Account-source owner-projection command below has a separate allow-list and
+consumer receipt check; this Todo-source command deliberately rejects other targets.
 
 The Todo migration adding `todo_event_replay_audit` must be applied first. Use a UTC ISO-8601
 range from a trusted incident record. Dry-run is the default and prints event IDs/types and
@@ -242,29 +251,82 @@ publication failed, so inspect the audit row and history before retrying. The ea
 attempt failed UUID validation before publishing; it did not change consumer state. Do not edit
 outbox or history rows manually. This command does not inspect or replay any RabbitMQ DLQ.
 
+#### Account owner-projection replay (OP-3)
+
+The separate Account outbox replay supports only published `account.registered` and
+`account.email-changed` events. It accepts one `--event-id` or a strict UTC ISO half-open
+`--from`/`--to` range, capped at 100 events. It validates each envelope against the owner
+consumer's event shapes and queries Todo's `processed_events` receipt and deletion tombstone
+before replay. Dry-run is the default and prints counts only; it does not print event IDs,
+payloads, emails, or owner IDs.
+
+Apply Account migration `016_create_owner_event_replay_audit.cjs` first
+(`npm run migrate:account`), then set `ACCOUNT_DATABASE_URL` and `TODO_DATABASE_URL` to the
+isolated database credentials. A read-only preview does not connect to RabbitMQ:
+
+```powershell
+$env:REPLAY_EVENT_ID = "<published-account-event-uuid>"
+node apps/account-service/scripts/replay-owner-events.mjs --event-id $env:REPLAY_EVENT_ID
+```
+
+After reviewing the counts, an operator may explicitly apply:
+
+```powershell
+$env:TODO_EVENT_REPLAY_OPERATOR_ID = $env:USERNAME
+# Set RABBITMQ_URL to the isolated broker before applying.
+node apps/account-service/scripts/replay-owner-events.mjs --event-id $env:REPLAY_EVENT_ID --apply
+```
+
+Apply sends to the dedicated `todo.owner-projection` queue (not the exchange), uses publisher
+confirms, and resets the owner retry-count header to zero. Every selected event is audited in
+Account's `owner_event_replay_audit` as started, queued, already processed, or failed. A failed publish
+after a send attempt is marked `replay_outcome_uncertain`; reconcile the audit and consumer receipt
+before retrying. A deletion tombstone is never replayed; it is audited as failed with
+`account_deleted_tombstone`. Stop on errors and do not publish against live services as a rehearsal.
+
+The exported `runOwnerReplayRehearsal` helper is used by
+`node scripts/verify-operations.mjs`: pass it the isolated Account/Todo database pools, a
+RabbitMQ confirm channel, a published unprocessed event UUID, and an operator ID. It sends once,
+waits for the `todo-owner-projection` row in `processed_events`, then invokes the replay again and
+requires both `queued` and `already_processed` audit evidence in Account's
+`owner_event_replay_audit` without a second send. The verifier
+also seeds an isolated deletion tombstone and confirms the event is not queued or receipted and is
+audited as `account_deleted_tombstone`. Its output contains counts only. The rehearsal requires the
+owner consumer to be running and must use isolated databases and broker resources.
+
 The operator reports running the targeted notification replay command successfully. This confirms
 that command path only; it does not verify inspection/replay for the history, owner-projection, or
 other service DLQs.
 
-The unified allow-listed command is being added for all three configured service DLQs:
 The unified allow-listed command is available for all three configured service DLQs:
 `todo.notifications.dlq`, `todo.owner-projection.dlq`, and `todo.history.dlq`. It emits only
 event ID, event type, occurrence time, and a sanitized failure reason; event payloads are never
-printed. Inspection is read-only. Replay requires an event ID and operator identity, scans at most
+printed. Inspection preserves messages, but temporarily holds and requeues them; ordering may
+change, so do not assume a stable FIFO order while inspecting. Replay requires an event ID and operator identity, scans at most
 1,000 messages, publishes to the paired consumer queue with publisher confirms, then removes the
 matching DLQ copy. Notification replay also resets the durable delivery claim through its existing
-repository. The new multi-queue path has not yet passed an isolated broker rehearsal.
+repository. Account migration `015_create_dlq_operation_audit.cjs` records each replay before
+mutation and records `queued`, `already_processed`, `failed`, or `outcome_uncertain`. A crash may
+leave `started`; reconcile that event against consumer receipts before retrying. Broker confirms
+and database writes are not one distributed transaction. The original DLQ copy is retained on
+failure, and consumer event-ID deduplication handles duplicate deliveries.
 
 ```powershell
-docker compose run --build --rm --no-deps -T account-service npm run ops:dlq -w @todo/account-service -- inspect --queue todo.history.dlq
+npm run ops:dlq -- inspect --queue todo.history.dlq
 $env:DLQ_OPERATOR_ID = $env:USERNAME
-docker compose run --build --rm --no-deps -T -e DLQ_OPERATOR_ID account-service npm run ops:dlq -w @todo/account-service -- replay --queue todo.history.dlq --event-id $env:EVENT_ID
+npm run ops:dlq -- replay --queue todo.history.dlq --event-id $env:EVENT_ID
 ```
 
 Use the same command with `todo.owner-projection.dlq` or `todo.notifications.dlq` as the queue.
 For every replay, set `DLQ_OPERATOR_ID` in the host environment and pass it into the one-shot
-container with `-e DLQ_OPERATOR_ID`. Verify the replay result and consumer-owned state before
+container with `-e DLQ_OPERATOR_ID` (the root npm wrapper does this). Verify the replay result and consumer-owned state before
 retrying after an uncertain confirmation.
+
+`npm run verify:day4` invokes `verify:operations` only on its disposable project. The rehearsal
+checks redacted inspection, all three dedicated replay queues, publisher confirmation and audit,
+retry-header reset, preservation of unrelated DLQ messages, half-open history range boundaries,
+dry-run nonpublication, and duplicate history/notification delivery claims. It never sends
+external mail or stops consumers in the normal operator stack.
 
 ### Transaction appears stuck
 

@@ -1,9 +1,7 @@
 import { connect } from "amqplib";
 import { z } from "zod";
-
-import { database } from "../dist/config/database.js";
-import { env } from "../dist/config/env.js";
-import { PostgresNotificationDeliveryRepository } from "../dist/notifications/postgres-notification-delivery.repository.js";
+import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 const MAX_SCAN_MESSAGES = 1000;
 const CONSUMER_RETRY_HEADERS = {
@@ -11,7 +9,7 @@ const CONSUMER_RETRY_HEADERS = {
   "todo.owner-projection.dlq": "x-todo-owner-retry-count",
 };
 
-function parseOptions(args) {
+export function parseOptions(args, env) {
   const [command, ...values] = args;
   if (command !== "inspect" && command !== "replay") {
     throw new Error("Usage: dlq-operations.mjs inspect|replay --queue <allowed-dlq> [--event-id <uuid>]");
@@ -33,12 +31,11 @@ function parseOptions(args) {
 
   const queue = options.get("--queue");
   const eventId = options.get("--event-id");
-  const allowedQueues = new Set(
-    env.ACCOUNT_DELETION_BROKER_QUEUES
-      .split(",")
-      .map((name) => name.trim())
-      .filter((name) => name.endsWith(".dlq")),
-  );
+  const allowedQueues = new Set([
+    env.RABBITMQ_NOTIFICATION_DLQ,
+    "todo.owner-projection.dlq",
+    "todo.history.dlq",
+  ]);
 
   if (!queue || !allowedQueues.has(queue)) {
     throw new Error("--queue must name a configured dead-letter queue");
@@ -50,10 +47,11 @@ function parseOptions(args) {
   return { command, queue, eventId };
 }
 
-function summarize(message) {
+export function summarize(message) {
   let eventId;
   let eventType;
   let occurredAt;
+  let payloadStatus = "invalid";
   try {
     const event = JSON.parse(message.content.toString("utf8"));
     if (event && typeof event === "object") {
@@ -66,6 +64,7 @@ function summarize(message) {
       occurredAt = typeof event.occurredAt === "string" && Number.isFinite(Date.parse(event.occurredAt))
         ? event.occurredAt
         : undefined;
+      payloadStatus = eventId ? "valid-identity" : "invalid-identity";
     }
   } catch {
     // Invalid payload details are intentionally not printed.
@@ -81,6 +80,7 @@ function summarize(message) {
       ? failureReason
       : undefined,
     redacted: true,
+    payloadStatus,
   };
 }
 
@@ -93,18 +93,20 @@ function matchesEvent(message, eventId) {
   }
 }
 
-async function main() {
-  const options = parseOptions(process.argv.slice(2));
-  const operatorId = process.env.DLQ_OPERATOR_ID?.trim();
+export async function operateDlq({ options, operatorId, channel, deliveryRepository, audit, env }) {
   if (options.command === "replay" && (!operatorId || operatorId.length > 100)) {
     throw new Error("DLQ_OPERATOR_ID must identify the operator (1-100 characters)");
   }
 
-  const connection = await connect(env.RABBITMQ_URL);
-  const channel = await connection.createConfirmChannel();
   const held = [];
   let selected;
+  let auditId;
+  let publishAttempted = false;
   try {
+    const targetQueue = options.queue === env.RABBITMQ_NOTIFICATION_DLQ
+      ? env.RABBITMQ_NOTIFICATION_QUEUE
+      : options.queue.slice(0, -".dlq".length);
+    if (options.command === "replay") await channel.checkQueue(targetQueue);
     const queueState = await channel.checkQueue(options.queue);
     if (queueState.messageCount > MAX_SCAN_MESSAGES) {
       throw new Error(`Queue exceeds the bounded scan (${MAX_SCAN_MESSAGES} messages)`);
@@ -123,28 +125,30 @@ async function main() {
     }
 
     if (options.command === "inspect") {
-      console.log(JSON.stringify({
+      return {
         command: "inspect",
         queue: options.queue,
         observed: summaries.length,
         messages: summaries,
-      }));
-      return;
+      };
     }
 
     if (!selected) {
       throw new Error(`Event ${options.eventId} was not found in ${options.queue}`);
     }
 
+    auditId = randomUUID();
+    await audit.start(auditId, options, operatorId);
     let result = "queued";
     if (options.queue === env.RABBITMQ_NOTIFICATION_DLQ) {
-      const deliveryRepository = new PostgresNotificationDeliveryRepository();
       const replay = await deliveryRepository.resetForReplay(options.eventId);
       if (replay.status === "ready") {
+        publishAttempted = true;
         channel.sendToQueue(env.RABBITMQ_NOTIFICATION_QUEUE, selected.content, {
+          ...selected.properties,
           persistent: true,
           contentType: "application/json",
-          headers: { "x-notification-attempt": 1 },
+          headers: { ...selected.properties.headers, "x-notification-attempt": 1, operatorReplay: true },
         });
         await channel.waitForConfirms();
         await deliveryRepository.markReplayQueued(options.eventId, replay.processingToken);
@@ -152,10 +156,10 @@ async function main() {
         result = "already-queued-or-delivered";
       }
     } else {
-      const targetQueue = options.queue.slice(0, -".dlq".length);
       const retryHeader = CONSUMER_RETRY_HEADERS[options.queue];
       const headers = { ...selected.properties.headers, operatorReplay: true };
       if (retryHeader) headers[retryHeader] = 0;
+      publishAttempted = true;
       channel.sendToQueue(targetQueue, selected.content, {
         ...selected.properties,
         persistent: true,
@@ -164,25 +168,67 @@ async function main() {
       await channel.waitForConfirms();
     }
 
+    await audit.finish(auditId, result === "queued" ? "queued" : "already_processed");
     channel.ack(selected);
     selected = undefined;
-    console.log(JSON.stringify({
+    return {
       command: "replay",
       queue: options.queue,
       eventId: options.eventId,
       operatorId,
       result,
-    }));
+    };
+  } catch (error) {
+    if (auditId) await audit.finish(auditId, publishAttempted ? "outcome_uncertain" : "failed");
+    throw error;
   } finally {
     if (selected) channel.nack(selected, false, true);
     for (const message of held) channel.nack(message, false, true);
-    await channel.close();
-    await connection.close();
-    await database.end();
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : "DLQ operation failed");
-  process.exitCode = 1;
-});
+export async function main(args = process.argv.slice(2)) {
+  const { database } = await import("../dist/config/database.js");
+  let connection;
+  let channel;
+  try {
+    const { env } = await import("../dist/config/env.js");
+    const { PostgresNotificationDeliveryRepository } = await import("../dist/notifications/postgres-notification-delivery.repository.js");
+    const options = parseOptions(args, env);
+    connection = await connect(env.RABBITMQ_URL);
+    channel = await connection.createConfirmChannel();
+    const audit = {
+      async start(id, selection, operatorId) {
+        await database.query(
+          `INSERT INTO dlq_operation_audit (id, event_id, source_queue, operator_id, status)
+           VALUES ($1, $2, $3, $4, 'started')`,
+          [id, selection.eventId, selection.queue, operatorId],
+        );
+      },
+      async finish(id, status) {
+        const result = await database.query(
+          `UPDATE dlq_operation_audit SET status = $2, completed_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [id, status],
+        );
+        if (result.rowCount !== 1) throw new Error("DLQ replay audit record was not found");
+      },
+    };
+    console.log(JSON.stringify(await operateDlq({
+      options, operatorId: process.env.DLQ_OPERATOR_ID?.trim(), channel,
+      deliveryRepository: new PostgresNotificationDeliveryRepository(), audit, env,
+    })));
+  } finally {
+    try {
+      await channel?.close();
+    } finally {
+      try { await connection?.close(); } finally { await database.end(); }
+    }
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : "DLQ operation failed");
+    process.exitCode = 1;
+  });
+}

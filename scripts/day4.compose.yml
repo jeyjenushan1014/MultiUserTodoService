@@ -1,0 +1,30 @@
+# Compose >=2.24.4: !reset prevents inherited default ports from reaching the host.
+services:
+  rabbitmq:
+    ports: !reset []
+  mailpit:
+    ports: !reset []
+  edge:
+    ports: !reset []
+  todo-service:
+    volumes:
+      - ${VERIFICATION_SCRIPTS}:/app/scripts:ro
+      - ${VERIFICATION_SOURCE}/contracts/onchain/ignition/deployments/chain-31337/artifacts:/app/verification-contract:ro
+  verification-chain:
+    image: ghcr.io/foundry-rs/foundry:v1.3.1
+    entrypoint: ["anvil"]
+    command: ["--host", "0.0.0.0", "--chain-id", "31337", "--silent"]
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://127.0.0.1:8545"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  validation:
+    profiles: ["verification"]
+    build:
+      context: ${VERIFICATION_SOURCE}
+      dockerfile: scripts/day4-validation.Dockerfile
+    environment:
+      TODO_E2E_BASE_URL: http://edge:3000
+      NODE_ENV: test
+    command: ["npm", "run", "check"]

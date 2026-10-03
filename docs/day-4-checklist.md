@@ -117,14 +117,19 @@ Live process-stop, compensation, and operator proofs remain pending.
 
 - [x] BC-1 every accepted task mutation anchored (`PostgresTodoRepository`, `PostgresUpdateTodoRepository`, `PostgresDeleteTodoRepository` enqueue to `chain_submissions`)
 - [x] BC-2 no personal data or identifying hashes on-chain (`PrivacyGate` enforces opaque UUIDs, blocks title/desc/email/userId)
-- [x] BC-3 bounded public task-history reads and count (local contract tests passed; public-network demonstration pending)
-- [x] BC-4 authorized writer only (local contract test passed; backend key safety pending)
+- [x] BC-3 bounded public task-history reads and count (local tests plus direct Sepolia synthetic-record read in `docs/onchain.md`)
+- [x] BC-4 authorized writer only (local contract test passed; Sepolia demo verified the configured writer)
 - [x] BC-5 local Hardhat deployment and tests (8 tests passed; chain 31337 address recorded)
-- [x] BC-5 public Sepolia deployment (chain 11155111; address and verified source recorded in `docs/onchain.md`)
+- [x] BC-5 public Sepolia deployment (chain 11155111; source verified; synthetic write/read demonstrated)
+- [x] Deploy contract to Sepolia or equivalent (`TaskHistory` v1; verified on Etherscan, Blockscout, and Sourcify)
+- [x] Record public contract address (`docs/onchain.md`)
+- [x] Read records directly from the public testnet (`npm run demo:sepolia`; synthetic record, 2 confirmations)
+- [x] Record gas measurements and contract version (local comparison and Sepolia demo receipt in `docs/onchain.md`)
 - [x] BC-15 private-key protection (`SecureSignerKeyProvider`, logger redaction, env validation & unit tests passed)
 - [x] BC-16 local gas measurements: append 75,583 gas with 1 and 1,000 prior task records
+- [x] BC-16 Sepolia demo gas sample: 91,881 gas for TaskHistory v1 synthetic `Created` record
 - [x] BC-17 backend build artifact for ABI **and** deployed address (`task-history.abi.json` & `task-history.deployment.json` exported and verified)
-- [x] Update `docs/onchain.md` for contract functions, local address, build commands, and measured gas
+- [x] Update `docs/onchain.md` for contract functions, deployment, public read steps, and gas evidence
 
 ### 9:00 AM-12:00 PM: Chain Worker and Indexer
 
@@ -215,27 +220,36 @@ email, and the SMTP key was replaced. Keep a redacted provider receipt outside
 the repository. Provider refusal and replacement evidence remain open for ML-5
 and ML-6.
 - [x] OP-1 rebuild commands for every projection (BC-6 chain projection rebuildable via `npm run rebuild:chain-projection`)
-- [ ] OP-2 notification DLQ replay command exists; inspection/replay for every DLQ remains pending
-- [ ] OP-3 targeted event replay
-- [ ] OP-6 consumer and chain lag visibility
-- [ ] OP-7 runtime feature flags
-- [ ] OP-8 no routine manual database access
-- [ ] OP-9 one-command rollback
-- [ ] OP-10 all commands work on a clean clone
+- [x] OP-2 targeted notification DLQ replay command (operator reports the command ran successfully)
+- [ ] OP-2 unified inspection/replay CLI for notification, owner-projection, and history DLQs; isolated broker rehearsal pending
+- [ ] OP-3 bounded time-range replay to `todo-history`; range tests and Compose rehearsal pending
+- [ ] OP-3 bounded time-range replay to `todo-history` (operator reports build, focused test, and dry-run passed; apply replay remains pending)
+- [ ] OP-3 bounded time-range replay to `todo-history` (dry-run selected 14 events: 9 eligible, 5 already processed; apply replay pending)
+- [x] OP-3 bounded time-range replay to `todo-history` (operator run selected 14 events: 9 queued, 5 already processed)
+- [ ] OP-3 targeted replay for other consumers with proven idempotency and audit
+- [ ] OP-6 progress CLI implemented; live broker/RPC output verification pending
+- [ ] OP-6 consumer lag verified live (six queues, zero ready/unacked, two consumers each); chain reader unavailable, investigate RPC/checkpoint
+- [ ] OP-6 consumer lag verified live (six queues, zero ready/unacked, two consumers each); RPC probe returned `fetch failed`, so chain lag remains unavailable
+- [ ] OP-6 consumer lag verified live (six queues, zero ready/unacked, two consumers each); RPC reachable, but fresh Hardhat chain is block 0 with no checkpoint (`not-initialized`)
+- [x] OP-6 live consumer and chain progress (six queues, zero ready/unacked, two consumers each; chain checkpoint at safe head with zero lag)
+- [x] OP-7 runtime behavior switch without redeploy (`mail-mode.mjs`; `verify-mail-mode.mjs` validates the audited sink/external switch)
+- [ ] OP-8 operator boundary documented; least-privilege enforcement and audited break-glass exercise pending
+- [ ] OP-9 release-tagged images and guarded rollback command implemented; retained-image rehearsal pending
+- [ ] OP-10 verifier generates ephemeral configuration; clean-clone run and all-command verification pending
 
 # copilot
 ### 10:30 PM-12:00 AM: Operations Documentation
 
-- [ ] Create `docs/operations.md`
-- [ ] Broker unavailable runbook
-- [ ] Chain unavailable runbook
-- [ ] Mail-provider failure runbook
-- [ ] Consumer progress failure runbook
-- [ ] DLQ filling runbook
-- [ ] Stuck transaction runbook
-- [ ] Failed migration runbook
-- [ ] Stuck compensation runbook
-- [ ] Latency breach runbook
+- [x] Create `docs/operations.md`
+- [x] Broker unavailable runbook
+- [x] Chain unavailable runbook (worker absent from default Compose; operator recovery command remains unavailable)
+- [x] Mail-provider failure runbook
+- [x] Consumer progress failure runbook (health/log checks documented; lag metrics unavailable)
+- [x] DLQ filling runbook (targeted notification replay documented; general DLQ tooling remains open)
+- [x] Stuck transaction runbook (operator recovery tooling remains unavailable)
+- [x] Failed migration runbook
+- [x] Stuck compensation runbook
+- [x] Latency breach runbook (measurement objectives remain open)
 - [ ] Consumer-lag and chain-lag visibility instructions
 - [ ] Rebuild, replay, DLQ, mail-flag, restore, and rollback commands
 
@@ -245,13 +259,13 @@ and ML-6.
 ### 4:30-7:30 AM: Performance
 
 - [ ] PF-2 keyset pagination for deep pages
-- [ ] PF-3 constant database round trips
+- [ ] PF-3 fixed four-query list path regression test added; focused test run pending
 - [ ] PF-4 read and write latency objectives
 - [ ] PF-5 automated load-test threshold
 - [ ] PF-6 optimistic concurrency conflict response
 - [ ] PF-10 expensive-query `EXPLAIN ANALYZE` evidence
-- [ ] Slow chain and mail dependency isolation
-- [ ] Pool and concurrency calculations documented
+- [x] Slow chain and mail dependency isolation (PF-7 evidence recorded above and in `docs/traceability.md`)
+- [x] Pool and concurrency calculations documented (`docs/capacity.md`; `npm run verify:capacity` passed)
 
 ### 8:00-10:00 AM: Proof
 # copilot
@@ -261,6 +275,7 @@ and ML-6.
 - [ ] PR-3 producer/consumer compatibility checks
 - [ ] PR-4 automated dependency stop/restart tests (Mailpit stop/restart covered by `npm run verify:mail`; other dependencies pending)
 - [ ] PR-5 one clean-clone verification command
+- [ ] PR-5 isolated per-run Compose cleanup and generated test config implemented; clean-clone and repeated-run verification pending
 - [ ] PR-6 documentation behavior checks
 - [ ] PR-7 isolated repeatable runs
 - [ ] PR-8 eight deliberate breakages recorded
@@ -279,10 +294,10 @@ and ML-6.
 - [x] Record public contract address (`docs/onchain.md`)
 - [x] Read records directly from the public testnet (`npm run demo:sepolia`; synthetic record, 2 confirmations)
 - [x] Record gas measurements and contract version (local comparative gas plus Sepolia demo receipt in `docs/onchain.md`)
-- [ ] Back up both databases
-- [ ] Restore into clean databases
-- [ ] Time and record restore
-- [ ] Verify restored behavior
+- [x] Back up both databases (custom-format dumps and SHA-256 hashes recorded in `docs/operations.md`)
+- [x] Restore into clean databases (separate scratch databases; originals untouched)
+- [x] Time and record restore (Account 0.697s; Todo 0.717s)
+- [x] Verify restored behavior (operator reports authenticated API and TODO-read smoke test passed against the scratch restores; details in `docs/operations.md`)
 
 ### 12:30-2:00 PM: Full Verification
 

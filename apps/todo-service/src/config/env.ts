@@ -67,6 +67,14 @@ const environmentSchema =
           "RABBITMQ_URL is required",
         ),
 
+    RABBITMQ_MANAGEMENT_URL: z
+      .url()
+      .default("http://rabbitmq:15672"),
+
+    RABBITMQ_USER: z.string().default(""),
+
+    RABBITMQ_PASSWORD: z.string().default(""),
+
     RABBITMQ_EXCHANGE:
       z
         .string()
@@ -287,6 +295,21 @@ TODO_HISTORY_DLQ:
       .string()
       .min(1)
       .default("todo.workspace-membership"),
+
+    RABBITMQ_NOTIFICATION_QUEUE: z
+      .string()
+      .min(1)
+      .default("todo.notifications"),
+
+    GATEWAY_SESSION_REVOCATION_QUEUE: z
+      .string()
+      .min(1)
+      .default("gateway.session-revocations"),
+
+    GATEWAY_WORKSPACE_MEMBERSHIP_QUEUE: z
+      .string()
+      .min(1)
+      .default("gateway.workspace-membership"),
 
     DATABASE_POOL_MAX:
       z.coerce

@@ -107,6 +107,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: todo-service-runtime
+    image: multi-user-todo-platform-todo-service:${APP_RELEASE_ID:-local}
 
     command:
       - node
@@ -197,6 +198,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: account-service-runtime
+    image: multi-user-todo-platform-account-service:${APP_RELEASE_ID:-local}
 
     environment:
       NODE_ENV: production
@@ -276,6 +278,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: account-service-runtime
+    image: multi-user-todo-platform-account-service:${APP_RELEASE_ID:-local}
 
     command:
       - node
@@ -322,6 +325,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: account-service-runtime
+    image: multi-user-todo-platform-account-service:${APP_RELEASE_ID:-local}
     command:
       - node
       - apps/account-service/dist/worker/workflow.worker.js
@@ -356,6 +360,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: account-service-runtime
+    image: multi-user-todo-platform-account-service:${APP_RELEASE_ID:-local}
 
     command:
       - npm
@@ -402,6 +407,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: todo-service-runtime
+    image: multi-user-todo-platform-todo-service:${APP_RELEASE_ID:-local}
 
     environment:
       NODE_ENV: production
@@ -413,6 +419,9 @@ services:
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
       RABBITMQ_URL: >-
         amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       ACCOUNT_DELETION_BROKER_QUEUES: ${ACCOUNT_DELETION_BROKER_QUEUES:-todo.notifications,todo.notifications.retry,todo.notifications.dlq,todo.owner-projection,todo.owner-projection.retry,todo.owner-projection.dlq,todo.history,todo.history.retry,todo.history.dlq,todo.workspace-membership,gateway.session-revocations,gateway.workspace-membership}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       REQUEST_BODY_LIMIT: ${REQUEST_BODY_LIMIT:-100kb}
@@ -470,6 +479,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: todo-service-runtime
+    image: multi-user-todo-platform-todo-service:${APP_RELEASE_ID:-local}
 
     command:
       - npm
@@ -519,6 +529,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: account-service-runtime
+    image: multi-user-todo-platform-account-service:${APP_RELEASE_ID:-local}
     command:
       - npm
       - run
@@ -583,6 +594,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: todo-service-runtime
+    image: multi-user-todo-platform-todo-service:${APP_RELEASE_ID:-local}
 
     command:
       - npm
@@ -635,6 +647,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: todo-service-runtime
+    image: multi-user-todo-platform-todo-service:${APP_RELEASE_ID:-local}
 
     command:
       - npm
@@ -688,6 +701,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: gateway-runtime
+    image: multi-user-todo-platform-gateway:${APP_RELEASE_ID:-local}
 
     environment:
       NODE_ENV: production

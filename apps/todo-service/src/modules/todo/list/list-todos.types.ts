@@ -16,6 +16,9 @@ export interface ListTodosParameters {
   readonly pageSize:
     number;
 
+  readonly cursor?:
+    string;
+
   readonly state?:
     TodoState;
 
@@ -35,4 +38,7 @@ export interface ListTodosRepositoryResult {
 
   readonly totalItems:
     number;
+
+  readonly nextCursor?:
+    string;
 }

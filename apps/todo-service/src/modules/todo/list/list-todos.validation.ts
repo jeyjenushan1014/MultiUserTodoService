@@ -36,6 +36,12 @@ export const listTodosQuerySchema =
           DEFAULT_TODO_PAGE_SIZE,
         ),
 
+      cursor: z
+        .string()
+        .min(1)
+        .max(300)
+        .optional(),
+
       state: z
         .enum(
           TODO_STATES,
@@ -64,7 +70,17 @@ export const listTodosQuerySchema =
           DEFAULT_SORT_ORDER,
         ),
     })
-    .strict();
+    .strict()
+    .refine(
+      (query) =>
+        query.cursor === undefined ||
+        query.sortBy === "createdAt",
+      {
+        message:
+          "Cursor pagination supports createdAt sorting only",
+        path: ["cursor"],
+      },
+    );
 
 export type ValidatedListTodosQuery =
   z.infer<

@@ -80,7 +80,7 @@ Backend signing key custody is implemented under BC-15 (`SecureSignerKeyProvider
 
 ## 6. Reading history
 
-The contract will provide two public read operations:
+The deployed contract exposes two public read operations:
 
 1. `getRecordCount(bytes16 taskId)` returns the total number of records for a task.
 2. `getHistory(bytes16 taskId, uint256 offset, uint256 limit)` returns one page.
@@ -159,11 +159,21 @@ history directly through the Sepolia RPC:
 | Synthetic task ID | `0x11111111111111111111111111111111` |
 | Synthetic workspace ID | `0x22222222222222222222222222222222` |
 | Action | `Created` (`0`) |
-| Transaction | `0xb3e3d885eaf61adae475ab9d247513aebb88b3ec832d5d32294077610ffacb2f` |
+| Transaction | [`0xb3e3d885eaf61adae475ab9d247513aebb88b3ec832d5d32294077610ffacb2f`](https://sepolia.etherscan.io/tx/0xb3e3d885eaf61adae475ab9d247513aebb88b3ec832d5d32294077610ffacb2f) |
 | Confirmed block | `11829028` |
 | Confirmations waited | `2` |
 | Gas used | `91881` |
 | Read-back | Count changed from `0` to `1`; `getHistory(taskId, 0, 50)` returned the synthetic record. |
+
+To repeat the read-only check without this application, open the
+[verified Sepolia contract](https://sepolia.etherscan.io/address/0xF9b72407696e8D30FB43E17c77dB8B77bDb231E7#readContract)
+and select **Contract → Read Contract**. Call `writer()` and `MAX_PAGE_SIZE()`;
+then call `getRecordCount` with task ID
+`0x11111111111111111111111111111111` and `getHistory` with that task ID,
+offset `0`, and limit `50`. Reads do not require connecting a wallet. The
+demonstration returned count `1` and one `Created` record for the synthetic
+task/workspace IDs above. Never use a real task or workspace identifier in a
+public explorer.
 
 The equivalent demo command is `npm run demo:sepolia` from `contracts/onchain`. It submits
 another append using the same synthetic task ID each time, so the count will increase on each
@@ -261,9 +271,9 @@ and unit-tested in `apps/todo-service/src/blockchain/__tests__/task-history-proj
 |---|---|---|
 | BC-1 | Backend mutation repositories (`PostgresTodoRepository`, `PostgresUpdateTodoRepository`, `PostgresDeleteTodoRepository`) atomically enqueue chain commands to `chain_submissions`. | Public testnet anchor verification. |
 | BC-2 | Automated `PrivacyGate` strictly rejects titles, descriptions, emails, account IDs, and hashes. Unit-tested in `privacy-gate.test.ts`; the Sepolia demo used synthetic opaque IDs only. | Validate privacy of production-derived identifiers before public backend writes. |
-| BC-3 | Local tests pass for count and bounded pages; `npm run demo:sepolia` read count and history directly from Sepolia after a synthetic write. | Public testnet read demonstrated for the synthetic task. |
+| BC-3 | Local tests pass for count and bounded pages; `npm run demo:sepolia` read count and history directly from Sepolia after a synthetic write. | Public testnet read demonstrated for the synthetic task; production identifiers still require privacy review. |
 | BC-4 | Local writer succeeds, another signer reverts. Backend custody protected by `SecureSignerKeyProvider`. | Keep writer control safe in production secrets. |
-| BC-5 | Local tests, chain-31337 deployment, and verified Sepolia deployment; `npm run demo:sepolia` waited two confirmations and read the record back. | Public deployment demonstrated on 2026-10-02. |
+| BC-5 | Local tests, chain-31337 deployment, and verified Sepolia deployment; `npm run demo:sepolia` waited two confirmations and read the record back. | Complete for the required local and public testnet demonstration. |
 | BC-6 | `npm run rebuild:chain-projection` and unit tests verify clearing and rescan from chain. | Demonstrated against local RPC. |
 | BC-7 | Unit-tested: `ON CONFLICT (chain_id, contract_address, transaction_hash, log_index) DO NOTHING`. | Demonstrated. |
 | BC-8 | Unit-tested: common ancestor reconciliation and `rollbackAfterBlock` removes reorged events. | Demonstrated. |
@@ -310,8 +320,13 @@ State is fully durable in PostgreSQL. If the worker process restarts mid-flight,
 - If attempts reach `maxRetries` (default 5), the record moves to `status = 'dead_letter'` with `last_error` populated.
 - Operators can inspect and alert on dead-lettered transactions without losing data or blocking normal processing.
 
-No production private key, public-testnet deployment, or chain submission worker
-is supplied by this milestone. These are separate release gates.
+The operator deployed and verified TaskHistory on Sepolia and performed a synthetic
+two-confirmation write/read demonstration; deployment evidence and the public
+transaction are recorded above. No production private key is committed or
+documented. Backend submission and indexer worker code exists, but neither worker
+is part of the default Compose topology, and production TODO traffic has not been
+demonstrated writing to the Sepolia deployment. These remain release and
+operational integration gates.
 
 
 ## Durable chain submissions
@@ -321,6 +336,8 @@ It contains task ID, workspace ID, action, chain/contract/writer addresses, retr
 nonce, transaction hashes, and transaction status. It does not contain task content,
 user IDs, email addresses, or signing private keys.
 
-The table is the durable queue foundation. BC-10 through BC-14 remain incomplete until
-the business transaction enqueues commands atomically and the chain worker implements
-submission, nonce coordination, receipt/finality tracking, retry, and dead-letter handling.
+The table is the durable queue foundation. Unit and integration tests cover the
+backend enqueue, submission state machine, nonce coordination, retry, and
+dead-letter code paths (BC-10 through BC-14). However, the corresponding workers
+are not started by default Compose, and a live production-path submission, receipt
+finality operation, and operator recovery flow remain unproven.

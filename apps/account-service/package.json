@@ -19,6 +19,7 @@
   ,"start:owner-projection-rebuild": "node dist/maintenance/owner-projection-rebuild.worker.js",
     "start:workflow": "node dist/worker/workflow.worker.js",
     "verify:ev8-live": "node scripts/verify-ev8-live.mjs"
+    ,"ops:dlq": "node scripts/dlq-operations.mjs"
 },
   "dependencies": {
     "@todo/common": "*",

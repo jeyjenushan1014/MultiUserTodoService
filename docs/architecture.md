@@ -16,8 +16,10 @@ See [architecture-diagram.md](architecture-diagram.md) for the visual topology a
 | Account outbox worker | Publishes account events | Account outbox rows |
 | Todo outbox worker | Publishes todo events | Todo outbox rows |
 | Todo owner consumer | Builds the Todo Service account projection | `todo_owners` |
-| Account notification consumer | Sends sharing notifications | Notification queue and Mailpit transport |
+| Account notification consumer | Sends password-reset, share, and share-withdrawal notifications | Notification queue, delivery claims, address-quota reservations, sink/provider transport selection |
 | Todo history worker | Records immutable task activity | `todo_history` |
+| Account deletion worker | Resumes leased account-erasure workflow and purges copies | `account_deletion_requests` |
+| Chain submission/indexer code | Persists privacy-gated chain commands and projects confirmed contract logs | `chain_submissions`, nonce coordination, and chain projection tables; these worker processes are not part of the default Compose topology |
 
 `@todo/contracts` contains public and integration contracts. `@todo/common` contains technical utilities. Neither shared package owns business data or business rules.
 
@@ -115,7 +117,53 @@ validates their respective response shapes, and checks the durable outbox rows.
 Gateway and Todo Service consume these events into local Redis membership
 projections. Authorization decisions use the local projection rather than a
 synchronous Account Service request; membership cache versions and revocation
-watermarks prevent older events or tokens from restoring stale access.
+watermarks prevent older events or tokens from restoring stale access. Account
+PostgreSQL is authoritative; its transactional outbox publishes the change,
+then each service's RabbitMQ consumer updates its own Redis projection. The live
+TN-7 test enforces a maximum 15-second propagation bound, including a request
+already holding a token issued before the role/removal change.
+
+## 5.4 Workspace-provisioning saga (ARC-9)
+
+The caller triggers `POST /api/v1/workflows/workspace-provisioning`. Account
+Service persists the workflow/steps and its private reservation, then the leased
+worker creates the Todo reservation and Gateway Redis publication through
+separate participant calls. Normal workspace/TODO reads remain hidden until all
+three steps are complete. A permanent failure moves the workflow to
+compensation; successful steps are undone in reverse order, and participant
+undo operations are idempotent. Each local transaction commits before its
+remote call. The detailed step/result states and live proof are in
+`docs/distributed-workflow.md` and `docs/testing.md`.
+
+## 5.5 Replica behavior and correctness (ARC-10)
+
+The default Compose topology configures two instances of each stateless API and
+worker. Shared PostgreSQL, Redis, and RabbitMQ hold coordination state; correctness
+does not depend on which replica receives a request or claims a message.
+
+| Process group | Effect of two instances | Correctness mechanism |
+|---|---|---|
+| Gateway, Account API, Todo API | Requests can be served by either replica. | Shared Redis limits/projections, PostgreSQL source-of-truth state, signed internal identity, and stateless HTTP handlers. |
+| Account/Todo outbox publishers | Compete to publish committed rows. | PostgreSQL leases/row locks, publisher confirms, stable event IDs, consumer deduplication. |
+| Membership, history, notification consumers | Compete for durable queue messages. | RabbitMQ acknowledgements, projection/event deduplication, notification event claims and recipient locks. |
+| Workflow workers | Compete for durable saga steps. | Expiring PostgreSQL leases and `FOR UPDATE SKIP LOCKED`; idempotent participants and compensation. |
+| Cleanup workers | Process bounded cleanup batches. | Transactional bounded batches and deletion/retention constraints. |
+
+Configured replica, pool, prefetch, and batch values and calculations are in
+`docs/capacity.md`; `npm run verify:capacity` checks the Compose values.
+
+## 5.6 Chain submission and finality window (ARC-11)
+
+Todo mutation repositories enqueue privacy-gated commands in `chain_submissions`
+inside the same PostgreSQL transaction as the TODO mutation. The request does
+not wait for mining. When the chain submission worker is deployed and enabled,
+it moves submissions through `pending`, `reserved`, and `submitted` to a final
+state (`confirmed`, `replaced`, `abandoned`, or `dead_letter`). The indexer
+accepts records only at the configured safe head; `CHAIN_CONFIRMATIONS` defaults
+to two and cannot be set below two. Until finality the append-only record is not
+promised as confirmed. The default Compose file does not currently start the
+chain submission or indexer workers, so the manual Sepolia demo proves the
+contract directly, not end-to-end production API anchoring. See `docs/onchain.md`.
 
 ## 6. Cache and consistency
 
@@ -153,9 +201,11 @@ Services start with local configuration and do not require another service merel
 | Account Service stopped | Existing projected TODO reads continue; account-dependent operations fail as unavailable |
 | Todo Service stopped | Account operations continue; TODO calls fail as unavailable |
 | History worker stopped | TODO mutations continue; history catches up later |
-| RabbitMQ stopped | Domain writes remain in outboxes; publication resumes later |
-| Redis stopped | Rate limiting fails open and TODO reads fall back to PostgreSQL |
-| Mailpit stopped | Notification delivery is retried and eventually dead-lettered; business request succeeds |
+| Redis stopped | General rate limiting fails open and TODO reads fall back to PostgreSQL; authentication and password-reset rate limiting fail closed with `503 RATE_LIMIT_UNAVAILABLE`. |
+| RabbitMQ stopped | Domain writes remain in transactional outboxes; consumers/outbox workers reconnect and publication resumes. |
+| Mailpit stopped in sink mode | Notification delivery is retried and eventually dead-lettered; business request succeeds. |
+| External SMTP provider refuses/times out | Business request remains successful; notification is retried and eventually sent to the notification DLQ. External-provider fault injection is not yet demonstrated. |
+| Chain RPC stopped | TODO mutation commits and returns without waiting for mining; chain submissions remain durable for a configured worker to retry. Default Compose does not start that worker. |
 | PostgreSQL stopped | Service remains alive, reports unhealthy, and recovers after the database returns |
 
 ## 9. Operational topology
@@ -203,11 +253,12 @@ share work through expiring PostgreSQL leases and `SKIP LOCKED`. All ordinary st
 until the workflow is terminal, and every remote call occurs after the preceding local transaction
 has closed.
 
-## Local on-chain contract milestone
+## On-chain contract milestone
 
-`contracts/onchain` contains a Hardhat 3 / Solidity 0.8.28 project for a minimal public
-`TaskHistory` record. Its build exports a generated ABI into Todo Service source. The local
-Hardhat test suite and chain-31337 deployment are documented in `onchain.md`. This is not yet a
-running platform component: there is no production chain writer, nonce coordinator, chain reader,
-public-testnet address, or finality state. TODO requests do not wait for mining today because
-they do not submit chain transactions yet, not because BC-10 has been demonstrated.
+`contracts/onchain` is a Hardhat 3 / Solidity 0.8.28 project. `TaskHistory` is deployed locally
+and to Sepolia; source verification, the Sepolia address, a two-confirmation synthetic write,
+and direct read-back are recorded in `docs/onchain.md`. Backend code implements privacy-gated
+chain submissions, nonce coordination, and a rebuildable event projection. However, chain
+submission and indexer workers are not included in the default Compose topology, so production
+TODO traffic has not been demonstrated writing to Sepolia. The manual demo proves the contract
+directly and must not be presented as end-to-end production anchoring evidence.

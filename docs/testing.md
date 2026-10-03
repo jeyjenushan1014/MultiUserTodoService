@@ -12,6 +12,23 @@ npm run verify:account-lifecycle
 
 `npm run check` runs lint, TypeScript builds, and unit tests without requiring manually started infrastructure. `npm run test:e2e` exercises the public Gateway path against the Docker stack.
 
+### Day 4 verification isolation
+
+`npm run verify:day4` assigns a timestamped, per-run `COMPOSE_PROJECT_NAME` to
+all Compose subprocesses and scopes `down -v --remove-orphans` cleanup to that
+project. It preflights the configured health URL and refuses to start if that
+port already responds. A stack left with `DAY4_KEEP_STACK=1` has a unique name
+and is not targeted by later runs. This prevents the verifier from deleting the
+working default Compose volumes; other fixed host ports can still conflict and
+will cause the isolated startup to fail without cleaning another project.
+
+The runner now installs lockfile dependencies and supplies per-run throwaway database,
+Redis, RabbitMQ, JWT, and internal-service credentials, plus a free API port. It forces
+Mailpit sink-only mode and a local Hardhat RPC URL, overriding provider/RPC values from a
+developer `.env`; it does not write those generated values to disk. Docker and Node.js 24
+are still prerequisites. The clean-clone and repeated-run proof has not yet been executed,
+so do not check off PR-5 or OP-10 based on implementation alone.
+
 The account-lifecycle unit slice is:
 
 ```powershell

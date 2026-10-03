@@ -51,6 +51,7 @@ function createListQueryIdentifier(
   return [
     `page=${parameters.page}`,
     `pageSize=${parameters.pageSize}`,
+    `cursor=${parameters.cursor ?? "first"}`,
     `state=${
       parameters.state ??
       "all"

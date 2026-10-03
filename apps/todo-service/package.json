@@ -12,6 +12,8 @@
     "migrate": "node-pg-migrate up -m migrations --migrations-table pgmigrations",
     "migrate:down": "node-pg-migrate down -m migrations --migrations-table pgmigrations",
     "start:history-worker": "node dist/src/history/history-worker.js",
+    "replay:event": "node scripts/replay-event.mjs",
+    "ops:progress": "node scripts/progress-status.mjs",
     "start:cleanup": "node dist/src/retention/cleanup.worker.js",
     "start:chain-indexer": "node dist/src/blockchain/task-history-indexer.worker.js",
      "rebuild:chain-projection": "node dist/src/blockchain/rebuild-task-history-projection.js"

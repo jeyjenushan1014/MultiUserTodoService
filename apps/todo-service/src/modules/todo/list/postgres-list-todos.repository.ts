@@ -1,4 +1,5 @@
 import type {
+  Pool,
   PoolClient,
 } from "pg";
 
@@ -69,6 +70,64 @@ interface ListTodoRow {
 
 type OrderKey =
   `${TodoSortField}:${SortOrder}`;
+
+interface CreatedAtCursor {
+  readonly createdAt: string;
+  readonly id: string;
+  readonly sortOrder: SortOrder;
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function decodeCursor(
+  encoded: string,
+  sortOrder: SortOrder,
+): CreatedAtCursor {
+  let value: unknown;
+  try {
+    value = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8"),
+    ) as unknown;
+  } catch {
+    throw new Error("Invalid TODO list cursor");
+  }
+
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("createdAt" in value) ||
+    typeof value.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(value.createdAt)) ||
+    !("id" in value) ||
+    typeof value.id !== "string" ||
+    !UUID_PATTERN.test(value.id) ||
+    !("sortOrder" in value) ||
+    value.sortOrder !== sortOrder
+  ) {
+    throw new Error("Invalid TODO list cursor");
+  }
+
+  return {
+    createdAt: value.createdAt,
+    id: value.id,
+    sortOrder,
+  };
+}
+
+function encodeCursor(
+  row: ListTodoRow,
+  sortOrder: SortOrder,
+): string {
+  const value: CreatedAtCursor = {
+    createdAt: row.created_at.toISOString(),
+    id: row.id,
+    sortOrder,
+  };
+  return Buffer.from(
+    JSON.stringify(value),
+  ).toString("base64url");
+}
 
 const ORDER_BY_CLAUSES:
   Readonly<
@@ -286,6 +345,10 @@ async function rollbackTransaction(
 
 export class PostgresListTodosRepository
 implements ListTodosRepository {
+  public constructor(
+    private readonly pool: Pick<Pool, "connect"> = database,
+  ) {}
+
   public async listTodos(
     parameters:
       ListTodosParameters,
@@ -293,13 +356,21 @@ implements ListTodosRepository {
     ListTodosRepositoryResult
   > {
     const client =
-      await database.connect();
+      await this.pool.connect();
 
     const offset =
       (
         parameters.page - 1
       ) *
       parameters.pageSize;
+
+    const cursor =
+      parameters.cursor === undefined
+        ? undefined
+        : decodeCursor(
+            parameters.cursor,
+            parameters.sortOrder,
+          );
 
     const accessCondition =
       getAccessCondition(
@@ -326,11 +397,26 @@ implements ListTodosRepository {
       );
     }
 
-    const limitParameterPosition =
-      filterValues.length + 1;
-
-    const offsetParameterPosition =
-      filterValues.length + 2;
+    const listValues: (string | number)[] = [
+      ...filterValues,
+    ];
+    let cursorCondition = "";
+    if (cursor !== undefined) {
+      listValues.push(cursor.createdAt, cursor.id);
+      const comparison = cursor.sortOrder === "desc" ? "<" : ">";
+      cursorCondition = `AND (t.created_at, t.id) ${comparison} ($${listValues.length - 1}, $${listValues.length})`;
+    }
+    listValues.push(
+      cursor === undefined
+        ? parameters.pageSize
+        : parameters.pageSize + 1,
+    );
+    const limitParameterPosition = listValues.length;
+    let offsetParameterPosition: number | undefined;
+    if (cursor === undefined) {
+      listValues.push(offset);
+      offsetParameterPosition = listValues.length;
+    }
 
     const orderByClause =
       getOrderByClause(
@@ -358,13 +444,6 @@ implements ListTodosRepository {
           `,
           filterValues,
         );
-
-      const listValues:
-        (string | number)[] = [
-          ...filterValues,
-          parameters.pageSize,
-          offset,
-        ];
 
       const todosResult =
         await client.query<
@@ -429,15 +508,14 @@ implements ListTodosRepository {
             WHERE t.deleted_at IS NULL
               AND ${accessCondition}
               ${stateCondition}
+              ${cursorCondition}
 
             ORDER BY
               ${orderByClause}
 
             LIMIT
               $${limitParameterPosition}
-
-            OFFSET
-              $${offsetParameterPosition}
+            ${offsetParameterPosition === undefined ? "" : `OFFSET $${offsetParameterPosition}`}
           `,
           listValues,
         );
@@ -446,9 +524,17 @@ implements ListTodosRepository {
         "COMMIT",
       );
 
+      const hasMore =
+        cursor !== undefined &&
+        todosResult.rows.length > parameters.pageSize;
+      const rows = hasMore
+        ? todosResult.rows.slice(0, parameters.pageSize)
+        : todosResult.rows;
+      const lastRow = rows.at(-1);
+
       return {
         items:
-          todosResult.rows.map(
+          rows.map(
             mapListTodoRow,
           ),
 
@@ -456,6 +542,15 @@ implements ListTodosRepository {
           parseTotalItems(
             countResult.rows[0],
           ),
+
+        ...(hasMore && lastRow !== undefined
+          ? {
+              nextCursor: encodeCursor(
+                lastRow,
+                parameters.sortOrder,
+              ),
+            }
+          : {}),
       };
     } catch (error) {
       await rollbackTransaction(

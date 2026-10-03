@@ -28,6 +28,9 @@ export interface ListTodosQuery {
   readonly pageSize:
     number;
 
+  readonly cursor?:
+    string;
+
   readonly state?:
     TodoState;
 
@@ -47,4 +50,7 @@ export interface ListTodosResponse {
 
   readonly pagination:
     PaginationMetadata;
+
+  readonly nextCursor?:
+    string;
 }

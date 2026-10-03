@@ -1,4 +1,328 @@
+## Release rollback (OP-9)
+
+Application and worker services use `APP_RELEASE_ID` image tags. Before deploying a release, use
+a unique immutable-by-convention tag (for example the Git commit ID) and build the images:
+
+```powershell
+$env:APP_RELEASE_ID = (git rev-parse --short HEAD).Trim()
+docker compose build
+docker compose up -d --no-build
+```
+
+Retain both the currently deployed tag and the previous known-good tag locally. To roll back one
+stateless service or worker, identify the operator and provide both tags:
+
+```powershell
+$env:ROLLBACK_OPERATOR_ID = $env:USERNAME
+npm run rollback:release -- --service todo-service --current <current-release-id> --release <previous-release-id>
+```
+
+The command refuses unknown services, invalid tags, or missing images; starts two instances of the
+target service on the selected prior image; and restores the current tag if a supported HTTP
+health check fails. For workers it verifies that the service is running. It does not run schema
+down-migrations, restore a database, or reverse a mined chain transaction. Releases must preserve
+backward compatibility with the current schema and durable messages. This command has not yet
+been rehearsed against two retained image tags, so OP-9 remains pending.
+
+## OP-6 Consumer and chain progress (OP-6)
 # Operations
+
+## Database backup and restore evidence (OP-4)
+
+On 2026-10-03, while application services and database-writing workers were
+stopped, custom-format `pg_dump` backups of both PostgreSQL databases were saved
+outside the repository under the operator's user-profile backup directory.
+SHA-256 hashes were recorded in a local manifest. The database containers
+remained running.
+
+| Database | Backup file | Size | SHA-256 | Restore target | Restore time |
+|---|---|---:|---|---|---:|
+| Account | `account-20261003_083515.dump` | 49,743 bytes | `4EFA59A590503A52835309471AF453EFC4E06FE8FCA73A6FFDD5943352C4E19D` | `account_restore_20261003_084102` | 0.697 seconds |
+| Todo | `todo-20261003_083515.dump` | 49,482 bytes | `7434C820B1AE3699626A72113A4D7050C97316B42ED4B0FB4FF559ABF929D3D9` | `todo_restore_20261003_084102` | 0.717 seconds |
+
+Both dumps restored successfully into newly created scratch databases using
+`pg_restore --no-owner`; the original databases were not overwritten. Read-only
+row-count checks matched:
+
+| Database | Check | Original | Restored |
+|---|---|---:|---:|
+| Account | migrations | 15 | 15 |
+| Account | users | 12 | 12 |
+| Account | workspaces | 0 | 0 |
+| Account | workspace members | 0 | 0 |
+| Account | deletion requests | 0 | 0 |
+| Todo | migrations | 20 | 20 |
+| Todo | todos | 8 | 8 |
+| Todo | shares | 6 | 6 |
+| Todo | history | 5 | 5 |
+| Todo | chain submissions | 8 | 8 |
+
+On 2026-10-03 the operator subsequently confirmed that the restored application
+behavior worked against the scratch databases. The smoke flow used the temporary
+Gateway pointed at the restored Account and Todo APIs and covered authentication
+and TODO reads. The first attempt had returned `VALIDATION_ERROR` because the
+`Read-Host` prompt labels were supplied as prompt text instead of entering values;
+its follow-up request had no bearer token and returned `INVALID_ACCESS_TOKEN`.
+That failed attempt was corrected before the operator's successful confirmation.
+The backup files and manifest remain private because they contain database data;
+they are outside source control.
+
+## OP-8 Operator boundary and command inventory
+
+Routine operations must use the application API, a documented service-specific
+operator command, or read-only health/logging interfaces. Direct SQL is not a
+routine operator interface. Existing commands commonly run through Docker Compose
+and therefore require Docker access; that access is broader than a least-privilege
+operator role. This section defines the intended boundary, but does not claim that
+the boundary is enforced yet.
+
+| Task | Supported interface today | Data source or effect | Boundary status |
+|---|---|---|---|
+| Check service/dependency health | `GET /health/dependencies`; `docker compose ps` and service logs | Health checks and process logs; read-only | Available; no consumer/chain lag view yet. |
+| Change mail delivery mode | `mail-mode.mjs status`, `sink`, or `external` | Audited Account PostgreSQL mode; changing mode requires an operator ID | Available, but the wrapper requires Docker access. |
+| Replay one notification | `replay-notification-dlq.mjs <event-id>` | Notification RabbitMQ DLQ and Account delivery state | Available for notification events only; no general DLQ inspector/replayer. |
+| Rebuild chain projection | `npm run rebuild:chain-projection` | Rebuilds Todo's local projection from configured chain logs | Available when the chain source is configured; not a chain transaction or a production writer control. |
+| Verify account erasure | `npm run verify:account-erasure -- <request-id> <user-id> <email>` | Reads Account/Todo state, Redis, broker queues/DLQs, and chain logs | Available in a running stack; arguments and output may contain personal identifiers, so restrict and redact them. |
+| Backfill workspace ownership | `backfill-workspaces.mjs` with dry-run by default and explicit `--apply` | Reads Account ownership and updates eligible Todo rows through the service script | Available; apply is a data mutation and requires a reviewed dry-run. |
+| Verify workspace concurrency | `verify-workspace-concurrency.mjs` | Runs a real PostgreSQL concurrency proof using the service environment | Available as a verification command, not a general database console. |
+| Apply migrations | One-shot `account-migrations` or `todo-migrations` Compose job | Mutates the corresponding PostgreSQL schema | Available; run only the affected job after backup and migration review. |
+| Back up or restore a database | Operator-run `pg_dump` / `pg_restore` procedure; OP-4 evidence is recorded above | Reads or replaces database contents, depending on target | Demonstrated for private scratch restores; not yet wrapped in a least-privilege command. Never restore over the live database as routine practice. |
+| Deploy a public contract | Hardhat Ignition deployment command in `docs/onchain.md` | Public chain transaction; requires deployment credentials | Manual release operation; not a routine service command. |
+| Inspect/replay non-notification DLQs or replay an arbitrary event | No supported command | Would touch broker messages and consumer-owned state | Unsupported; do not use `rabbitmqadmin`, queue purge, or direct SQL as a substitute. |
+| Inspect consumer/chain lag | No supported command | Queue, outbox, and chain-submission progress | Unsupported; use health/logs for liveness only. |
+| Toggle non-mail runtime feature flags | No general feature-flag command exists | No shared flag store/interface | Unsupported; mail mode is the only current audited runtime switch. |
+| Roll back an application release | No one-command rollback exists | Release image/configuration and schema compatibility | Unsupported; do not treat migration `down` or chain transaction reversal as application rollback. |
+
+### Break-glass database access
+
+Direct database access is reserved for an incident or approved maintenance task
+that cannot be completed through a supported command. Record the incident/change
+identifier, approver, operator, target database, exact read/write statements, and
+expected effect before access. Take and verify a backup before writes; use a
+scoped, time-limited credential; capture redacted output; validate application
+health and affected records afterward; then revoke the credential and record
+closure. Never edit outbox, delivery, workflow, migration-history, or chain-state
+rows manually to force progress. If a safe recovery command does not exist, stop
+and escalate rather than improvising a mutation.
+
+OP-8 remains open until routine operator tasks have least-privilege interfaces,
+Docker/database access is separated from ordinary operator access, and the
+break-glass process is exercised and audited. The inventory is the baseline for
+those follow-up controls, not evidence that they are already enforced.
+
+## OP-5 Incident runbooks
+## Consumer and chain progress (OP-6)
+
+Run this command from a Compose environment with Todo PostgreSQL, RabbitMQ Management, and the
+configured chain RPC reachable:
+
+```powershell
+docker compose run --build --rm --no-deps -T todo-service npm run ops:progress -w @todo/todo-service
+```
+
+It reports each configured consumer queue's ready and unacknowledged message counts and active
+consumer count. The chain section reports the RPC latest block, confirmation-adjusted safe head,
+projection checkpoint, checkpoint time, and block lag. A missing checkpoint is `not-initialized`;
+unreachable or invalid dependencies report `unavailable`, not zero lag. The command queries the
+broker, Todo database, and chain RPC itself; operators do not connect to those systems manually.
+It does not print event payloads, RPC URLs, or credentials. This command has editor diagnostics
+only so far. On 2026-10-03 the operator ran it successfully: all six queues reported zero ready
+and unacknowledged messages with two consumers each. The first chain probe failed because no RPC
+was listening. After starting a fresh local Hardhat node, the progress command reported RPC
+reachable at chain 31337, latest block 0, safe head -1, and `not-initialized` with no checkpoint.
+After deploying TaskHistory, mining one local block, and running `npm run rebuild:chain-projection`,
+the operator observed latest block 2, safe head/checkpoint block 1, and zero lag. The final
+progress output showed all six queues at zero ready/unacknowledged messages with two consumers.
+
+## OP-5 Incident runbooks
+
+### Broker unavailable
+
+**Symptom:** `GET /health/dependencies` reports RabbitMQ unavailable, or worker logs show
+connection/reconnect errors. Business writes should remain in their database outboxes.
+
+```powershell
+docker compose ps rabbitmq
+docker compose logs --since 10m --tail 100 rabbitmq
+docker compose up -d --wait rabbitmq
+docker compose ps todo-outbox-worker account-outbox-worker todo-owner-consumer account-notification-consumer todo-history-worker
+```
+
+Confirm RabbitMQ is healthy and workers return to `Up`; check the dependency health endpoint
+again. Do not purge queues. Outbox publishers retry committed rows after the broker returns.
+
+### Chain RPC unavailable
+
+**Symptom:** chain submission logs report RPC timeouts or chain-ID mismatch. TODO API writes
+should remain independent of mining. Current default Compose does not start the chain submission
+or indexer workers, so public-chain production progress/lag is not observable through the normal
+stack; BC-10..BC-14 operator recovery remains incomplete. Do not start a writer or submit test
+transactions using production-derived identifiers. Check `CHAIN_ID`, RPC configuration, and the
+contract metadata in the private deployment environment. Restore the RPC and confirm chain ID
+before enabling a worker. There is not yet a supported operator status/retry command for a stuck
+chain submission; do not edit its database row manually.
+
+### Mail provider rejecting or rate-limiting
+
+**Symptom:** a business request succeeds but no mail arrives; consumer logs show a sanitized
+notification failure, or delivery reaches the notification DLQ. First check mode and worker state:
+
+```powershell
+docker compose run --rm --no-deps -T account-service node apps/account-service/scripts/mail-mode.mjs status
+docker compose ps account-notification-consumer
+docker compose logs --since 10m --tail 100 account-notification-consumer
+```
+
+Check the registered recipient's inbox/spam and provider activity without exposing the address,
+message, token, or credential in shared logs. A provider-pinned message is not rerouted to Mailpit
+when mode changes. Keep mode at sink to stop new external attempts; do not replay an external-pinned
+event until external service is available and recipient quota permits delivery.
+
+### Consumer stopped making progress
+
+**Symptom:** `/health/dependencies` lists a consumer unavailable, or its queue backlog grows.
+Check health, replicas, and recent logs:
+
+```powershell
+Invoke-RestMethod http://localhost:3000/health/dependencies
+docker compose ps todo-owner-consumer account-notification-consumer todo-history-worker
+docker compose logs --since 10m --tail 100 todo-owner-consumer account-notification-consumer todo-history-worker
+```
+
+Restore the failed dependency first, then recreate/restart only the affected consumer service.
+The health endpoint reports liveness, not per-consumer backlog age/lag; OP-6 lag visibility remains
+an open tooling gap.
+
+### Dead-letter queue filling
+
+**Symptom:** notification or consumer failures are accumulating in a DLQ. Stop the underlying
+failure before replay. For a known notification event ID, the supported targeted replay is:
+
+```powershell
+$env:EVENT_ID = Read-Host "Notification event UUID"
+docker compose run --rm --no-deps -T account-service node apps/account-service/scripts/replay-notification-dlq.mjs "$env:EVENT_ID"
+```
+
+The script targets one notification event, preserves nonmatching messages, checks terminal
+delivery state, and has replay fencing. Do not purge a DLQ or edit delivery records manually.
+There is no single supported inspector/replayer for every service DLQ yet; broad OP-2/OP-3
+coverage remains open. The durable-outbox event replay command below is separate from DLQ replay.
+
+### Targeted event replay (OP-3)
+
+The first supported target is `todo-history`. The command selects already-published Todo outbox
+events in the half-open UTC range `[from, to)`, validates every selected envelope, and sends them
+only to the durable history queue. It is capped at 100 matching events; split larger ranges into
+smaller windows. The consumer's unique `todo_history.event_id` constraint makes duplicate delivery
+a no-op. Other consumers are deliberately rejected until their replay safety is separately
+established.
+
+The Todo migration adding `todo_event_replay_audit` must be applied first. Use a UTC ISO-8601
+range from a trusted incident record. Dry-run is the default and prints event IDs/types and
+already-processed status, but no event payload:
+
+```powershell
+$env:REPLAY_FROM = "2026-10-02T00:00:00Z"
+$env:REPLAY_TO = "2026-10-03T00:00:00Z"
+docker compose run --rm --no-deps -T todo-service node apps/todo-service/scripts/replay-event.mjs --from $env:REPLAY_FROM --to $env:REPLAY_TO --target todo-history
+```
+
+Review the dry-run result. To publish, identify the operator and explicitly pass `--apply`:
+
+```powershell
+$env:TODO_EVENT_REPLAY_OPERATOR_ID = $env:USERNAME
+docker compose run --rm --no-deps -T -e TODO_EVENT_REPLAY_OPERATOR_ID todo-service node apps/todo-service/scripts/replay-event.mjs --from $env:REPLAY_FROM --to $env:REPLAY_TO --target todo-history --apply
+```
+
+The command refuses unsupported targets, invalid/reversed ranges, oversized ranges, and any
+selected row with a mismatched envelope. Already-processed events are audited as no-ops. Apply
+attempts are recorded per event in `todo_event_replay_audit`; on a publish error it stops at that
+event and reports the confirmed prefix. An uncertain broker confirmation is not proof that
+publication failed, so inspect the audit row and history before retrying. The earlier single-ID
+attempt failed UUID validation before publishing; it did not change consumer state. Do not edit
+outbox or history rows manually. This command does not inspect or replay any RabbitMQ DLQ.
+
+The operator reports running the targeted notification replay command successfully. This confirms
+that command path only; it does not verify inspection/replay for the history, owner-projection, or
+other service DLQs.
+
+The unified allow-listed command is being added for all three configured service DLQs:
+The unified allow-listed command is available for all three configured service DLQs:
+`todo.notifications.dlq`, `todo.owner-projection.dlq`, and `todo.history.dlq`. It emits only
+event ID, event type, occurrence time, and a sanitized failure reason; event payloads are never
+printed. Inspection is read-only. Replay requires an event ID and operator identity, scans at most
+1,000 messages, publishes to the paired consumer queue with publisher confirms, then removes the
+matching DLQ copy. Notification replay also resets the durable delivery claim through its existing
+repository. The new multi-queue path has not yet passed an isolated broker rehearsal.
+
+```powershell
+docker compose run --build --rm --no-deps -T account-service npm run ops:dlq -w @todo/account-service -- inspect --queue todo.history.dlq
+$env:DLQ_OPERATOR_ID = $env:USERNAME
+docker compose run --build --rm --no-deps -T -e DLQ_OPERATOR_ID account-service npm run ops:dlq -w @todo/account-service -- replay --queue todo.history.dlq --event-id $env:EVENT_ID
+```
+
+Use the same command with `todo.owner-projection.dlq` or `todo.notifications.dlq` as the queue.
+For every replay, set `DLQ_OPERATOR_ID` in the host environment and pass it into the one-shot
+container with `-e DLQ_OPERATOR_ID`. Verify the replay result and consumer-owned state before
+retrying after an uncertain confirmation.
+
+### Transaction appears stuck
+
+**Symptom:** a chain submission remains nonterminal or an operator reports a transaction hash
+that has not progressed. Save the public transaction hash, chain ID, and contract address; never
+share a private key or RPC URL. Check the public testnet explorer and RPC availability. A transaction
+already mined on chain cannot be rolled back. The default Compose stack has no chain-worker
+operator status/replacement command, so do not alter database state or broadcast a replacement
+manually; BC-11/OP-5 chain recovery tooling remains incomplete.
+
+### Migration failed
+
+**Symptom:** `account-migrations` or `todo-migrations` exits nonzero. Capture the named migration
+and error, and stop dependent service startup. Inspect only the migration logs:
+
+```powershell
+docker compose logs --no-color --tail 100 account-migrations todo-migrations
+```
+
+Take/retain a database backup before any repair. Resolve the migration/code/history mismatch, then
+then rerun only the failed job after confirming its target database and migration history:
+
+```powershell
+docker compose run --rm account-migrations
+docker compose run --rm todo-migrations
+```
+
+Run only the affected service's job. Do not use `--no-check-order`, edit `pgmigrations`, or run
+`down` against production data as a shortcut. These commands use the configured Compose database;
+they are not a substitute for a backup or a reviewed recovery plan.
+
+### Workflow stuck unwinding
+
+**Symptom:** workspace provisioning remains compensating or reports a compensation failure.
+Check the internal workflow health endpoint from Account Service:
+
+```powershell
+docker compose exec -T account-service node --input-type=module -e "const r=await fetch('http://127.0.0.1:3001/health/workflows'); console.log(r.status, await r.text());"
+docker compose logs --since 10m --tail 100 workflow-worker
+```
+
+Restore the unavailable participant and let the leased worker resume. Do not create/delete
+reservation rows manually. The workflow status endpoint is documented in `docs/api.md`; the
+health response exposes stuck-compensation count and threshold without a database connection.
+
+### Latency objective breached
+
+**Symptom:** users report slow reads/writes or timeouts. Check dependency health and service logs:
+
+```powershell
+Invoke-RestMethod http://localhost:3000/health/dependencies
+docker compose ps
+docker compose logs --since 10m --tail 100 gateway account-service todo-service
+```
+
+PF-4/PF-5 latency objectives and an automated threshold command are not yet established, so no
+objective can currently be declared breached from a measured percentile. Record endpoint, time
+window, concurrency, and observed latency; do not claim a pass until PF-4/PF-5 measurement exists.
 
 ## Notification delivery (Stages 2 and 3)
 

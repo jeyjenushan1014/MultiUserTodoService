@@ -28,6 +28,14 @@ export class ListTodosService {
           pageSize:
             query.pageSize,
 
+          ...(query.cursor ===
+          undefined
+            ? {}
+            : {
+                cursor:
+                  query.cursor,
+              }),
+
           ...(query.state ===
           undefined
             ? {}
@@ -70,6 +78,14 @@ export class ListTodosService {
 
         totalPages,
       },
+
+      ...(result.nextCursor ===
+      undefined
+        ? {}
+        : {
+            nextCursor:
+              result.nextCursor,
+          }),
     };
   }
 }

@@ -125,8 +125,9 @@ describe("owner event replay", () => {
     expect(auditUpdate[0]).toContain("SET status = $2, error_code = $3");
     const startedAudit = deps.accountDb.query.mock.calls.find(([sql]) =>
       sql.includes("INSERT INTO owner_event_replay_audit") &&
-      sql.includes("CASE WHEN $5 = 'started'"),
+      sql.includes("CASE WHEN $5::varchar = 'started'"),
     );
+    expect(startedAudit[0]).toContain("$4, $5::varchar, $6");
     expect(auditUpdate[1]).toEqual([startedAudit[1][0], "queued", null]);
     expect(result.target).toBe("todo-owner-projection");
   });

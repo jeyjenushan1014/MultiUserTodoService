@@ -73,6 +73,89 @@ That failed attempt was corrected before the operator's successful confirmation.
 The backup files and manifest remain private because they contain database data;
 they are outside source control.
 
+## Operational command quick reference
+
+Run from the repository root. Confirm the Compose project and target first; never
+run a restore against the current application database.
+
+```powershell
+# Consumer and chain lag (reports unavailable/not-initialized explicitly).
+npm run ops:progress
+
+# Rebuild the local chain projection from chain logs.
+npm run rebuild:chain-projection
+
+# Inspect a DLQ without exposing payloads; use any one of the three allow-listed queues.
+npm run ops:dlq -- inspect --queue todo.notifications.dlq
+npm run ops:dlq -- inspect --queue todo.owner-projection.dlq
+npm run ops:dlq -- inspect --queue todo.history.dlq
+
+# Preview history replay; dry-run is the default.
+$env:REPLAY_FROM = "2026-10-01T00:00:00Z"
+$env:REPLAY_TO = "2026-10-02T00:00:00Z"
+npm run replay:history -- --from $env:REPLAY_FROM --to $env:REPLAY_TO --target todo-history
+
+# Set an operator ID only for an approved replay of one event.
+$env:DLQ_OPERATOR_ID = $env:USERNAME
+$env:EVENT_ID = Read-Host "Event UUID"
+npm run ops:dlq -- replay --queue todo.history.dlq --event-id $env:EVENT_ID
+
+# Runtime mail flag; external mode requires approved provider setup and operator authorization.
+docker compose run --rm --no-deps -T account-service node apps/account-service/scripts/mail-mode.mjs status
+docker compose run --rm --no-deps -T -e MAIL_OPERATOR_ID=$env:USERNAME account-service node apps/account-service/scripts/mail-mode.mjs sink
+docker compose run --rm --no-deps -T -e MAIL_OPERATOR_ID=$env:USERNAME account-service node apps/account-service/scripts/mail-mode.mjs external
+
+# Release rollback; retain both image tags and identify the operator.
+$env:ROLLBACK_OPERATOR_ID = $env:USERNAME
+npm run rollback:release -- --service todo-service --current <current-tag> --release <known-good-tag>
+```
+
+The angle-bracket values in the rollback example are placeholders and must be
+replaced with retained image tags before execution. For owner-projection replay,
+see the dedicated dry-run/apply commands below; it writes only to the fixed
+owner queue and requires both isolated service database URLs.
+
+### Scratch-only database backup and restore commands
+
+The following PowerShell example stores custom-format dumps outside the repository
+and restores into new scratch databases. It does not overwrite the source database.
+Use an approved maintenance window and stop application writers before backup.
+
+```powershell
+$stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$backupDir = Join-Path $env:USERPROFILE "todo-db-backups"
+New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+$accountDump = Join-Path $backupDir "account-$stamp.dump"
+$todoDump = Join-Path $backupDir "todo-$stamp.dump"
+
+docker compose exec -T account-postgres sh -c 'pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /tmp/account.dump'
+docker compose cp account-postgres:/tmp/account.dump $accountDump
+docker compose exec -T account-postgres rm -f /tmp/account.dump
+docker compose exec -T todo-postgres sh -c 'pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /tmp/todo.dump'
+docker compose cp todo-postgres:/tmp/todo.dump $todoDump
+docker compose exec -T todo-postgres rm -f /tmp/todo.dump
+Get-FileHash -Algorithm SHA256 $accountDump, $todoDump
+
+$accountUser = (docker compose exec -T account-postgres sh -c 'printf "%s" "$POSTGRES_USER"').Trim()
+$todoUser = (docker compose exec -T todo-postgres sh -c 'printf "%s" "$POSTGRES_USER"').Trim()
+$accountRestoreDb = "account_restore_$stamp"
+$todoRestoreDb = "todo_restore_$stamp"
+docker compose exec -T account-postgres createdb -U $accountUser $accountRestoreDb
+docker compose cp $accountDump account-postgres:/tmp/account-restore.dump
+docker compose exec -T account-postgres pg_restore --exit-on-error --no-owner -U $accountUser -d $accountRestoreDb /tmp/account-restore.dump
+docker compose exec -T account-postgres rm -f /tmp/account-restore.dump
+docker compose exec -T todo-postgres createdb -U $todoUser $todoRestoreDb
+docker compose cp $todoDump todo-postgres:/tmp/todo-restore.dump
+docker compose exec -T todo-postgres pg_restore --exit-on-error --no-owner -U $todoUser -d $todoRestoreDb /tmp/todo-restore.dump
+docker compose exec -T todo-postgres rm -f /tmp/todo-restore.dump
+```
+
+Validate row counts and run an authenticated API/read smoke test using a temporary
+application configuration pointed only at the two restore databases. Keep both
+original databases untouched. After the evidence is captured, drop only the named
+scratch restore databases and securely retain or remove the private dump files under
+the organization's backup policy.
+
 ## OP-8 Operator boundary and command inventory
 
 Routine operations must use the application API, a documented service-specific
@@ -433,9 +516,12 @@ docker compose ps
 docker compose logs --since 10m --tail 100 gateway account-service todo-service
 ```
 
-PF-4/PF-5 latency objectives and an automated threshold command are not yet established, so no
-objective can currently be declared breached from a measured percentile. Record endpoint, time
-window, concurrency, and observed latency; do not claim a pass until PF-4/PF-5 measurement exists.
+The declared PF-4 objectives are read p95 <= 300 ms and write p95 <= 500 ms. The
+`npm run verify:performance` gate measures these in an isolated synthetic-load run;
+it is not a live production monitor and must not be used to diagnose a live incident.
+For an incident, record the affected endpoint, UTC window, concurrency and measured
+latency from approved telemetry, then compare those measurements with the documented
+objectives. Do not run the synthetic load against production.
 
 ## Notification delivery (Stages 2 and 3)
 

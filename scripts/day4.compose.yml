@@ -2,6 +2,8 @@
 services:
   rabbitmq:
     ports: !reset []
+    healthcheck:
+      test: ["CMD", "su-exec", "rabbitmq", "rabbitmq-diagnostics", "-q", "ping"]
   mailpit:
     ports: !reset []
   edge:

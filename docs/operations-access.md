@@ -82,15 +82,87 @@ fixed search path, expose no SQL input, and return only the listed fields. The
 routine identity has no direct access to the underlying tables, even for reads
 or writes.
 
-Until all operator-control and scoped-routine migrations are applied to the
-intended databases and the dedicated login memberships/secrets are provisioned,
-the non-Docker CLI is not available there. The existing Compose service and
-migration credentials remain broad application/database-owner credentials; do
-not expose them to routine operators. The database boundary is least-privilege
-only for separately provisioned operator logins. Docker/host access remains a
-separate deployment control: this database work does not enforce least
-privilege for Docker administrators or expose every existing operator task
-through the restricted non-Docker CLI.
+The existing Compose service and migration credentials remain broad
+application/database-owner credentials; do not expose them to routine
+operators. The database boundary is least-privilege only for separately
+provisioned operator logins. Docker/host access remains a separate deployment
+control: this database work does not enforce least privilege for Docker
+administrators or expose every existing operator task through the restricted
+non-Docker CLI.
+
+## Local Compose OP-8 integration status
+
+On 2026-10-03, OP-8 was applied and exercised against the already-running local
+Compose databases (`account_db` and `todo_db`). The four operator-control and
+scoped-routine migrations are recorded in their respective migration tables.
+Only those OP-8 migrations were targeted; no database was recreated, no
+business rows were modified, and no `up`, `restart`, or `down` command was used
+against existing services. No PostgreSQL host-port bindings were added.
+
+The Account database had an older migration gap before OP-8:
+`015_create_dlq_operation_audit` and `016_create_owner_event_replay_audit`
+were absent. The two reviewed, additive audit-table migrations were subsequently
+applied using a bounded two-migration maintenance invocation. Routine operator
+access to both new tables remains denied.
+
+Because the runner orders history by `run_on`, then `id`, installing the missing
+tables alone did not repair the order guard. With separate explicit operator
+approval, four ordering records were normalized transactionally after preserving
+their original IDs and exact execution timestamps in the append-only
+`migration_order_maintenance_receipts` record
+`a72f6ffd-bd84-4a92-af89-5774866f2de5`. The original execution times in that
+receipt, not the normalized ordering timestamps, are the historical evidence.
+No business rows, operator permissions, or break-glass audit records were changed.
+The normal `docker compose run --rm --no-deps account-migrations npm run migrate`
+then passed with "No migrations to run" and no order-check override. Do not
+generalize this approved repair into disabling order checks for deployments.
+Todo had its prior
+migrations through `20261003110000_index_published_outbox_events`; only its
+two OP-8 migrations were applied.
+
+Two individually named LOGIN roles are provisioned: `local_account_operator`
+is a member only of `account_routine_operator`, and `local_todo_operator` is a
+member only of `todo_routine_operator`. Both are non-superusers without
+database/schema creation, role-creation, or RLS-bypass privileges. Effective
+checks found no direct public-schema table or sequence privileges, and no
+break-glass or auditor membership. Their connection URLs are stored in the
+Git-ignored, Windows-ACL-restricted files
+`secrets/operators/account.env` and `secrets/operators/todo.env`; each contains
+only that service's operator URL. The URLs use Compose-internal hostnames
+(`account-postgres` / `todo-postgres`) and are reachable only from the Compose
+network. No database port is published to the host, so these local files do
+not make the host-side `npm run ops:restricted` commands reachable yet. Do not
+publish a database port to work around this; provide an approved private
+operator network endpoint before using the CLI from a non-Docker host.
+
+The CLI was run with each actual dedicated login from inside the existing
+Compose network. Account `mail-status`, `mail-audit`, and `access-audit`
+initially returned one, one, and zero rows respectively; Todo `chain-progress` and
+`access-audit` initially returned one and zero rows. After the exercises, the
+same actual CLI reads returned Account counts of one, six, and two, and Todo
+counts of one and two. Application-owner URLs were rejected in both services
+with "Database login is not a dedicated routine operator identity".
+Direct reads of each service's
+operator audit table and underlying configuration/checkpoint table were
+denied. The mail write command was not run, external delivery was not enabled,
+and no real mail was sent.
+
+An audit-only break-glass integration exercise was also completed in each
+database using a separate temporary LOGIN identity with only its corresponding
+break-glass group membership. Self-approval, an overlong expiry, and a malformed
+digest were rejected; a synthetic open/close pair was appended with outcome
+`aborted`. The temporary identities were dropped immediately afterward; the
+four append-only audit rows remain as evidence. No business SQL was executed.
+The synthetic references are `OP8-AUDIT-ONLY-account-4d289d0d` and
+`OP8-AUDIT-ONLY-todo-7bef7623`, with two open/close rows each.
+This was a database-function exercise, not approval for an operational
+break-glass incident or a substitute for the incident-system approval and
+backup requirements above.
+
+The final Compose status snapshot also showed the Account and Todo cleanup
+workers restarting; PostgreSQL and the API services were running. No worker
+logs were inspected or worker changes made, so this execution does not
+determine the cause or attribute those restarts to OP-8.
 
 ## Break-glass approval and audit
 

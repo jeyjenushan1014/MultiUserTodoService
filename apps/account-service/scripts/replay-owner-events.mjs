@@ -219,8 +219,8 @@ async function insertAudit(accountDb, eventId, operatorId, status, errorCode = n
       INSERT INTO owner_event_replay_audit (
         id, event_id, target_consumer, operator_id, status, error_code, completed_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6,
-              CASE WHEN $5 = 'started' THEN NULL ELSE CURRENT_TIMESTAMP END)
+      VALUES ($1, $2, $3, $4, $5::varchar, $6,
+              CASE WHEN $5::varchar = 'started' THEN NULL ELSE CURRENT_TIMESTAMP END)
     `,
     [auditId, eventId, OWNER_CONSUMER, operatorId, status, errorCode],
   );

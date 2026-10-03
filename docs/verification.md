@@ -4,10 +4,12 @@ Run from the repository root:
 
 ```powershell
 node --test scripts\__tests__\rollback-release.test.mjs scripts\__tests__\verify-day4.test.mjs
-node scripts\verify-rollback.mjs
-node scripts\verify-day4.mjs --ref HEAD
+npm run verify:rollback
+npm run verify:day4 -- --clean-clone
 # Before committing coordinated changes, explicitly validate a source snapshot:
 node scripts\verify-day4.mjs --working-tree
+# Focus on the requested operational commands while source changes are uncommitted:
+npm run verify:day4 -- --working-tree --operations-only
 ```
 
 The default verifier requires the verifier, helpers, and `verify-operations.mjs`
@@ -21,7 +23,7 @@ links are refused. The receipt identifies this as an
 **uncommitted clean source snapshot**, records its source digest and base commit,
 and sets `cleanCommittedSource` to false. It is not a historical release clone or
 proof of a committed revision. Do not combine `--working-tree` with `--ref`.
-`--clean-clone` remains an alias for `--working-tree`.
+`--clean-clone` selects only committed source and is the documented full-verification command.
 Wait until coordinated source changes are complete before taking the snapshot.
 Neither mode runs `npm ci` in the shared working directory; locked dependencies
 are intentionally installed only in the disposable Docker build.
@@ -37,7 +39,12 @@ No host ports are published. The existing default stack, host `node_modules`,
 `.env`, database volumes, and chain node are never reset or reused. Do not invoke
 legacy live verifiers separately against your default stack as a substitute.
 
-Each command has a deadline (at most ten minutes); main verification commands have
+The isolated RabbitMQ healthcheck runs as `rabbitmq`, not root. This prevents
+the diagnostic client from creating a root-owned Erlang cookie while the broker
+is still starting on a fresh volume. It changes only the disposable overlay,
+not the already-running broker or its cookie.
+
+Each command has a deadline (at most ten minutes, or twenty for the full validation-image build); main verification commands have
 a 30-minute budget, with separately bounded rollback rehearsal and cleanup. Checks include lint/build/unit
 tests, API and authorization checks, live E2E, workspace concurrency and repeated
 backfill dry-run, repeated chain projection rebuild, operator replay/DLQ/progress
@@ -51,10 +58,32 @@ rehearsal restarts its consumers, the verifier again waits for all six queues to
 drain and the chain reader to be caught up. Captured operator/mail diagnostics
 redact ephemeral credentials and URLs; the success receipt contains neither.
 
-The separate OP-8 restricted-login scratch rehearsal is not automatically run
-against service databases: its loopback scratch-name guard must remain intact.
-Public-chain transactions, external mail-provider checks, and real incident
-actions require separate approvals and are outside this local automated scope.
+The aggregate command also runs the isolated Mailpit stop/restart/retry/DLQ proof,
+the three-consumer DLQ and targeted owner/history replay rehearsal, and OP-8 against
+newly-created scratch databases in the disposable Compose project. OP-8 creates real
+short-lived restricted login roles, verifies denied raw table access and exercises
+append-only break-glass audit records; it neither applies migrations nor provisions
+identities on a live deployment. The scratch database volume and generated credentials
+are removed with the isolated project.
+The scratch databases are restored from the freshly migrated disposable service
+databases, preserving their routines and grants without re-creating PostgreSQL
+roles that are cluster-global. Nonempty user/task counts and the dump catalogue
+are checked before restricted-login rehearsals; scratch databases are dropped
+afterward. Build inputs are cached separately from operator scripts and docs,
+so a documentation-only update does not recompile all five workspaces.
+
+`--operations-only` retains real migrations, Gateway E2E, mail-mode/retry/quota,
+three-DLQ and owner/history replay, broker outage/recovery, repeated rebuilds,
+progress, restricted-login scratch checks, nonempty scratch backup/restore, and
+rollback. It skips the exhaustive migration reversal/historical-code suite,
+full chain fault suite, and the separate Mailpit outage stack. Those skipped
+checks are not claimed by an operations-only receipt. Use `--clean-clone` instead
+of `--working-tree` after the coordinated changes have been committed to verify
+the actual committed source; these options are mutually exclusive.
+
+Public-chain transactions, external mail-provider delivery, live identity provisioning,
+database restore into a live target, and real incident break-glass actions require
+separate approvals and remain outside this local automated scope.
 
 The operator rehearsal runs on the host from the isolated clone or source snapshot. It receives
 the ephemeral verification environment, isolated-project guards, both Compose

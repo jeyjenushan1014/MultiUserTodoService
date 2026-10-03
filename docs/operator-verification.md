@@ -59,10 +59,19 @@ and deployment responsibilities.
 | Consumer and chain progress | `ops:progress -- --require-ready` on the disposable stack | Six queues available/drained with consumers; initialized chain checkpoint caught up |
 | Runtime mail switch | `verify-mail-mode.mjs` on a sink-only stack | Audited mode changes, pinning, and kill switch pass without external mail |
 | Restricted access and break-glass | `verify-operator-access.mjs` on separate scratch databases | Allowed operations succeed, direct writes fail, open/close audit is immutable |
+| Account/Todo backup and restore | `verify:day4 -- --operations-only` | `pg_dump`, scratch `createdb`, `pg_restore --exit-on-error`, nonempty row-count comparison and scratch `dropdb` pass |
+| Broker outage/recovery | Disposable `verify:operations` rehearsal | Gateway registration succeeds with broker stopped, durable outbox remains unpublished, then publish and actual owner receipt succeed after restart |
 | Retained-image rollback | `npm run verify:rollback` | All replicas switch image references; failed health restores current replicas |
 
-Database restores, public-contract deployment, real SMTP delivery, account-erasure
+Restores into live databases, public-contract deployment, real SMTP delivery, account-erasure
 operations on real identities, and incident-specific break-glass writes are not
 safe generic automated commands. Their documented procedures require the named
 inputs, approval, and deployment credentials. A clean-source verifier does not
 claim to execute those actions against production or a public testnet.
+
+For coordinated source work, run
+`npm run verify:day4 -- --working-tree --operations-only`. After committing the
+tested source, run `npm run verify:day4 -- --clean-clone --operations-only`.
+The former never counts as committed-clean-clone evidence. The latter covers
+the operational inventory above, not the separately excluded full chain fault,
+Mailpit outage or historical migration compatibility suites.

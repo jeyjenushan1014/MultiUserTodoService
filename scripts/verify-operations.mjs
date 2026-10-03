@@ -304,6 +304,59 @@ console.log(JSON.stringify({ removed: 1 })); await database.end();`);
   assert.equal(command("todo-service", "apps/todo-service/scripts/replay-event.mjs", capRange).selected, 100);
   assert.deepEqual(Object.values(queueCounts()), [0, 0, 0], "Cap validation must not publish");
   console.log("OP-2/OP-3 passed: audited DLQ targets, redaction, unrelated-message preservation, history half-open replay, exact 100/101 cap, owner processed_events idempotency, tombstone suppression and isolation.");
+  docker(["start", ...consumers]);
+  let brokerStopped = false;
+  try {
+    docker(["stop", "rabbitmq"]);
+    brokerStopped = true;
+    const email = `day4-broker-restart-${randomUUID()}@example.test`;
+    const registration = probe("gateway", `
+const email = ${JSON.stringify(email)};
+const response = await fetch("http://127.0.0.1:3000/api/v1/auth/register", {
+  method: "POST", headers: { "content-type": "application/json" },
+  body: JSON.stringify({ email, password: "BrokerRestartProof123!" })
+});
+console.log(JSON.stringify({ status: response.status, requestId: response.headers.get("x-request-id") }));`);
+    assert.equal(registration.status, 201, "Account registration must remain durable while RabbitMQ is unavailable");
+    const pending = probe("account-service", `${accountDbImport}
+const result = await database.query(
+  "SELECT id FROM outbox_events WHERE event_type = 'account.registered' AND payload->>'email' = $1 AND published_at IS NULL",
+  [${JSON.stringify(email)}]);
+console.log(JSON.stringify({ pending: result.rowCount })); await database.end();`);
+    assert.equal(pending.pending, 1, "The registration event must remain in the Account outbox during the outage");
+    docker(["start", "rabbitmq"]);
+    brokerStopped = false;
+    const deadline = Date.now() + 180_000;
+    let delivered;
+    let consumed = false;
+    while (Date.now() < deadline) {
+      delivered = probe("account-service", `${accountDbImport}
+const result = await database.query(
+  "SELECT id, published_at FROM outbox_events WHERE event_type = 'account.registered' AND payload->>'email' = $1",
+  [${JSON.stringify(email)}]);
+console.log(JSON.stringify({
+  eventId: result.rows[0]?.id,
+  published: result.rowCount === 1 && result.rows[0].published_at !== null
+})); await database.end();`);
+      if (delivered.published) {
+        const receipt = probe("todo-service", `${todoDbImport}
+const result = await database.query(
+  "SELECT event_id FROM processed_events WHERE event_id = $1 AND consumer_name = 'todo-owner-projection'",
+  [${delivered.eventId ? JSON.stringify(delivered.eventId) : "null"}]);
+console.log(JSON.stringify({ processed: result.rowCount })); await database.end();`);
+        if (receipt.processed === 1) {
+          consumed = true;
+          break;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    assert.equal(delivered?.published, true, "Account outbox must publish after RabbitMQ restarts");
+    assert.equal(consumed, true, "Todo owner projection must consume the event after RabbitMQ restarts");
+    console.log("PR-4 RabbitMQ stop/restart passed: API write persisted to outbox during outage and reached the consumer after recovery.");
+  } finally {
+    if (brokerStopped) docker(["start", "rabbitmq"]);
+  }
 } finally {
   if (stopped) {
     try {

@@ -226,7 +226,7 @@ and ML-6.
 - [ ] OP-3 targeted replay for other consumers with proven idempotency and audit
 - [x] OP-6 live consumer and chain progress (six queues, zero ready/unacked, two consumers each; chain checkpoint at safe head with zero lag)
 - [x] OP-7 runtime behavior switch without redeploy (`mail-mode.mjs`; `verify-mail-mode.mjs` validates the audited sink/external switch)
-- [ ] OP-8 live deployment enforcement: isolated real-login restricted operations, denied raw table access, and audited break-glass exercise pass; operator explicitly chose to leave live permissions/identity provisioning unchanged
+- [x] OP-8 live deployment enforcement: dedicated Account/Todo operator logins, actual restricted CLI reads, rejected owner credentials/raw table access, and audited break-glass open/close passed on the existing local deployment; host-side private network wiring remains deployment-specific
 - [x] OP-9 release-tagged images and guarded rollback command; isolated three-replica retained-tag switch, failed-health restoration, and cleanup passed (`npm run verify:rollback`)
 - [ ] OP-10 verifier generates ephemeral configuration; clean-clone run and all-command verification pending
 
@@ -242,14 +242,14 @@ requirements. New automated evidence is recorded in `docs/operator-verification.
 - [x] Broker unavailable runbook
 - [x] Chain unavailable runbook (default Compose workers, mounted-key setup, restart/reconciliation and omitted replacement/replay tooling documented)
 - [x] Mail-provider failure runbook
-- [x] Consumer progress failure runbook (health/log checks documented; lag metrics unavailable)
-- [x] DLQ filling runbook (targeted notification replay documented; general DLQ tooling remains open)
+- [x] Consumer progress failure runbook (six queue ready/unacknowledged/consumer counts and persisted chain checkpoint/lag documented)
+- [x] DLQ filling runbook (all three allow-listed DLQs, bounded redacted inspection, targeted replay and audit documented)
 - [x] Stuck transaction runbook (operator recovery tooling remains unavailable)
 - [x] Failed migration runbook
 - [x] Stuck compensation runbook
-- [x] Latency breach runbook (measurement objectives remain open)
-- [ ] Consumer-lag and chain-lag visibility instructions
-- [ ] Rebuild, replay, DLQ, mail-flag, restore, and rollback commands
+- [x] Latency breach runbook (read p95 <=300ms/write p95 <=500ms objectives and production-measurement distinction documented)
+- [x] Consumer-lag and chain-lag visibility instructions
+- [x] Rebuild, replay, DLQ, mail-flag, restore, and rollback commands
 
 ## Day 3: Performance, Proof, and Final Verification
 

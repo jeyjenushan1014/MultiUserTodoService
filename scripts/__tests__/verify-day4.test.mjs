@@ -44,8 +44,17 @@ test("rejects legacy/unsafe command-line overrides", () => {
   });
   assert.throws(() => parseOptions(["--pagination-only", "--query-plans-only"]));
   assert.throws(() => parseOptions(["--performance-only", "--query-plans-only"]));
-  assert.deepEqual(parseOptions(["--clean-clone"]), { ref: "HEAD", keep: false, workingTree: true });
-  assert.throws(() => parseOptions(["--clean-clone", "--ref", "HEAD"]));
+  assert.deepEqual(parseOptions(["--working-tree", "--operations-only"]), {
+    ref: "HEAD", keep: false, workingTree: true, operationsOnly: true,
+  });
+  for (const flag of ["--pagination-only", "--performance-only", "--query-plans-only"]) {
+    assert.throws(() => parseOptions(["--operations-only", flag]), /one verification scope/);
+  }
+  assert.deepEqual(parseOptions(["--clean-clone"]), { ref: "HEAD", keep: false, cleanClone: true });
+  assert.throws(() => parseOptions(["--working-tree", "--clean-clone"]));
+  assert.deepEqual(parseOptions(["--clean-clone", "--ref", "HEAD"]), {
+    ref: "HEAD", keep: false, cleanClone: true,
+  });
 });
 test("performance script parser reads trailing JSON line", () => {
   const output = "warning: warmup jitter\n{\"passed\":true,\"requirement\":\"PF-3\"}\n";

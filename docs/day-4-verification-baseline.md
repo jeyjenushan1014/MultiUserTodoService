@@ -1,5 +1,48 @@
 # Day 4 Verification Baseline
 
+## 2026-10-03 requested operational completion work
+
+The earlier owner-replay PostgreSQL `42P08` failure was traced to inconsistent
+inference of audit status parameter `$5`. Both uses now explicitly cast to
+`varchar`. All ten targeted owner-replay Vitest tests and all ten focused
+verifier-isolation Node tests pass. Live broker rehearsal remains the required
+check of this database fix, not the mocked unit tests alone.
+
+The verifier now treats `--clean-clone` as committed source, never as an alias
+of `--working-tree`, and offers a separately scoped `--operations-only` run.
+It generates ephemeral configuration, waits for infrastructure before worker
+startup, exercises broker stop/restart, provisions scratch restricted logins,
+and verifies real nonempty Account/Todo backups restored into scratch databases.
+Skipped full chain and historical migration checks are not claimed by the
+operational scope.
+
+Project `todo-day4-verify-1791045702713-5291aec51e` failed before operational
+replay at the historical migration verification's 240-second deadline.
+Docker Engine also returned an API 500 and automatic cleanup failed.
+The isolated project's secret-free cleanup manifest was subsequently used to
+remove that project's containers, networks and volumes successfully; no live
+application resources were reset. The failure receipt is retained separately
+under `.verification`. This is not aggregate success or clean-clone evidence.
+
+Project `todo-day4-verify-1791047109041-e5bfb61c5f` subsequently passed the
+Node 24 workspace build, 40 operations tests, documentation and authorization
+checks, but RabbitMQ failed before workers started. The retained redacted logs
+showed an Erlang cookie permission error (`eacces`), not a consumer failure.
+The isolated healthcheck now executes under the broker's own user to avoid
+root-owned cookie creation during startup. That failed project's cleanup passed.
+OP-8 scratch databases now use real backup/restores of the migrated disposable
+databases rather than reapplying cluster-global role-creation migrations.
+
+Live OP-8 provisioning subsequently passed on the existing local databases,
+including actual CLI invocation with dedicated logins and rejected owner
+credentials. Two audit-only open/close rows persist per database. The earlier
+choice to leave live permissions unchanged is therefore superseded by the
+operator's later authorization. Missing Account replay audit tables and the
+resulting migration-order issue were repaired with explicit approval and an
+immutable original-metadata receipt; normal migration verification now passes.
+See [operations-access.md](operations-access.md) for measured commands, references
+and the remaining private-network/administrator-maintenance boundaries.
+
 ## 2026-10-03 priority-review remediation
 
 The isolated working-tree snapshot passed all 28 real Gateway E2E tests, including

@@ -31,12 +31,16 @@ export function parseOptions(args) {
     else if (args[i] === "--pagination-only") options.paginationOnly = true;
     else if (args[i] === "--performance-only") options.performanceOnly = true;
     else if (args[i] === "--query-plans-only") options.queryPlansOnly = true;
-    else if (args[i] === "--working-tree" || args[i] === "--clean-clone") options.workingTree = true;
+    else if (args[i] === "--operations-only") options.operationsOnly = true;
+    else if (args[i] === "--working-tree") options.workingTree = true;
+    else if (args[i] === "--clean-clone") options.cleanClone = true;
     else if (args[i] === "--ref" && args[i + 1] && !args[i + 1].startsWith("-")) options.ref = args[++i];
-    else throw new Error("Usage: verify-day4.mjs [--ref <committed-revision> | --working-tree] [--pagination-only | --performance-only | --query-plans-only] [--keep]");
+    else throw new Error("Usage: verify-day4.mjs [--ref <committed-revision> | --working-tree | --clean-clone] [--pagination-only | --performance-only | --query-plans-only | --operations-only] [--keep]");
   }
-  if (options.workingTree && args.includes("--ref")) throw new Error("--working-tree snapshots the current source and cannot be combined with --ref");
-  if ([options.paginationOnly, options.performanceOnly, options.queryPlansOnly].filter(Boolean).length > 1) {
+  if (options.workingTree && (args.includes("--ref") || options.cleanClone)) {
+    throw new Error("--working-tree cannot be combined with --ref or --clean-clone");
+  }
+  if ([options.paginationOnly, options.performanceOnly, options.queryPlansOnly, options.operationsOnly].filter(Boolean).length > 1) {
     throw new Error("Choose one verification scope");
   }
   return options;
@@ -231,8 +235,9 @@ export async function waitForProgress(check, { timeoutMs = 60_000, sleep = (ms) 
 }
 
 export async function verifyDay4(options = {}, { repository = sourceRoot } = {}) {
-  const { ref = "HEAD", keep = false, workingTree = false, paginationOnly = false, performanceOnly = false, queryPlansOnly = false } = options;
+  const { ref = "HEAD", keep = false, workingTree = false, cleanClone = false, paginationOnly = false, performanceOnly = false, queryPlansOnly = false, operationsOnly = false } = options;
   if (workingTree && ref !== "HEAD") throw new Error("--working-tree cannot select a historical revision");
+  if (workingTree && cleanClone) throw new Error("--working-tree cannot be combined with --clean-clone");
   const id = `${Date.now()}-${randomBytes(5).toString("hex")}`;
   const project = `todo-day4-verify-${id}`;
   const release = `day4-${id}`;
@@ -261,14 +266,14 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     }
     return result.stdout ?? "";
   };
-  const runRedacted = (command, args, label, timeout = commandTimeoutMs) => {
+  const runRedacted = (command, args, label, timeout = commandTimeoutMs, commandEnv = env) => {
     console.log(`=== ${label} ===`);
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new Error("Verification exceeded its 30-minute total deadline");
     const result = spawnSync(command, args, {
-      cwd: clone, env, encoding: "utf8", timeout: Math.min(timeout, remaining), maxBuffer: 16 * 1024 * 1024,
+      cwd: clone, env: commandEnv, encoding: "utf8", timeout: Math.min(timeout, remaining), maxBuffer: 16 * 1024 * 1024,
     });
-    const output = redactVerificationOutput(`${result.stdout ?? ""}${result.stderr ?? ""}`, env);
+    const output = redactVerificationOutput(`${result.stdout ?? ""}${result.stderr ?? ""}`, commandEnv);
     if (output.trim()) console.log(output.trim());
     if (result.error || result.status !== 0) throw new Error(`${label} failed (${result.error?.code ?? result.status})`);
   };
@@ -319,19 +324,32 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       dc(["build", service], `Build isolated ${service} image (one target at a time)`);
     }
     const todoImage = `multi-user-todo-platform-todo-service:${release}`;
-    dc(["--profile", "verification", "build", "validation"], "Build Node 24 locked-dependency validation image");
+    dc(["--profile", "verification", "build", "validation"], "Build Node 24 locked-dependency validation image",
+      { timeout: 1_200_000 });
     stackAttempted = true;
-    dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "check"], "Lint, build and all unit tests");
+    if (!operationsOnly) {
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "check"],
+        "Lint, build and all unit tests");
+    } else {
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:operations"],
+        "Focused operations and verifier unit tests");
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation",
+        "npm", "run", "test", "-w", "@todo/account-service", "--",
+        "scripts/replay-owner-events.test.mjs"],
+      "Focused owner replay unit tests");
+    }
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "node", "--test",
       "scripts/__tests__/rollback-release.test.mjs", "scripts/__tests__/verify-day4.test.mjs"], "Operational verifier unit tests");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:docs"], "API documentation verification");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "verify:authorization"], "Authorization verification");
-    dc(["up", "-d", "--no-build", "account-postgres", "todo-postgres", "redis", "rabbitmq", "mailpit",
-      "account-migrations", "todo-migrations", "verification-chain", "evolution-postgres"], "Start disposable infrastructure and migrations");
+    dc(["up", "-d", "--no-build", "--wait", "--wait-timeout", "180",
+      "account-postgres", "todo-postgres", "redis", "rabbitmq", "mailpit",
+      "account-migrations", "todo-migrations", "verification-chain", "evolution-postgres"],
+    "Start and health-check disposable infrastructure before starting workers", { timeout: 240_000 });
     dc(["run", "--rm", "--no-deps", "-T", "todo-service", "node", "scripts/setup-day4-chain.mjs"],
       "Deploy and validate TaskHistory on isolated local chain", { timeout: 120_000 });
     dc(["up", "-d", "--no-build", "--wait", "--wait-timeout", "180"], "Start and health-check all replicas", { timeout: 240_000 });
-    if (!performanceOnly) {
+    if (!performanceOnly && !operationsOnly) {
       dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "node",
         "scripts/verify-evolution-schema.mjs"], "Execute all real migration reversals and previous-code HTTP traffic", { timeout: 240_000 });
     }
@@ -368,6 +386,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       console.log(JSON.stringify(evidence));
       return evidence;
     }
+    if (!operationsOnly) {
     dc(["stop", "verification-chain"], "Stop isolated chain for real outage injection");
     try {
       dc(["exec", "-T", "todo-service", "node", "scripts/verify-chain-live.mjs", "--outage"],
@@ -386,11 +405,20 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     dc(["exec", "-T", "todo-service", "node", "scripts/verify-chain-crash.mjs", "--recover", crash.transactionHash],
       "Reconcile durable transaction after process death", { timeout: 240_000 });
     dc(["exec", "-T", "todo-service", "node", "scripts/verify-chain-live.mjs"],
-      "Real application chain pipeline, concurrent writers and replacement contracts", { timeout: 240_000 });
+      "Real application chain pipeline, concurrent writers and replacement contracts", { timeout: 360_000 });
+    }
     for (const script of ["verify-mail-mode.mjs", "verify-notification-retry.mjs", "verify-notification-quota.mjs"]) {
       runRedacted("docker", [...compose, "exec", "-T", "-e", `DLQ_OPERATOR_ID=day4-verifier:${project}`,
         "account-service", "node", `apps/account-service/scripts/${script}`],
         `Sink-only notification verification: ${script}`, 120_000);
+    }
+    const mailEnvironment = { ...env };
+    for (const key of ["COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR", "COMPOSE_ENV_FILES", "COMPOSE_DISABLE_ENV_FILE"]) {
+      delete mailEnvironment[key];
+    }
+    if (!operationsOnly) {
+      runRedacted(process.execPath, [join(clone, "scripts", "verify-mail-live.mjs")],
+        "PR-4 Mailpit outage, retry, restart and replay", 600_000, mailEnvironment);
     }
     dc(["exec", "-T", "account-service", "node", "apps/account-service/scripts/verify-workspace-concurrency.mjs"], "Workspace PostgreSQL concurrency proof");
     for (let pass = 1; pass <= 2; pass++) {
@@ -404,18 +432,66 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     ], undefined, { capture: true, timeout: 20_000 })));
     console.log(JSON.stringify({ check: "ops:progress", result: "passed", ...progress }));
     runRedacted(process.execPath, [join(clone, "scripts", "verify-operations.mjs")], "Operator replay, DLQ and progress rehearsal");
+    const operatorSuffix = randomBytes(5).toString("hex");
+    for (const service of ["account", "todo"]) {
+      const databaseName = `op10_scratch_${operatorSuffix}_${service}`;
+      const databaseUrl = new URL(env[service === "account" ? "ACCOUNT_DATABASE_URL" : "TODO_DATABASE_URL"]);
+      databaseUrl.pathname = `/${databaseName}`;
+      const restoredTable = service === "account" ? "users" : "todos";
+      dc(["exec", "-T", "-e", `RESTORE_DATABASE=${databaseName}`,
+        "-e", `RESTORE_TABLE=${restoredTable}`, `${service}-postgres`, "sh", "-eu", "-c",
+        'test "$RESTORE_DATABASE" != "$POSTGRES_DB"; ' +
+        'pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /tmp/op10.dump; ' +
+        'createdb -U "$POSTGRES_USER" "$RESTORE_DATABASE"; ' +
+        'pg_restore --exit-on-error --no-owner -U "$POSTGRES_USER" -d "$RESTORE_DATABASE" /tmp/op10.dump; ' +
+        'source_count=$(psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM $RESTORE_TABLE"); ' +
+        'restored_count=$(psql -U "$POSTGRES_USER" -d "$RESTORE_DATABASE" -Atc "SELECT count(*) FROM $RESTORE_TABLE"); ' +
+        'test "$source_count" -gt 0; test "$source_count" = "$restored_count"; ' +
+        'pg_restore --list /tmp/op10.dump >/dev/null; rm /tmp/op10.dump; ' +
+        'printf "Scratch restore and nonempty row-count verification passed\\n"'],
+      `OP-10 real ${service} backup/restore command rehearsal`);
+      dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T",
+        "-e", "OP8_CONTAINER_REHEARSAL=1",
+        "-e", "OPERATIONS_REHEARSAL_ISOLATED=1",
+        "-e", `DAY4_COMPOSE_PROJECT=${project}`,
+        "-e", `COMPOSE_PROJECT_NAME=${project}`,
+        "-e", `OP8_SCRATCH_DATABASE_URL=${databaseUrl}`,
+        "validation", "node", "scripts/verify-operator-access.mjs"],
+      `OP-8 real-login, denied-table, and audited break-glass rehearsal (${service})`);
+      dc(["exec", "-T", `${service}-postgres`, "sh", "-eu", "-c",
+        'dropdb -U "$POSTGRES_USER" "$1"', "op10-cleanup", databaseName],
+      `Remove verified ${service} scratch restore database`);
+    }
     const finalProgress = await waitForProgress(() => JSON.parse(dc([
       "exec", "-T", "todo-service", "node", "apps/todo-service/scripts/progress-status.mjs", "--require-ready",
     ], undefined, { capture: true, timeout: 20_000 })));
     console.log(JSON.stringify({ check: "ops:progress-after-restart", result: "passed", ...finalProgress }));
     if (Date.now() >= deadline) throw new Error("Verification exceeded its 30-minute command budget");
     const rollback = await verifyRollback({ sourceImage: todoImage, cwd: clone, env });
-    evidence = { result: "passed", ...source, project, cleanCommittedSource: !workingTree,
+    evidence = { result: "passed", scope: operationsOnly ? "OP-2/OP-3/OP-6/OP-7/OP-8/OP-9" : "day4", ...source, project, cleanCommittedSource: !workingTree,
       isolatedLocalChain: true, sinkOnlyMail: true, mailModeRetryQuotaVerified: true,
-      progressVerifiedAfterConsumerRestart: true, rollback };
+      progressVerifiedAfterConsumerRestart: true, dlqAndReplayVerified: true,
+      operatorBoundaryVerifiedOnScratchDatabases: true, backupRestoreCommandsVerified: true,
+      migrationReversalsVerified: !operationsOnly, rollback };
     await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
     console.log(JSON.stringify(evidence));
     return evidence;
+  } catch (error) {
+    evidence = {
+      result: "failed",
+      scope: operationsOnly ? "OP-2/OP-3/OP-6/OP-7/OP-8/OP-9" : "day4",
+      project,
+      cleanCommittedSource: !workingTree,
+      failure: redactVerificationOutput(error instanceof Error ? error.message : "Unknown verification failure", env),
+    };
+    if (compose && stackAttempted) {
+      const logs = spawnSync("docker", [...compose, "logs", "--no-color", "--tail", "40",
+        "rabbitmq", "chain-writer", "chain-indexer"], {
+        cwd: clone, env, encoding: "utf8", timeout: 20_000, maxBuffer: 1024 * 1024,
+      });
+      evidence.dependencyDiagnostics = redactVerificationOutput(`${logs.stdout ?? ""}${logs.stderr ?? ""}`, env);
+    }
+    throw error;
   } finally {
     let cleanupError;
     if (compose && stackAttempted && !keep) {

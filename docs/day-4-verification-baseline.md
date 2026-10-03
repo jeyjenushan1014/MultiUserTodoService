@@ -2,6 +2,30 @@
 
 ## 2026-10-03 requested operational completion work
 
+### Latest committed operational proof
+
+`npm run verify:day4 -- --clean-clone --operations-only` passed with exit code 0
+at `8c94a0d84a0452a13587afab937328c6dce7d2ae`, project
+`todo-day4-verify-1791053209069-1d64602767`. Receipt:
+`.verification/todo-day4-verify-1791053209069-1d64602767-result.json`.
+It records committed clean source, real three-DLQ/owner/history replay, mail
+mode/retry/quota, progress after consumer restart, scratch restricted identities,
+nonempty backup/restores and successful three-replica rollback/failed-health
+restoration. The run passed 44 operations tests, ten owner replay tests and
+30 live Gateway E2E tests. All six queues were drained with two consumers each;
+chain latest block 34, safe head/checkpoint 33 and lag zero. All owned containers,
+networks and volumes were removed.
+
+The same revision passed the separate real Mailpit outage rehearsal inside the
+full clean-clone command, as well as lint/build/all unit checks and migration
+reversals. However, that full command subsequently failed dependency readiness
+for `todoOutboxPublisher`, as detailed below. Requested operational inventory is
+verified; aggregate full-Day-4 and exhaustive repository-wide OP-10 remain
+unproven. Local/public incident actions and historical-release compatibility
+are not inferred from these fixtures.
+
+### Earlier committed operational proof and follow-ups
+
 `npm run verify:day4 -- --clean-clone --operations-only` passed with exit code 0
 at committed revision `5515a4ce9d1547463095ed9adc4d8a6fd57ecf08`.
 Project: `todo-day4-verify-1791048283836-6e7b4a89b9`. The non-secret receipt
@@ -63,10 +87,24 @@ builds of a shared image tag; canonical service images now build once before
 worker startup. The corrected standalone Mailpit proof observed an actual
 password-reset request during SMTP outage, unrelated authenticated Todo reads
 and writes, two retries, terminal DLQ, restart, audited replay and delivery to the
-local sink. Project: `todo-mail-verify-257cb39be2`. The operations suite has
+local sink. Project: `todo-mail-verify-257cb39be2`; exit code 0, with containers,
+network, volumes, five image aliases and temporary configuration removed.
+The operations suite has
 44 passing tests, including three environment-isolation guards. The aggregate
 verifier now runs this separate rehearsal before the main stack, avoiding
-simultaneous fixture stacks. Committed aggregate re-verification remains required.
+simultaneous fixture stacks.
+
+The full committed-clone retry at `8c94a0d84a0452a13587afab937328c6dce7d2ae`,
+project `todo-day4-verify-1791052361482-1a9bfa3dfb`, passed lint/build/all unit
+checks, documentation/authorization, the now-isolated Mailpit outage proof,
+local contract deployment and real migration reversals/previous-code traffic.
+It then failed the bounded Gateway dependency-health check because
+`todoOutboxPublisher` remained unavailable; the other listed dependencies were
+available. The redacted failure receipt is
+`.verification/todo-day4-verify-1791052361482-1a9bfa3dfb-result.json`.
+All of that project's containers, networks and volumes were removed. This
+remaining aggregate failure is not attributed to a cause that was not measured,
+and no full-suite or exhaustive repository-wide success is claimed.
 
 The earlier owner-replay PostgreSQL `42P08` failure was traced to inconsistent
 inference of audit status parameter `$5`. Both uses now explicitly cast to

@@ -77,7 +77,19 @@ The former never counts as committed-clean-clone evidence. The latter covers
 the operational inventory above, not the separately excluded full chain fault,
 Mailpit outage or historical migration compatibility suites.
 
-### Completed committed-source rehearsal
+### Latest committed-source rehearsal
+
+The latest `npm run verify:day4 -- --clean-clone --operations-only` passed with
+exit code 0 at `8c94a0d84a0452a13587afab937328c6dce7d2ae`.
+Receipt: `.verification/todo-day4-verify-1791053209069-1d64602767-result.json`.
+It passed 44 operations tests, ten owner replay tests, 30 Gateway E2E tests and
+every operational inventory row except the separately scoped SMTP outage row.
+That SMTP row passed at the same revision inside the full clean-clone command;
+the full command later failed Gateway dependency readiness for the Todo outbox
+publisher. Neither separate passes nor this operational-only success constitute
+a passing aggregate full suite. Both projects were cleaned.
+
+### Earlier completed committed-source rehearsal
 
 On 2026-10-03, `npm run verify:day4 -- --clean-clone --operations-only`
 passed with exit code 0 at `5515a4ce9d1547463095ed9adc4d8a6fd57ecf08`.

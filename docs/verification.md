@@ -35,7 +35,9 @@ supporting native fetch. Builds/tests execute with Node 24 inside Docker.
 The verifier clones that immutable revision below `.verification`, uses an explicit
 unique Compose project and empty env file, creates ephemeral database/broker/JWT
 credentials, mounts an empty mail-secret directory, and forces sink-only mail.
-No host ports are published. The existing default stack, host `node_modules`,
+The main isolated stack publishes no host ports; the separate Mailpit fixture
+uses temporary Docker-assigned test ports and removes them with its project.
+The existing default stack, host `node_modules`,
 `.env`, database volumes, and chain node are never reset or reused. Do not invoke
 legacy live verifiers separately against your default stack as a substitute.
 

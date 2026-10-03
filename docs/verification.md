@@ -65,6 +65,15 @@ drain and the chain reader to be caught up. Captured operator/mail diagnostics
 redact ephemeral credentials and URLs; the success receipt contains neither.
 
 The aggregate command also runs the isolated Mailpit stop/restart/retry/DLQ proof,
+before starting its main infrastructure, so the two fixture stacks do not run
+concurrently. The mail verifier uses an explicit base Compose file and empty env
+file, fresh credentials and consistently regenerated connection URLs, and unique
+release tags. It never inherits parent/deployment database or broker URLs. It
+builds each shared service image once before starting workers, avoiding competing
+builds of the same tag, and removes its five temporary image aliases on cleanup.
+The mail-only fixture has an unavailable local-only chain endpoint; it does not
+start chain workers or contact a public RPC.
+The aggregate command then runs
 the three-consumer DLQ and targeted owner/history replay rehearsal, and OP-8 against
 newly-created scratch databases in the disposable Compose project. OP-8 creates real
 short-lived restricted login roles, verifies denied raw table access and exercises

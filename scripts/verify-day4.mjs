@@ -7,6 +7,7 @@ import { delimiter, dirname, join, relative, resolve, isAbsolute } from "node:pa
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyRollback } from "./verify-rollback.mjs";
 import { privateKeyToAccount } from "viem/accounts";
+import { isolatedHostEnvironment } from "./verification-environment.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const commandTimeoutMs = 600_000;
@@ -122,10 +123,7 @@ export async function snapshotCurrentSource(repository, destination) {
 
 export function verificationEnvironment(project, release, scratch, clone, inherited = process.env) {
   // Do not inherit Compose selectors, .env values, public RPC URLs or production credentials.
-  const env = Object.fromEntries(["PATH", "Path", "SystemRoot", "SYSTEMROOT", "HOME", "USERPROFILE",
-    "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "ProgramData", "ProgramFiles", "ProgramFiles(x86)",
-    "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]
-    .filter((key) => inherited[key] !== undefined).map((key) => [key, inherited[key]]));
+  const env = isolatedHostEnvironment(inherited);
   const secret = () => randomBytes(32).toString("hex");
   Object.assign(env, {
     COMPOSE_PROJECT_NAME: project, DAY4_COMPOSE_PROJECT: project, APP_RELEASE_ID: release,
@@ -297,7 +295,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       ? await snapshotCurrentSource(repository, clone)
       : { revision: cloneCommittedSource(repository, clone, ref, run), sourceKind: "committed-clean-clone" };
     const { revision } = source;
-    for (const file of ["scripts/verify-operations.mjs", "scripts/day4.compose.yml", "scripts/day4-validation.Dockerfile",
+    for (const file of ["scripts/verification-environment.mjs", "scripts/verify-operations.mjs", "scripts/day4.compose.yml", "scripts/day4-validation.Dockerfile",
       "scripts/setup-day4-chain.mjs", "scripts/rollback-release.mjs"]) {
       await readFile(join(clone, file));
     }
@@ -356,6 +354,14 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       "scripts/__tests__/rollback-release.test.mjs", "scripts/__tests__/verify-day4.test.mjs"], "Operational verifier unit tests");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "test:docs"], "API documentation verification");
     dc(["--profile", "verification", "run", "--rm", "--no-deps", "-T", "validation", "npm", "run", "verify:authorization"], "Authorization verification");
+    if (!operationsOnly) {
+      const mailEnvironment = { ...env };
+      for (const key of ["COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR", "COMPOSE_ENV_FILES", "COMPOSE_DISABLE_ENV_FILE"]) {
+        delete mailEnvironment[key];
+      }
+      runRedacted(process.execPath, [join(clone, "scripts", "verify-mail-live.mjs")],
+        "PR-4 Mailpit outage, retry, restart and replay before the main stack starts", 600_000, mailEnvironment);
+    }
     dc(["up", "-d", "--no-build", "--wait", "--wait-timeout", "180",
       "account-postgres", "todo-postgres", "redis", "rabbitmq", "mailpit",
       "account-migrations", "todo-migrations", "verification-chain", "evolution-postgres"],
@@ -427,14 +433,6 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       runRedacted("docker", [...compose, "exec", "-T", "-e", `DLQ_OPERATOR_ID=day4-verifier:${project}`,
         "account-service", "node", `apps/account-service/scripts/${script}`],
         `Sink-only notification verification: ${script}`, 120_000);
-    }
-    const mailEnvironment = { ...env };
-    for (const key of ["COMPOSE_FILE", "COMPOSE_PATH_SEPARATOR", "COMPOSE_ENV_FILES", "COMPOSE_DISABLE_ENV_FILE"]) {
-      delete mailEnvironment[key];
-    }
-    if (!operationsOnly) {
-      runRedacted(process.execPath, [join(clone, "scripts", "verify-mail-live.mjs")],
-        "PR-4 Mailpit outage, retry, restart and replay", 600_000, mailEnvironment);
     }
     dc(["exec", "-T", "account-service", "node", "apps/account-service/scripts/verify-workspace-concurrency.mjs"], "Workspace PostgreSQL concurrency proof");
     for (let pass = 1; pass <= 2; pass++) {

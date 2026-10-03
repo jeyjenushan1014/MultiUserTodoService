@@ -58,6 +58,7 @@ and deployment responsibilities.
 | Owner targeted replay | `runOwnerReplayRehearsal` on the disposable stack | Actual consumer records receipt; repeated replay queues nothing and is audited |
 | Consumer and chain progress | `ops:progress -- --require-ready` on the disposable stack | Six queues available/drained with consumers; initialized chain checkpoint caught up |
 | Runtime mail switch | `verify-mail-mode.mjs` on a sink-only stack | Audited mode changes, pinning, and kill switch pass without external mail |
+| Real local SMTP outage | `node scripts\verify-mail-live.mjs`, also invoked by full `verify:day4` | Request and unrelated Todo traffic survive outage; retries, terminal DLQ, audited replay and Mailpit delivery pass |
 | Restricted access and break-glass | `verify-operator-access.mjs` on separate scratch databases | Allowed operations succeed, direct writes fail, open/close audit is immutable |
 | Account/Todo backup and restore | `verify:day4 -- --operations-only` | `pg_dump`, scratch `createdb`, `pg_restore --exit-on-error`, nonempty row-count comparison and scratch `dropdb` pass |
 | Broker outage/recovery | Disposable `verify:operations` rehearsal | Gateway registration succeeds with broker stopped, durable outbox remains unpublished, then publish and actual owner receipt succeed after restart |

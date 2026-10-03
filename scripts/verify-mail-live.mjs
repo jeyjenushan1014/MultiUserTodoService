@@ -4,45 +4,15 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mailVerificationEnvironment } from "./verification-environment.mjs";
 
 const project = `todo-mail-verify-${randomBytes(5).toString("hex")}`;
 const secretDir = join(tmpdir(), `${project}-empty-secrets`);
-const composeEnvironment = {
-  ...process.env,
-  ACCOUNT_POSTGRES_USER: "mail_verify_account",
-  ACCOUNT_POSTGRES_PASSWORD: randomBytes(32).toString("hex"),
-  ACCOUNT_POSTGRES_DB: "mail_verify_account",
-  TODO_POSTGRES_USER: "mail_verify_todo",
-  TODO_POSTGRES_PASSWORD: randomBytes(32).toString("hex"),
-  TODO_POSTGRES_DB: "mail_verify_todo",
-  REDIS_PASSWORD: randomBytes(32).toString("hex"),
-  RABBITMQ_USER: "mail_verify_broker",
-  RABBITMQ_PASSWORD: randomBytes(32).toString("hex"),
-  INTERNAL_SERVICE_SECRET: randomBytes(48).toString("hex"),
-  JWT_SECRET: randomBytes(48).toString("hex"),
-  CHAIN_WRITER_ADDRESS: "0x0000000000000000000000000000000000000001",
-  TASK_HISTORY_CONTRACT_ADDRESS: "0x0000000000000000000000000000000000000002",
-  TASK_HISTORY_DEPLOYMENT_BLOCK: "1",
-  API_PORT: "0",
-  MAILPIT_SMTP_PORT: "0",
-  MAILPIT_HTTP_PORT: "0",
-  RABBITMQ_AMQP_PORT: "0",
-  RABBITMQ_MANAGEMENT_PORT: "0",
-  MAIL_TEST_SINK_ONLY: "true",
-  MAIL_HOST: "mailpit",
-  MAIL_PORT: "1025",
-  MAIL_FROM: "no-reply@todo.local",
-  MAIL_PROVIDER_HOST: "",
-  MAIL_PROVIDER_FROM: "",
-  MAIL_SECRET_DIR: secretDir,
-  MAIL_RETRY_FIRST_MS: "3000",
-  MAIL_RETRY_SECOND_MS: "4000",
-  MAIL_CONNECTION_TIMEOUT_MS: "1000",
-  MAIL_GREETING_TIMEOUT_MS: "1000",
-  MAIL_SOCKET_TIMEOUT_MS: "1000",
-};
-const compose = ["compose", "-p", project];
+const composeEnvironment = mailVerificationEnvironment(project, secretDir);
+const emptyEnvFile = join(secretDir, "empty.env");
+const compose = ["compose", "-p", project, "--env-file", emptyEnvFile,
+  "-f", join(process.cwd(), "docker-compose.yml")];
 const deadlineMs = 600_000;
 
 function runDocker(args, { capture = false, quiet = false } = {}) {
@@ -133,6 +103,8 @@ async function mailpitContains(mailpitUrl, email) {
 
 let started = false;
 try {
+  await mkdir(secretDir, { recursive: true });
+  await writeFile(emptyEnvFile, "", { mode: 0o600 });
   const configuration = JSON.parse(runDocker(["config", "--format", "json"], { capture: true }));
   const workerEnvironment = configuration.services["account-notification-consumer"].environment;
   assert.equal(workerEnvironment.MAIL_TEST_SINK_ONLY, "true");
@@ -154,8 +126,10 @@ try {
     return status.length > 0;
   }, "stable RabbitMQ before worker startup", 90_000);
 
+  runDocker(["build", "gateway", "account-service", "todo-service",
+    "account-migrations", "todo-migrations"], { capture: true });
   runDocker([
-    "up", "-d", "--build", "--scale", "account-service=2",
+    "up", "-d", "--no-build", "--scale", "account-service=2",
     "--scale", "account-notification-consumer=2", "edge",
     "redis", "account-outbox-worker", "account-notification-consumer",
     "todo-owner-consumer",
@@ -283,5 +257,31 @@ try {
       process.exitCode = 1;
     }
   }
-  await rm(secretDir, { recursive: true, force: true }).catch(() => {});
+  const images = [
+    ...["gateway", "account-service", "todo-service"]
+      .map((service) => `multi-user-todo-platform-${service}:${project}`),
+    `${project}-account-migrations:latest`,
+    `${project}-todo-migrations:latest`,
+  ];
+  for (const image of images) {
+    const exists = spawnSync("docker", ["image", "ls", "--quiet", image], {
+      env: composeEnvironment, encoding: "utf8", timeout: 30_000,
+    });
+    if (exists.error || exists.status !== 0) {
+      console.error(`Cannot check temporary mail image cleanup: ${image}`);
+      process.exitCode = 1;
+    } else if (exists.stdout.trim()) {
+      const removed = spawnSync("docker", ["image", "rm", image], {
+        env: composeEnvironment, encoding: "utf8", timeout: 30_000,
+      });
+      if (removed.error || removed.status !== 0) {
+        console.error(`Temporary mail image cleanup failed: ${image}`);
+        process.exitCode = 1;
+      }
+    }
+  }
+  await rm(secretDir, { recursive: true, force: true }).catch((error) => {
+    console.error(`Temporary mail configuration cleanup failed: ${error.message}`);
+    process.exitCode = 1;
+  });
 }

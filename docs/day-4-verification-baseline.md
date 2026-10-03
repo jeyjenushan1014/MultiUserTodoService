@@ -47,6 +47,27 @@ degraded/connection-failure recovery and deadline rejection. Broker-user
 diagnostics are also wired into the normal Compose healthcheck and separate
 mail rehearsal, without recreating an existing live service.
 
+A full committed-clone run at `607237e5e80e561e6fc2fcd58df855af8e4391d8`,
+project `todo-day4-verify-1791050298124-268aac03a7`, subsequently passed
+dependency readiness, E2E, historical migration reversals and actual chain RPC
+outage, writer crash/recovery, concurrent writers, replacement contracts and
+bounded human-review proof. It failed at the separate nested Mailpit stack's
+Docker startup (Engine API 500); both projects were cleaned. This is not a
+full-suite pass.
+
+The mail verifier was also found to inherit parent connection URLs despite
+generating different child credentials. It now allowlists only host CLI settings,
+regenerates all service URLs, selects an explicit empty env file/base Compose
+file and uses its own release tags. A first standalone retry exposed competing
+builds of a shared image tag; canonical service images now build once before
+worker startup. The corrected standalone Mailpit proof observed an actual
+password-reset request during SMTP outage, unrelated authenticated Todo reads
+and writes, two retries, terminal DLQ, restart, audited replay and delivery to the
+local sink. Project: `todo-mail-verify-257cb39be2`. The operations suite has
+44 passing tests, including three environment-isolation guards. The aggregate
+verifier now runs this separate rehearsal before the main stack, avoiding
+simultaneous fixture stacks. Committed aggregate re-verification remains required.
+
 The earlier owner-replay PostgreSQL `42P08` failure was traced to inconsistent
 inference of audit status parameter `$5`. Both uses now explicitly cast to
 `varchar`. All ten targeted owner-replay Vitest tests and all ten focused

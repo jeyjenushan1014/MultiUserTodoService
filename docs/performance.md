@@ -128,4 +128,6 @@ Measured results from the accepted receipt:
 | PF-5 | Passed | Automatic evaluator exited `0` on normal thresholds, and deliberate breach exited `1` with expected failures (`read: p95 objective breached`, `write: p95 objective breached`). |
 
 This command is not PF-10 expensive query-plan evidence or a blanket completion
-claim for all Day-4 requirements.
+claim for all Day-4 requirements. PF-10 is separately verified by
+`npm run verify:query-plans`; see [query-plans.md](query-plans.md) for its accepted
+real execution plans and measured limitations.

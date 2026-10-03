@@ -39,6 +39,11 @@ test("rejects legacy/unsafe command-line overrides", () => {
     ref: "HEAD", keep: false, workingTree: true, performanceOnly: true,
   });
   assert.throws(() => parseOptions(["--pagination-only", "--performance-only"]));
+  assert.deepEqual(parseOptions(["--working-tree", "--query-plans-only"]), {
+    ref: "HEAD", keep: false, workingTree: true, queryPlansOnly: true,
+  });
+  assert.throws(() => parseOptions(["--pagination-only", "--query-plans-only"]));
+  assert.throws(() => parseOptions(["--performance-only", "--query-plans-only"]));
   assert.deepEqual(parseOptions(["--clean-clone"]), { ref: "HEAD", keep: false, workingTree: true });
   assert.throws(() => parseOptions(["--clean-clone", "--ref", "HEAD"]));
 });

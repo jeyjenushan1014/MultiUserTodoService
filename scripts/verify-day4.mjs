@@ -30,12 +30,15 @@ export function parseOptions(args) {
     if (args[i] === "--keep") options.keep = true;
     else if (args[i] === "--pagination-only") options.paginationOnly = true;
     else if (args[i] === "--performance-only") options.performanceOnly = true;
+    else if (args[i] === "--query-plans-only") options.queryPlansOnly = true;
     else if (args[i] === "--working-tree" || args[i] === "--clean-clone") options.workingTree = true;
     else if (args[i] === "--ref" && args[i + 1] && !args[i + 1].startsWith("-")) options.ref = args[++i];
-    else throw new Error("Usage: verify-day4.mjs [--ref <committed-revision> | --working-tree] [--pagination-only | --performance-only] [--keep]");
+    else throw new Error("Usage: verify-day4.mjs [--ref <committed-revision> | --working-tree] [--pagination-only | --performance-only | --query-plans-only] [--keep]");
   }
   if (options.workingTree && args.includes("--ref")) throw new Error("--working-tree snapshots the current source and cannot be combined with --ref");
-  if (options.paginationOnly && options.performanceOnly) throw new Error("Choose one verification scope");
+  if ([options.paginationOnly, options.performanceOnly, options.queryPlansOnly].filter(Boolean).length > 1) {
+    throw new Error("Choose one verification scope");
+  }
   return options;
 }
 
@@ -228,7 +231,7 @@ export async function waitForProgress(check, { timeoutMs = 60_000, sleep = (ms) 
 }
 
 export async function verifyDay4(options = {}, { repository = sourceRoot } = {}) {
-  const { ref = "HEAD", keep = false, workingTree = false, paginationOnly = false, performanceOnly = false } = options;
+  const { ref = "HEAD", keep = false, workingTree = false, paginationOnly = false, performanceOnly = false, queryPlansOnly = false } = options;
   if (workingTree && ref !== "HEAD") throw new Error("--working-tree cannot select a historical revision");
   const id = `${Date.now()}-${randomBytes(5).toString("hex")}`;
   const project = `todo-day4-verify-${id}`;
@@ -246,6 +249,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     if (remaining <= 0) throw new Error("Verification exceeded its 30-minute total deadline");
     const result = spawnSync(command, args, {
       cwd, env, encoding: "utf8", timeout: Math.min(timeout, remaining),
+      maxBuffer: 16 * 1024 * 1024,
       stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
     });
     if (result.error || result.status !== 0) {
@@ -295,6 +299,22 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
     const cleanupFile = join(scratch, "cleanup.compose.json");
     await writeFile(cleanupFile, JSON.stringify(cleanupComposeConfig(config, project), null, 2));
     console.log(`Source: ${source.sourceKind}; base revision: ${revision}; isolated project: ${project}; no host ports`);
+    if (queryPlansOnly) {
+      dc(["--profile", "verification", "build", "validation"], "Build production code and locked dependencies for query plans",
+        { timeout: 1_200_000 });
+      stackAttempted = true;
+      dc(["up", "-d", "--wait", "--wait-timeout", "90", "evolution-postgres"], "Start dedicated query-plan PostgreSQL cluster");
+      const queryPlans = parseLastJsonLine(dc([
+        "--profile", "verification", "run", "--rm", "--no-deps", "-T",
+        "-e", "QUERY_PLAN_VERIFY_ISOLATED=1", "validation", "node", "scripts/verify-query-plans.mjs",
+      ], "PF-10 actual production SQL EXPLAIN ANALYZE", { capture: true, timeout: 900_000 }), "PF-10 query plans");
+      assert.equal(queryPlans.passed, true);
+      evidence = { result: "passed", scope: "PF-10", ...source, project,
+        cleanCommittedSource: !workingTree, queryPlans };
+      await writeFile(join(scratch, "result.json"), JSON.stringify(evidence, null, 2));
+      console.log(`PF-10 passed: ${queryPlans.cases.length} cases; full SQL, parameters and plans saved in receipt`);
+      return evidence;
+    }
     for (const service of ["account-migrations", "todo-migrations", "account-service", "todo-service", "gateway"]) {
       dc(["build", service], `Build isolated ${service} image (one target at a time)`);
     }
@@ -415,7 +435,7 @@ export async function verifyDay4(options = {}, { repository = sourceRoot } = {})
       }
       // Keep a non-secret result outside the deleted clone; never retain generated credentials.
       if (evidence) await writeFile(join(repository, ".verification", `${project}-result.json`), JSON.stringify(evidence, null, 2));
-      if (!cleanupError) await rm(scratch, { recursive: true, force: true });
+      if (!cleanupError) await rm(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     } else {
       console.log(`--keep: isolated stack/clone retained at ${scratch}. Cleanup: docker compose --project-name ${project} -f "${join(scratch, "cleanup.compose.json")}" down --volumes --remove-orphans`);
     }

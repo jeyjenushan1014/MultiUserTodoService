@@ -124,7 +124,7 @@ These are **not completed requirements**, and adding code-shaped tests does not 
 | ABI-changing contract replacement | Retaining compatible deployments is implemented; inventing a generic decoder without a real second ABI would be misleading. |
 | Real provider refusal/throttling/outage proof (full ML-5) and live provider replacement (ML-6) | Avoid sending test mail to people or consuming a real provider quota. Sink failure/retry proof does not substitute for external-provider behavior. |
 | Complete PR-1/PR-2/PR-4 across every Day 4 requirement and dependency | This remediation targets the review's specific unsupported evidence. The entire assessment still needs requirement-by-requirement behavioral review; no global tick is justified by the targeted checks. |
-| PF-4/PF-5/PF-10 broad load objectives and large-data query evidence where still missing | Correctness, deployment and lost-update prevention take priority over performance claims without a reproducible dataset and measured thresholds. |
+| Saturation testing and 100,000-task API latency objectives | PF-4/PF-5 now have accepted 20-user, 20,000-task paced API evidence; PF-10 has 36 real executed plans on 100,000 tasks. Maximum throughput and API latency at the larger dataset remain outside those proven scopes; costly shared/all and legacy OFFSET plans are documented in [query-plans.md](query-plans.md). |
 
 The broader uncovered groups remain in [traceability.md](traceability.md) and
 [day-4-checklist.md](day-4-checklist.md). This list does not turn partial work into coverage.

@@ -261,7 +261,7 @@ requirements. New automated evidence is recorded in `docs/operator-verification.
 - [x] PF-4 read and write latency objectives (`npm run verify:performance` accepted run: 20 users, 300s window, 20,000 seeded tasks, read p95 214.65ms <= 300ms, write p95 179.88ms <= 500ms, zero measured errors/invalid responses)
 - [x] PF-5 automated load-test threshold (`npm run verify:performance` accepted run: threshold evaluator exited 0 on measured data and exited 1 with explicit read/write breach reasons under deliberate-breach mode)
 - [x] PF-6 optimistic concurrency conflict response (`version` / `expectedVersion`, atomic compare-and-swap, real simultaneous API edits: one success and one `409 TODO_VERSION_CONFLICT`; all 28 live E2E tests passed)
-- [ ] PF-10 expensive-query `EXPLAIN ANALYZE` evidence
+- [x] PF-10 expensive-query `EXPLAIN ANALYZE` evidence (`npm run verify:query-plans` passed on 2026-10-03: 36 production count/list plans across 18 cases, 100,000 tasks and 50,000 active shares; SQL/binds, actual rows, buffers and indexes recorded; measured findings and legacy OFFSET limitations in `docs/query-plans.md`)
 - [x] Slow chain and mail dependency isolation (PF-7 evidence recorded above and in `docs/traceability.md`)
 - [x] Pool and concurrency calculations documented (`docs/capacity.md`; `npm run verify:capacity` passed)
 

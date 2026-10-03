@@ -28,6 +28,14 @@ Fixed latency limits, dataset, sample/error guards and a deliberate non-zero-exi
 threshold breach are described in [performance.md](performance.md). It must pass
 before checklist completion; no production database or external provider is used.
 
+### PF-10 expensive-query plans
+
+`npm run verify:query-plans` runs 36 real `EXPLAIN (ANALYZE, BUFFERS)` plans
+captured from the production list repository on 100,000 tasks in a fresh isolated
+PostgreSQL cluster. It checks independently computed IDs/counts and records full
+SQL, bind values, plans, planner settings and index definitions in its receipt.
+See [query-plans.md](query-plans.md) for scope, reproduction and interpretation.
+
 ### Day 4 verification isolation
 
 `npm run verify:day4` creates a fresh local clone of the selected committed revision
